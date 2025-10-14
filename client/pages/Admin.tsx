@@ -11,7 +11,9 @@ export default function AdminPage() {
   const [state, setState] = useState<AdminStateResponse | null>(null);
 
   const load = async (code: string) => {
-    const res = await fetch(`/api/admin/state?room=${encodeURIComponent(code)}`);
+    const res = await fetch(
+      `/api/admin/state?room=${encodeURIComponent(code)}`,
+    );
     if (res.ok) {
       const data = (await res.json()) as AdminStateResponse;
       setState(data);
@@ -117,54 +119,142 @@ export default function AdminPage() {
         <div className="container py-3 flex items-center justify-between">
           <div>
             <h1 className="font-bold text-slate-800">Admin Dashboard</h1>
-            <p className="text-sm text-slate-500">Manage rooms, questions, and timer</p>
+            <p className="text-sm text-slate-500">
+              Manage rooms, questions, and timer
+            </p>
           </div>
-          <a href="/leaderboard" className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90">Live Leaderboard</a>
+          <a
+            href="/leaderboard"
+            className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90"
+          >
+            Live Leaderboard
+          </a>
         </div>
       </header>
 
       <main className="container py-6 space-y-6">
         <section className="bg-white border rounded-xl p-4 shadow-sm">
-          <form onSubmit={createRoom} className="flex flex-col sm:flex-row gap-3 items-start sm:items-end">
+          <form
+            onSubmit={createRoom}
+            className="flex flex-col sm:flex-row gap-3 items-start sm:items-end"
+          >
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Room Code</label>
-              <input value={roomCode} onChange={(e)=>setRoomCode(e.target.value.toUpperCase())} className="rounded-lg border px-3 py-2" placeholder="DEMO" />
+              <label className="block text-sm font-medium text-slate-700 mb-1">
+                Room Code
+              </label>
+              <input
+                value={roomCode}
+                onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
+                className="rounded-lg border px-3 py-2"
+                placeholder="DEMO"
+              />
             </div>
-            <button className="px-4 py-2 rounded-lg bg-primary text-primary-foreground font-semibold hover:bg-primary/90">Create/Load Room</button>
-            <button type="button" onClick={seedDemo} className="px-4 py-2 rounded-lg border font-semibold hover:bg-blue-50">Seed Demo Questions</button>
-            <button type="button" onClick={startTimer} className="px-4 py-2 rounded-lg bg-green-600 text-white font-semibold hover:bg-green-700">Start Timer</button>
-            <button type="button" onClick={extendTimer} className="px-4 py-2 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700">Extend</button>
-            <button type="button" onClick={forceEnd} className="px-4 py-2 rounded-lg bg-red-600 text-white font-semibold hover:bg-red-700">Force End</button>
+            <button className="px-4 py-2 rounded-lg bg-primary text-primary-foreground font-semibold hover:bg-primary/90">
+              Create/Load Room
+            </button>
+            <button
+              type="button"
+              onClick={seedDemo}
+              className="px-4 py-2 rounded-lg border font-semibold hover:bg-blue-50"
+            >
+              Seed Demo Questions
+            </button>
+            <button
+              type="button"
+              onClick={startTimer}
+              className="px-4 py-2 rounded-lg bg-green-600 text-white font-semibold hover:bg-green-700"
+            >
+              Start Timer
+            </button>
+            <button
+              type="button"
+              onClick={extendTimer}
+              className="px-4 py-2 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700"
+            >
+              Extend
+            </button>
+            <button
+              type="button"
+              onClick={forceEnd}
+              className="px-4 py-2 rounded-lg bg-red-600 text-white font-semibold hover:bg-red-700"
+            >
+              Force End
+            </button>
           </form>
           {room && (
-            <div className="mt-3 text-sm text-slate-600">Room: <span className="font-semibold">{room.code}</span> · Title: {room.title} · Ends: {room.roundEndAt ? new Date(room.roundEndAt).toLocaleTimeString() : "Not started"}</div>
+            <div className="mt-3 text-sm text-slate-600">
+              Room: <span className="font-semibold">{room.code}</span> · Title:{" "}
+              {room.title} · Ends:{" "}
+              {room.roundEndAt
+                ? new Date(room.roundEndAt).toLocaleTimeString()
+                : "Not started"}
+            </div>
           )}
         </section>
 
         <section className="bg-white border rounded-xl p-4 shadow-sm">
           <h2 className="font-semibold text-slate-800 mb-3">Add Question</h2>
-          <form onSubmit={addQuestion} className="grid grid-cols-1 md:grid-cols-6 gap-3">
-            <input name="qt" required placeholder="C question text (output only)" className="md:col-span-3 rounded-lg border px-3 py-2" />
-            <input name="ans" required placeholder="Correct output" className="md:col-span-2 rounded-lg border px-3 py-2" />
-            <label className="flex items-center gap-2 md:col-span-1 text-sm"><input type="checkbox" name="is_real" defaultChecked className="accent-blue-600"/> Real</label>
+          <form
+            onSubmit={addQuestion}
+            className="grid grid-cols-1 md:grid-cols-6 gap-3"
+          >
+            <input
+              name="qt"
+              required
+              placeholder="C question text (output only)"
+              className="md:col-span-3 rounded-lg border px-3 py-2"
+            />
+            <input
+              name="ans"
+              required
+              placeholder="Correct output"
+              className="md:col-span-2 rounded-lg border px-3 py-2"
+            />
+            <label className="flex items-center gap-2 md:col-span-1 text-sm">
+              <input
+                type="checkbox"
+                name="is_real"
+                defaultChecked
+                className="accent-blue-600"
+              />{" "}
+              Real
+            </label>
             <div className="md:col-span-6">
-              <button className="px-4 py-2 rounded-lg bg-primary text-primary-foreground font-semibold hover:bg-primary/90">Add</button>
+              <button className="px-4 py-2 rounded-lg bg-primary text-primary-foreground font-semibold hover:bg-primary/90">
+                Add
+              </button>
             </div>
           </form>
         </section>
 
         <section className="bg-white border rounded-xl p-4 shadow-sm">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="font-semibold text-slate-800">Questions ({state?.questions.length || 0})</h2>
-            <span className="text-sm text-slate-600">Real: {realCount} · Fake: {fakeCount}</span>
+            <h2 className="font-semibold text-slate-800">
+              Questions ({state?.questions.length || 0})
+            </h2>
+            <span className="text-sm text-slate-600">
+              Real: {realCount} · Fake: {fakeCount}
+            </span>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
             {state?.questions.map((q) => (
               <div key={q.question_id} className="border rounded-lg p-3">
                 <div className="text-sm text-slate-800">{q.question_text}</div>
-                <div className="mt-1 text-xs text-slate-500">Answer: {q.correct_answer} · {q.is_real ? <span className="text-green-700">Real</span> : <span className="text-amber-700">Fake</span>}</div>
+                <div className="mt-1 text-xs text-slate-500">
+                  Answer: {q.correct_answer} ·{" "}
+                  {q.is_real ? (
+                    <span className="text-green-700">Real</span>
+                  ) : (
+                    <span className="text-amber-700">Fake</span>
+                  )}
+                </div>
                 <div className="mt-2 flex gap-2">
-                  <button onClick={()=>deleteQuestion(q.question_id)} className="px-3 py-1.5 rounded-md bg-red-600 text-white text-sm">Delete</button>
+                  <button
+                    onClick={() => deleteQuestion(q.question_id)}
+                    className="px-3 py-1.5 rounded-md bg-red-600 text-white text-sm"
+                  >
+                    Delete
+                  </button>
                 </div>
               </div>
             ))}
@@ -179,12 +269,19 @@ export default function AdminPage() {
             <div className="px-4 py-2">Started</div>
             <div className="px-4 py-2">Ended</div>
           </div>
-          {state?.teams.map((t)=> (
-            <div key={t.team_id} className="grid grid-cols-4 gap-0 border-b last:border-b-0">
+          {state?.teams.map((t) => (
+            <div
+              key={t.team_id}
+              className="grid grid-cols-4 gap-0 border-b last:border-b-0"
+            >
               <div className="px-4 py-2">{t.team_name}</div>
               <div className="px-4 py-2">{t.lines_completed}</div>
-              <div className="px-4 py-2">{new Date(t.start_time).toLocaleTimeString()}</div>
-              <div className="px-4 py-2">{t.end_time ? new Date(t.end_time).toLocaleTimeString() : "—"}</div>
+              <div className="px-4 py-2">
+                {new Date(t.start_time).toLocaleTimeString()}
+              </div>
+              <div className="px-4 py-2">
+                {t.end_time ? new Date(t.end_time).toLocaleTimeString() : "—"}
+              </div>
             </div>
           ))}
         </section>

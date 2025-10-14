@@ -14,8 +14,14 @@ export default function CongratulationsPage() {
     let t: Team | null = null;
     let room: { code: string } | null = null;
     try {
-      t = rawTeam && rawTeam !== "undefined" && rawTeam !== "null" ? (JSON.parse(rawTeam) as Team) : null;
-      room = rawRoom && rawRoom !== "undefined" && rawRoom !== "null" ? (JSON.parse(rawRoom) as { code: string }) : null;
+      t =
+        rawTeam && rawTeam !== "undefined" && rawTeam !== "null"
+          ? (JSON.parse(rawTeam) as Team)
+          : null;
+      room =
+        rawRoom && rawRoom !== "undefined" && rawRoom !== "null"
+          ? (JSON.parse(rawRoom) as { code: string })
+          : null;
     } catch {}
     if (!t || !room) {
       navigate("/");
@@ -24,14 +30,18 @@ export default function CongratulationsPage() {
     setTeam(t);
 
     const run = async () => {
-      const stateRes = await fetch(`/api/game-state?teamId=${encodeURIComponent(t.team_id)}`);
+      const stateRes = await fetch(
+        `/api/game-state?teamId=${encodeURIComponent(t.team_id)}`,
+      );
       const state = (await stateRes.json()) as GameStateResponse;
       if (state.team.lines_completed < 5) {
         setAllowed(false);
         return;
       }
       setAllowed(true);
-      const lbRes = await fetch(`/api/leaderboard?room=${encodeURIComponent(room.code)}`);
+      const lbRes = await fetch(
+        `/api/leaderboard?room=${encodeURIComponent(room.code)}`,
+      );
       const lb = (await lbRes.json()) as LeaderboardResponse;
       const my = lb.rows.find((r) => r.team_name === t.team_name);
       setRank(my?.rank ?? null);
@@ -45,8 +55,15 @@ export default function CongratulationsPage() {
       <div className="min-h-screen flex items-center justify-center bg-white">
         <div className="text-center">
           <p className="text-2xl font-bold text-red-600">Access Denied</p>
-          <p className="text-slate-600 mt-2">Complete 5 lines to view this page</p>
-          <a href="/game" className="inline-block mt-4 text-primary font-semibold">Back to Game</a>
+          <p className="text-slate-600 mt-2">
+            Complete 5 lines to view this page
+          </p>
+          <a
+            href="/game"
+            className="inline-block mt-4 text-primary font-semibold"
+          >
+            Back to Game
+          </a>
         </div>
       </div>
     );
@@ -55,15 +72,31 @@ export default function CongratulationsPage() {
     <div className="min-h-screen bg-gradient-to-b from-white to-blue-50 flex items-center justify-center px-4">
       <div className="bg-white border rounded-2xl shadow-xl p-8 w-full max-w-lg text-center">
         <div className="text-4xl">🎉</div>
-        <h1 className="text-2xl font-extrabold text-slate-900 mt-2">Congratulations!</h1>
+        <h1 className="text-2xl font-extrabold text-slate-900 mt-2">
+          Congratulations!
+        </h1>
         <p className="text-slate-600 mt-1">You Completed Bingo!</p>
         <div className="mt-4">
-          <p className="text-lg font-semibold text-slate-800">Team: {team?.team_name}</p>
-          {rank && <p className="text-blue-700 font-medium mt-1">Rank: #{rank}</p>}
+          <p className="text-lg font-semibold text-slate-800">
+            Team: {team?.team_name}
+          </p>
+          {rank && (
+            <p className="text-blue-700 font-medium mt-1">Rank: #{rank}</p>
+          )}
         </div>
         <div className="mt-6 flex gap-3 justify-center">
-          <a href="/leaderboard" className="px-4 py-2 rounded-lg bg-primary text-primary-foreground font-semibold hover:bg-primary/90">View Leaderboard</a>
-          <a href="/" className="px-4 py-2 rounded-lg border font-semibold hover:bg-blue-50">Home</a>
+          <a
+            href="/leaderboard"
+            className="px-4 py-2 rounded-lg bg-primary text-primary-foreground font-semibold hover:bg-primary/90"
+          >
+            View Leaderboard
+          </a>
+          <a
+            href="/"
+            className="px-4 py-2 rounded-lg border font-semibold hover:bg-blue-50"
+          >
+            Home
+          </a>
         </div>
       </div>
     </div>

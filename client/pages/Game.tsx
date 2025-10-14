@@ -27,11 +27,16 @@ export default function GamePage() {
   const navigate = useNavigate();
   const team = useTeam();
   const [room, setRoom] = useState<Room | null>(useRoom());
-  const [questions, setQuestions] = useState<GameStateResponse["questions"]>([] as GameStateResponse["questions"]);
+  const [questions, setQuestions] = useState<GameStateResponse["questions"]>(
+    [] as GameStateResponse["questions"],
+  );
   const [solved, setSolved] = useState<string[]>([]);
   const [selectedQid, setSelectedQid] = useState<number | null>(null);
   const [answer, setAnswer] = useState("");
-  const [status, setStatus] = useState<{ type: "success" | "error" | "warn" | "info"; text: string } | null>(null);
+  const [status, setStatus] = useState<{
+    type: "success" | "error" | "warn" | "info";
+    text: string;
+  } | null>(null);
   const [lines, setLines] = useState<number>(0);
   const [disabled, setDisabled] = useState<boolean>(false);
 
@@ -41,7 +46,9 @@ export default function GamePage() {
 
   const loadState = async () => {
     if (!team) return;
-    const res = await fetch(`/api/game-state?teamId=${encodeURIComponent(team.team_id)}`);
+    const res = await fetch(
+      `/api/game-state?teamId=${encodeURIComponent(team.team_id)}`,
+    );
     if (!res.ok) {
       // If team not found, clear stale localStorage and send back to login
       try {
@@ -54,15 +61,26 @@ export default function GamePage() {
       } catch {}
       return; // keep previous state
     }
-    const data = (await res.json()) as Partial<GameStateResponse> & Record<string, unknown>;
-    if (!data || !Array.isArray(data.questions) || !data.room || !Array.isArray(data.solved_positions)) return;
+    const data = (await res.json()) as Partial<GameStateResponse> &
+      Record<string, unknown>;
+    if (
+      !data ||
+      !Array.isArray(data.questions) ||
+      !data.room ||
+      !Array.isArray(data.solved_positions)
+    )
+      return;
     setRoom(data.room as GameStateResponse["room"]);
     localStorage.setItem("bingo.room", JSON.stringify(data.room));
     setQuestions(data.questions as GameStateResponse["questions"]);
     setSolved(data.solved_positions as string[]);
     // derive lines
     setLines(computeLines(data.solved_positions as string[]));
-    if ((data.room as GameStateResponse["room"]).roundEndAt && Date.now() > (data.room as GameStateResponse["room"]).roundEndAt!) setDisabled(true);
+    if (
+      (data.room as GameStateResponse["room"]).roundEndAt &&
+      Date.now() > (data.room as GameStateResponse["room"]).roundEndAt!
+    )
+      setDisabled(true);
   };
 
   useEffect(() => {
@@ -81,7 +99,8 @@ export default function GamePage() {
     setSelectedQid(qid);
     setAnswer("");
     const q = questions.find((x) => x.question_id === qid);
-    if (q && !q.is_real) setStatus({ type: "warn", text: "Fake Question – No Bingo Point" });
+    if (q && !q.is_real)
+      setStatus({ type: "warn", text: "Fake Question – No Bingo Point" });
     else setStatus(null);
   };
 
@@ -93,7 +112,11 @@ export default function GamePage() {
     const res = await fetch("/api/submit", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ teamId: team.team_id, questionId: selectedQid, answer }),
+      body: JSON.stringify({
+        teamId: team.team_id,
+        questionId: selectedQid,
+        answer,
+      }),
     });
     const data = (await res.json()) as SubmissionResult;
 
@@ -146,7 +169,9 @@ export default function GamePage() {
         <div className="container py-3 flex items-center justify-between">
           <div>
             <h1 className="font-bold text-slate-800">Game – Coding Bingo</h1>
-            <p className="text-sm text-slate-500">Team: {team?.team_name} · Room: {room?.code}</p>
+            <p className="text-sm text-slate-500">
+              Team: {team?.team_name} · Room: {room?.code}
+            </p>
           </div>
           <div className="flex items-center gap-3">
             {timeLeft && (
@@ -176,12 +201,18 @@ export default function GamePage() {
                   selectedQid === q.question_id ? "ring-2 ring-primary" : ""
                 }`}
               >
-                <div className="text-sm text-slate-800 line-clamp-2">{q.question_text}</div>
+                <div className="text-sm text-slate-800 line-clamp-2">
+                  {q.question_text}
+                </div>
                 <div className="mt-1 text-xs">
                   {q.is_real ? (
-                    <span className="text-green-700 bg-green-50 border border-green-200 px-2 py-0.5 rounded-md">Real</span>
+                    <span className="text-green-700 bg-green-50 border border-green-200 px-2 py-0.5 rounded-md">
+                      Real
+                    </span>
                   ) : (
-                    <span className="text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md">Fake</span>
+                    <span className="text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md">
+                      Fake
+                    </span>
                   )}
                 </div>
               </button>
@@ -210,10 +241,10 @@ export default function GamePage() {
                 status.type === "success"
                   ? "text-green-700 bg-green-50 border-green-200"
                   : status.type === "error"
-                  ? "text-red-700 bg-red-50 border-red-200"
-                  : status.type === "warn"
-                  ? "text-amber-700 bg-amber-50 border-amber-200"
-                  : "text-slate-700 bg-slate-50 border-slate-200"
+                    ? "text-red-700 bg-red-50 border-red-200"
+                    : status.type === "warn"
+                      ? "text-amber-700 bg-amber-50 border-amber-200"
+                      : "text-slate-700 bg-slate-50 border-slate-200"
               }`}
             >
               {status.text}
@@ -227,7 +258,9 @@ export default function GamePage() {
             <span className="text-sm text-slate-600">Lines: {lines} / 5</span>
           </div>
           <BingoGrid solved={solved} />
-          <p className="text-xs text-slate-500 mt-3">Fill any 5 lines (row/column/diagonal) to win.</p>
+          <p className="text-xs text-slate-500 mt-3">
+            Fill any 5 lines (row/column/diagonal) to win.
+          </p>
         </section>
       </main>
     </div>
@@ -246,7 +279,9 @@ function BingoGrid({ solved }: { solved: string[] }) {
             <div
               key={pos}
               className={`aspect-square rounded-lg border flex items-center justify-center text-sm font-semibold ${
-                isOn ? "bg-green-50 border-green-300 text-green-800" : "bg-blue-50 border-blue-200 text-blue-800"
+                isOn
+                  ? "bg-green-50 border-green-300 text-green-800"
+                  : "bg-blue-50 border-blue-200 text-blue-800"
               }`}
             >
               {pos}

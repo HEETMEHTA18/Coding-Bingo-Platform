@@ -13,7 +13,10 @@ export default function Index() {
     // If already logged in, go to game
     const saved = localStorage.getItem("bingo.team");
     try {
-      const parsed = saved && saved !== "undefined" && saved !== "null" ? JSON.parse(saved) : null;
+      const parsed =
+        saved && saved !== "undefined" && saved !== "null"
+          ? JSON.parse(saved)
+          : null;
       if (parsed && parsed.team_id) navigate("/game");
     } catch {
       // ignore corrupted data
@@ -35,7 +38,10 @@ export default function Index() {
 
     setLoading(true);
     try {
-      const body: LoginRequest = { team_name: teamName.trim(), room_code: roomCode.trim() };
+      const body: LoginRequest = {
+        team_name: teamName.trim(),
+        room_code: roomCode.trim(),
+      };
       const res = await fetch("/api/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -62,12 +68,19 @@ export default function Index() {
     <div className="min-h-screen bg-gradient-to-b from-white to-blue-50 flex items-center justify-center px-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-6">
-          <h1 className="text-2xl font-bold text-slate-800">Real-Time Coding Bingo</h1>
+          <h1 className="text-2xl font-bold text-slate-800">
+            Real-Time Coding Bingo
+          </h1>
           <p className="text-slate-500">Enter your team to join the room</p>
         </div>
-        <form onSubmit={submit} className="bg-white shadow-xl rounded-xl border border-slate-100 p-6 space-y-4">
+        <form
+          onSubmit={submit}
+          className="bg-white shadow-xl rounded-xl border border-slate-100 p-6 space-y-4"
+        >
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Team Name</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              Team Name
+            </label>
             <input
               className="w-full rounded-lg border border-slate-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary"
               placeholder="e.g. Code Ninjas"
@@ -76,7 +89,9 @@ export default function Index() {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Room Code</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              Room Code
+            </label>
             <input
               className="w-full rounded-lg border border-slate-200 px-3 py-2 uppercase tracking-wider focus:outline-none focus:ring-2 focus:ring-primary"
               placeholder="e.g. DEMO"
@@ -96,7 +111,9 @@ export default function Index() {
           >
             {loading ? "Joining..." : "Join Game"}
           </button>
-          <p className="text-xs text-slate-500 text-center">Use room code DEMO to try it now</p>
+          <p className="text-xs text-slate-500 text-center">
+            Use room code DEMO to try it now
+          </p>
         </form>
       </div>
     </div>

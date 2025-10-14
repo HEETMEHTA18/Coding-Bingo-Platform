@@ -159,7 +159,13 @@ export function createServer() {
   app.get("/api/rooms/:code", (req, res) => {
     const code = req.params.code.toUpperCase();
     const room = rooms.get(code);
-    if (!room) return res.status(404).json({ ok: false, error: "Invalid room code" } satisfies ErrorResponse);
+    if (!room)
+      return res
+        .status(404)
+        .json({
+          ok: false,
+          error: "Invalid room code",
+        } satisfies ErrorResponse);
     res.json(room);
   });
 
@@ -167,13 +173,29 @@ export function createServer() {
   app.post("/api/login", (req, res) => {
     const { team_name, room_code } = (req.body || {}) as LoginRequest;
     if (!team_name || !team_name.trim())
-      return res.status(400).json({ ok: false, error: "Team name is required" } satisfies ErrorResponse);
+      return res
+        .status(400)
+        .json({
+          ok: false,
+          error: "Team name is required",
+        } satisfies ErrorResponse);
     if (!room_code || !room_code.trim())
-      return res.status(400).json({ ok: false, error: "Room code is required" } satisfies ErrorResponse);
+      return res
+        .status(400)
+        .json({
+          ok: false,
+          error: "Room code is required",
+        } satisfies ErrorResponse);
 
     const code = room_code.toUpperCase();
     const room = rooms.get(code);
-    if (!room) return res.status(400).json({ ok: false, error: "Invalid room code" } satisfies ErrorResponse);
+    if (!room)
+      return res
+        .status(400)
+        .json({
+          ok: false,
+          error: "Invalid room code",
+        } satisfies ErrorResponse);
 
     const teamMap = teamsByRoom.get(code)!;
     // No duplicates in same room
@@ -181,7 +203,10 @@ export function createServer() {
       if (t.team_name.toLowerCase() === team_name.trim().toLowerCase()) {
         return res
           .status(400)
-          .json({ ok: false, error: "This team name already exists" } satisfies ErrorResponse);
+          .json({
+            ok: false,
+            error: "This team name already exists",
+          } satisfies ErrorResponse);
       }
     }
 
@@ -214,10 +239,16 @@ export function createServer() {
   // Game state for a team
   app.get("/api/game-state", (req, res) => {
     const teamId = String(req.query.teamId || "");
-    if (!teamId) return res.status(400).json({ ok: false, error: "Missing teamId" } satisfies ErrorResponse);
+    if (!teamId)
+      return res
+        .status(400)
+        .json({ ok: false, error: "Missing teamId" } satisfies ErrorResponse);
 
     const team = findTeamById(teamId);
-    if (!team) return res.status(404).json({ ok: false, error: "Team not found" } satisfies ErrorResponse);
+    if (!team)
+      return res
+        .status(404)
+        .json({ ok: false, error: "Team not found" } satisfies ErrorResponse);
 
     const room = rooms.get(team.room_code)!;
     const questions = roomQuestions.get(team.room_code)!;
@@ -243,12 +274,22 @@ export function createServer() {
     const answerRaw = String(req.body.answer ?? "");
 
     if (!teamId)
-      return res.status(400).json({ ok: false, error: "Missing teamId" } satisfies ErrorResponse);
+      return res
+        .status(400)
+        .json({ ok: false, error: "Missing teamId" } satisfies ErrorResponse);
     if (!questionId)
-      return res.status(400).json({ ok: false, error: "Missing questionId" } satisfies ErrorResponse);
+      return res
+        .status(400)
+        .json({
+          ok: false,
+          error: "Missing questionId",
+        } satisfies ErrorResponse);
 
     const team = findTeamById(teamId);
-    if (!team) return res.status(404).json({ ok: false, error: "Team not found" } satisfies ErrorResponse);
+    if (!team)
+      return res
+        .status(404)
+        .json({ ok: false, error: "Team not found" } satisfies ErrorResponse);
     const room = rooms.get(team.room_code)!;
 
     // Timer validation
@@ -279,7 +320,10 @@ export function createServer() {
 
     const questions = roomQuestions.get(team.room_code)!;
     const q = questions.find((x) => x.question_id === questionId);
-    if (!q) return res.status(400).json({ ok: false, error: "Invalid question" } satisfies ErrorResponse);
+    if (!q)
+      return res
+        .status(400)
+        .json({ ok: false, error: "Invalid question" } satisfies ErrorResponse);
 
     const solvedSet = teamSolvedPositions.get(teamId)!;
     const solvedQs = teamSolvedQuestions.get(teamId)!;
@@ -360,7 +404,13 @@ export function createServer() {
   app.get("/api/leaderboard", (req, res) => {
     const code = String(req.query.room || "").toUpperCase();
     const room = rooms.get(code);
-    if (!room) return res.status(400).json({ ok: false, error: "Invalid room code" } satisfies ErrorResponse);
+    if (!room)
+      return res
+        .status(400)
+        .json({
+          ok: false,
+          error: "Invalid room code",
+        } satisfies ErrorResponse);
 
     const tmap = teamsByRoom.get(code)!;
     const rows = Array.from(tmap.values())
@@ -370,12 +420,17 @@ export function createServer() {
         time_taken_ms: (t.end_time ?? Date.now()) - t.start_time,
       }))
       .sort((a, b) => {
-        if (b.lines_completed !== a.lines_completed) return b.lines_completed - a.lines_completed;
+        if (b.lines_completed !== a.lines_completed)
+          return b.lines_completed - a.lines_completed;
         return a.time_taken_ms - b.time_taken_ms;
       })
       .map((r, idx) => ({ ...r, rank: idx + 1 }));
 
-    const payload: LeaderboardResponse = { room_code: code, rows, updated_at: Date.now() };
+    const payload: LeaderboardResponse = {
+      room_code: code,
+      rows,
+      updated_at: Date.now(),
+    };
     res.json(payload);
   });
 
@@ -384,12 +439,21 @@ export function createServer() {
     const code = String(req.body.room || "").toUpperCase();
     const minutes = Number(req.body.minutes || 0);
     const room = rooms.get(code);
-    if (!room) return res.status(400).json({ ok: false, error: "Invalid room code" } satisfies ErrorResponse);
+    if (!room)
+      return res
+        .status(400)
+        .json({
+          ok: false,
+          error: "Invalid room code",
+        } satisfies ErrorResponse);
     if (!minutes || minutes <= 0)
-      return res.status(400).json({ ok: false, error: "Invalid minutes" } satisfies ErrorResponse);
+      return res
+        .status(400)
+        .json({ ok: false, error: "Invalid minutes" } satisfies ErrorResponse);
 
     const now = Date.now();
-    const base = room.roundEndAt && room.roundEndAt > now ? room.roundEndAt : now;
+    const base =
+      room.roundEndAt && room.roundEndAt > now ? room.roundEndAt : now;
     room.roundEndAt = base + minutes * 60 * 1000;
     rooms.set(code, room);
     res.json(room);
@@ -397,8 +461,15 @@ export function createServer() {
 
   // --- Admin endpoints ---
   app.post("/api/admin/create-room", (req, res) => {
-    const { code, title, durationMinutes } = (req.body || {}) as AdminCreateRoomRequest;
-    if (!code || !title) return res.status(400).json({ ok: false, error: "Missing code/title" } satisfies ErrorResponse);
+    const { code, title, durationMinutes } = (req.body ||
+      {}) as AdminCreateRoomRequest;
+    if (!code || !title)
+      return res
+        .status(400)
+        .json({
+          ok: false,
+          error: "Missing code/title",
+        } satisfies ErrorResponse);
     const c = code.toUpperCase();
     const now = Date.now();
     const room: Room = {
@@ -414,8 +485,12 @@ export function createServer() {
 
   app.post("/api/admin/seed-demo", (req, res) => {
     const code = String(req.body.room || "").toUpperCase();
-    if (!code) return res.status(400).json({ ok: false, error: "Missing room" } satisfies ErrorResponse);
-    if (!rooms.get(code)) rooms.set(code, { code, title: `${code} Room`, roundEndAt: null });
+    if (!code)
+      return res
+        .status(400)
+        .json({ ok: false, error: "Missing room" } satisfies ErrorResponse);
+    if (!rooms.get(code))
+      rooms.set(code, { code, title: `${code} Room`, roundEndAt: null });
     roomQuestions.set(code, generateDemoQuestions());
     if (!teamsByRoom.get(code)) teamsByRoom.set(code, new Map());
     res.json({ ok: true });
@@ -424,7 +499,13 @@ export function createServer() {
   app.get("/api/admin/state", (req, res) => {
     const code = String(req.query.room || "").toUpperCase();
     const room = rooms.get(code);
-    if (!room) return res.status(404).json({ ok: false, error: "Invalid room code" } satisfies ErrorResponse);
+    if (!room)
+      return res
+        .status(404)
+        .json({
+          ok: false,
+          error: "Invalid room code",
+        } satisfies ErrorResponse);
     const questions = roomQuestions.get(code) ?? [];
     const teams = Array.from(teamsByRoom.get(code)?.values() ?? []);
     const payload: AdminStateResponse = { room, questions, teams };
@@ -432,9 +513,13 @@ export function createServer() {
   });
 
   app.post("/api/admin/add-question", (req, res) => {
-    const { room, question_text, correct_answer, is_real } = (req.body || {}) as AdminAddQuestionRequest;
+    const { room, question_text, correct_answer, is_real } = (req.body ||
+      {}) as AdminAddQuestionRequest;
     const code = String(room || "").toUpperCase();
-    if (!rooms.get(code)) return res.status(404).json({ ok: false, error: "Invalid room" } satisfies ErrorResponse);
+    if (!rooms.get(code))
+      return res
+        .status(404)
+        .json({ ok: false, error: "Invalid room" } satisfies ErrorResponse);
     const list = roomQuestions.get(code) ?? [];
     const nextId = (list.at(-1)?.question_id ?? 0) + 1;
     const q: Question = {
@@ -450,10 +535,14 @@ export function createServer() {
   });
 
   app.post("/api/admin/delete-question", (req, res) => {
-    const { room, question_id } = (req.body || {}) as AdminDeleteQuestionRequest;
+    const { room, question_id } = (req.body ||
+      {}) as AdminDeleteQuestionRequest;
     const code = String(room || "").toUpperCase();
     const list = roomQuestions.get(code);
-    if (!list) return res.status(404).json({ ok: false, error: "Invalid room" } satisfies ErrorResponse);
+    if (!list)
+      return res
+        .status(404)
+        .json({ ok: false, error: "Invalid room" } satisfies ErrorResponse);
     const idx = list.findIndex((x) => x.question_id === Number(question_id));
     if (idx >= 0) list.splice(idx, 1);
     roomQuestions.set(code, list);
@@ -464,7 +553,10 @@ export function createServer() {
     const { room, minutes } = (req.body || {}) as AdminStartRequest;
     const code = String(room || "").toUpperCase();
     const r = rooms.get(code);
-    if (!r) return res.status(404).json({ ok: false, error: "Invalid room" } satisfies ErrorResponse);
+    if (!r)
+      return res
+        .status(404)
+        .json({ ok: false, error: "Invalid room" } satisfies ErrorResponse);
     r.roundEndAt = Date.now() + Number(minutes || 0) * 60 * 1000;
     rooms.set(code, r);
     res.json(r);
@@ -474,7 +566,10 @@ export function createServer() {
     const { room } = (req.body || {}) as AdminForceEndRequest;
     const code = String(room || "").toUpperCase();
     const r = rooms.get(code);
-    if (!r) return res.status(404).json({ ok: false, error: "Invalid room" } satisfies ErrorResponse);
+    if (!r)
+      return res
+        .status(404)
+        .json({ ok: false, error: "Invalid room" } satisfies ErrorResponse);
     const now = Date.now();
     r.roundEndAt = now;
     const tmap = teamsByRoom.get(code) ?? new Map();

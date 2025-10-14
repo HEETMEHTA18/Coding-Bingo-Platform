@@ -7,7 +7,9 @@ export default function LeaderboardPage() {
   const [room, setRoom] = useState<Room | null>(() => {
     const raw = localStorage.getItem("bingo.room");
     try {
-      return raw && raw !== "undefined" && raw !== "null" ? (JSON.parse(raw) as Room) : null;
+      return raw && raw !== "undefined" && raw !== "null"
+        ? (JSON.parse(raw) as Room)
+        : null;
     } catch {
       return null;
     }
@@ -16,7 +18,9 @@ export default function LeaderboardPage() {
 
   const load = async () => {
     if (!room) return;
-    const res = await fetch(`/api/leaderboard?room=${encodeURIComponent(room.code)}`);
+    const res = await fetch(
+      `/api/leaderboard?room=${encodeURIComponent(room.code)}`,
+    );
     const data = (await res.json()) as LeaderboardResponse;
     setRows(data.rows);
   };
@@ -40,7 +44,12 @@ export default function LeaderboardPage() {
             <h1 className="font-bold text-slate-800">Live Leaderboard</h1>
             <p className="text-sm text-slate-500">Room: {room?.code}</p>
           </div>
-          <a href="/game" className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90">Back to Game</a>
+          <a
+            href="/game"
+            className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90"
+          >
+            Back to Game
+          </a>
         </div>
       </header>
 
@@ -53,7 +62,10 @@ export default function LeaderboardPage() {
             <div className="px-4 py-3">Time Taken</div>
           </div>
           {rows.map((r) => (
-            <div key={r.rank} className="grid grid-cols-4 gap-0 border-b last:border-b-0">
+            <div
+              key={r.rank}
+              className="grid grid-cols-4 gap-0 border-b last:border-b-0"
+            >
               <div className="px-4 py-3 font-semibold">#{r.rank}</div>
               <div className="px-4 py-3">{r.team_name}</div>
               <div className="px-4 py-3">{r.lines_completed}</div>
