@@ -6,7 +6,11 @@ export default function LeaderboardPage() {
   const navigate = useNavigate();
   const [room, setRoom] = useState<Room | null>(() => {
     const raw = localStorage.getItem("bingo.room");
-    return raw ? (JSON.parse(raw) as Room) : null;
+    try {
+      return raw && raw !== "undefined" && raw !== "null" ? (JSON.parse(raw) as Room) : null;
+    } catch {
+      return null;
+    }
   });
   const [rows, setRows] = useState<LeaderboardResponse["rows"]>([]);
 
