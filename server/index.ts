@@ -3,6 +3,12 @@ import express from "express";
 import cors from "cors";
 import { handleDemo } from "./routes/demo";
 import type {
+  AdminAddQuestionRequest,
+  AdminCreateRoomRequest,
+  AdminDeleteQuestionRequest,
+  AdminForceEndRequest,
+  AdminStartRequest,
+  AdminStateResponse,
   ErrorResponse,
   GameStateResponse,
   LeaderboardResponse,
@@ -387,6 +393,94 @@ export function createServer() {
     room.roundEndAt = base + minutes * 60 * 1000;
     rooms.set(code, room);
     res.json(room);
+  });
+
+  // --- Admin endpoints ---
+  app.post("/api/admin/create-room", (req, res) => {
+    const { code, title, durationMinutes } = (req.body || {}) as AdminCreateRoomRequest;
+    if (!code || !title) return res.status(400).json({ ok: false, error: "Missing code/title" } satisfies ErrorResponse);
+    const c = code.toUpperCase();
+    const now = Date.now();
+    const room: Room = {
+      code: c,
+      title: title.trim(),
+      roundEndAt: durationMinutes ? now + durationMinutes * 60 * 1000 : null,
+    };
+    rooms.set(c, room);
+    roomQuestions.set(c, []);
+    teamsByRoom.set(c, new Map());
+    return res.json(room);
+  });
+
+  app.post("/api/admin/seed-demo", (req, res) => {
+    const code = String(req.body.room || "").toUpperCase();
+    if (!code) return res.status(400).json({ ok: false, error: "Missing room" } satisfies ErrorResponse);
+    if (!rooms.get(code)) rooms.set(code, { code, title: `${code} Room`, roundEndAt: null });
+    roomQuestions.set(code, generateDemoQuestions());
+    if (!teamsByRoom.get(code)) teamsByRoom.set(code, new Map());
+    res.json({ ok: true });
+  });
+
+  app.get("/api/admin/state", (req, res) => {
+    const code = String(req.query.room || "").toUpperCase();
+    const room = rooms.get(code);
+    if (!room) return res.status(404).json({ ok: false, error: "Invalid room code" } satisfies ErrorResponse);
+    const questions = roomQuestions.get(code) ?? [];
+    const teams = Array.from(teamsByRoom.get(code)?.values() ?? []);
+    const payload: AdminStateResponse = { room, questions, teams };
+    res.json(payload);
+  });
+
+  app.post("/api/admin/add-question", (req, res) => {
+    const { room, question_text, correct_answer, is_real } = (req.body || {}) as AdminAddQuestionRequest;
+    const code = String(room || "").toUpperCase();
+    if (!rooms.get(code)) return res.status(404).json({ ok: false, error: "Invalid room" } satisfies ErrorResponse);
+    const list = roomQuestions.get(code) ?? [];
+    const nextId = (list.at(-1)?.question_id ?? 0) + 1;
+    const q: Question = {
+      question_id: nextId,
+      question_text: question_text.trim(),
+      is_real: Boolean(is_real),
+      correct_answer: String(correct_answer),
+      assigned_grid_pos: null,
+    };
+    list.push(q);
+    roomQuestions.set(code, list);
+    res.json(q);
+  });
+
+  app.post("/api/admin/delete-question", (req, res) => {
+    const { room, question_id } = (req.body || {}) as AdminDeleteQuestionRequest;
+    const code = String(room || "").toUpperCase();
+    const list = roomQuestions.get(code);
+    if (!list) return res.status(404).json({ ok: false, error: "Invalid room" } satisfies ErrorResponse);
+    const idx = list.findIndex((x) => x.question_id === Number(question_id));
+    if (idx >= 0) list.splice(idx, 1);
+    roomQuestions.set(code, list);
+    res.json({ ok: true });
+  });
+
+  app.post("/api/admin/start", (req, res) => {
+    const { room, minutes } = (req.body || {}) as AdminStartRequest;
+    const code = String(room || "").toUpperCase();
+    const r = rooms.get(code);
+    if (!r) return res.status(404).json({ ok: false, error: "Invalid room" } satisfies ErrorResponse);
+    r.roundEndAt = Date.now() + Number(minutes || 0) * 60 * 1000;
+    rooms.set(code, r);
+    res.json(r);
+  });
+
+  app.post("/api/admin/force-end", (req, res) => {
+    const { room } = (req.body || {}) as AdminForceEndRequest;
+    const code = String(room || "").toUpperCase();
+    const r = rooms.get(code);
+    if (!r) return res.status(404).json({ ok: false, error: "Invalid room" } satisfies ErrorResponse);
+    const now = Date.now();
+    r.roundEndAt = now;
+    const tmap = teamsByRoom.get(code) ?? new Map();
+    for (const t of tmap.values()) if (!t.end_time) t.end_time = now;
+    rooms.set(code, r);
+    res.json(r);
   });
 
   return app;
