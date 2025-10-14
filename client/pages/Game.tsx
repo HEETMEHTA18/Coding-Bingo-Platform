@@ -7,13 +7,20 @@ import type {
   Room,
 } from "@shared/api";
 
+function safeParse<T>(raw: string | null): T | null {
+  try {
+    if (!raw) return null;
+    if (raw === "undefined" || raw === "null") return null;
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
+}
 function useTeam(): Team | null {
-  const raw = localStorage.getItem("bingo.team");
-  return raw ? (JSON.parse(raw) as Team) : null;
+  return safeParse<Team>(localStorage.getItem("bingo.team"));
 }
 function useRoom(): Room | null {
-  const raw = localStorage.getItem("bingo.room");
-  return raw ? (JSON.parse(raw) as Room) : null;
+  return safeParse<Room>(localStorage.getItem("bingo.room"));
 }
 
 export default function GamePage() {
