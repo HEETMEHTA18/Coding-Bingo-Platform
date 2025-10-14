@@ -81,3 +81,32 @@ export interface GameStateResponse {
   questions: Array<Pick<Question, "question_id" | "question_text" | "is_real">>;
   solved_positions: string[]; // positions filled by this team
 }
+
+// Admin API
+export interface AdminCreateRoomRequest {
+  code: RoomCode;
+  title: string;
+  durationMinutes?: number | null; // start immediately if provided
+}
+export interface AdminStateResponse {
+  room: Room;
+  questions: Question[];
+  teams: Team[];
+}
+export interface AdminAddQuestionRequest {
+  room: RoomCode;
+  question_text: string;
+  correct_answer: string;
+  is_real: boolean;
+}
+export interface AdminDeleteQuestionRequest {
+  room: RoomCode;
+  question_id: QuestionID;
+}
+export interface AdminStartRequest {
+  room: RoomCode;
+  minutes: number;
+}
+export interface AdminForceEndRequest {
+  room: RoomCode;
+}
