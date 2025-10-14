@@ -1,61 +1,98 @@
-import { DemoResponse } from "@shared/api";
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import type { ErrorResponse, LoginRequest, LoginResponse } from "@shared/api";
 
 export default function Index() {
-  const [exampleFromServer, setExampleFromServer] = useState("");
-  // Fetch users on component mount
-  useEffect(() => {
-    fetchDemo();
-  }, []);
+  const navigate = useNavigate();
+  const [teamName, setTeamName] = useState("");
+  const [roomCode, setRoomCode] = useState("DEMO");
+  const [error, setError] = useState<string>("");
+  const [loading, setLoading] = useState(false);
 
-  // Example of how to fetch data from the server (if needed)
-  const fetchDemo = async () => {
+  useEffect(() => {
+    // If already logged in, go to game
+    const saved = localStorage.getItem("bingo.team");
+    if (saved) navigate("/game");
+  }, [navigate]);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+
+    if (!teamName.trim()) {
+      setError("Team name is required");
+      return;
+    }
+    if (!roomCode.trim()) {
+      setError("Room code is required");
+      return;
+    }
+
+    setLoading(true);
     try {
-      const response = await fetch("/api/demo");
-      const data = (await response.json()) as DemoResponse;
-      setExampleFromServer(data.message);
-    } catch (error) {
-      console.error("Error fetching hello:", error);
+      const body: LoginRequest = { team_name: teamName.trim(), room_code: roomCode.trim() };
+      const res = await fetch("/api/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = (await res.json()) as LoginResponse | ErrorResponse;
+      if (!res.ok || ("ok" in data && data.ok === false)) {
+        const msg = (data as ErrorResponse).error || "Login failed";
+        setError(msg);
+        return;
+      }
+      const success = data as LoginResponse;
+      localStorage.setItem("bingo.team", JSON.stringify(success.team));
+      localStorage.setItem("bingo.room", JSON.stringify(success.room));
+      navigate("/game");
+    } catch (err) {
+      setError("Network error");
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200">
-      <div className="text-center">
-        {/* TODO: FUSION_GENERATION_APP_PLACEHOLDER replace everything here with the actual app! */}
-        <h1 className="text-2xl font-semibold text-slate-800 flex items-center justify-center gap-3">
-          <svg
-            className="animate-spin h-8 w-8 text-slate-400"
-            viewBox="0 0 50 50"
+    <div className="min-h-screen bg-gradient-to-b from-white to-blue-50 flex items-center justify-center px-4">
+      <div className="w-full max-w-md">
+        <div className="text-center mb-6">
+          <h1 className="text-2xl font-bold text-slate-800">Real-Time Coding Bingo</h1>
+          <p className="text-slate-500">Enter your team to join the room</p>
+        </div>
+        <form onSubmit={submit} className="bg-white shadow-xl rounded-xl border border-slate-100 p-6 space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Team Name</label>
+            <input
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary"
+              placeholder="e.g. Code Ninjas"
+              value={teamName}
+              onChange={(e) => setTeamName(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Room Code</label>
+            <input
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 uppercase tracking-wider focus:outline-none focus:ring-2 focus:ring-primary"
+              placeholder="e.g. DEMO"
+              value={roomCode}
+              onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
+            />
+          </div>
+          {error && (
+            <div className="text-sm font-medium text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+              {error}
+            </div>
+          )}
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-primary text-primary-foreground rounded-lg py-2.5 font-semibold hover:bg-primary/90 disabled:opacity-60"
           >
-            <circle
-              className="opacity-30"
-              cx="25"
-              cy="25"
-              r="20"
-              stroke="currentColor"
-              strokeWidth="5"
-              fill="none"
-            />
-            <circle
-              className="text-slate-600"
-              cx="25"
-              cy="25"
-              r="20"
-              stroke="currentColor"
-              strokeWidth="5"
-              fill="none"
-              strokeDasharray="100"
-              strokeDashoffset="75"
-            />
-          </svg>
-          Generating your app...
-        </h1>
-        <p className="mt-4 text-slate-600 max-w-md">
-          Watch the chat on the left for updates that might need your attention
-          to finish generating
-        </p>
-        <p className="mt-4 hidden max-w-md">{exampleFromServer}</p>
+            {loading ? "Joining..." : "Join Game"}
+          </button>
+          <p className="text-xs text-slate-500 text-center">Use room code DEMO to try it now</p>
+        </form>
       </div>
     </div>
   );
