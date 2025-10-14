@@ -12,7 +12,12 @@ export default function Index() {
   useEffect(() => {
     // If already logged in, go to game
     const saved = localStorage.getItem("bingo.team");
-    if (saved) navigate("/game");
+    try {
+      const parsed = saved && saved !== "undefined" && saved !== "null" ? JSON.parse(saved) : null;
+      if (parsed && parsed.team_id) navigate("/game");
+    } catch {
+      // ignore corrupted data
+    }
   }, [navigate]);
 
   const submit = async (e: React.FormEvent) => {
