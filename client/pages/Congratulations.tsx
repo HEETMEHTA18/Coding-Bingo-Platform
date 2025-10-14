@@ -11,12 +11,16 @@ export default function CongratulationsPage() {
   useEffect(() => {
     const rawTeam = localStorage.getItem("bingo.team");
     const rawRoom = localStorage.getItem("bingo.room");
-    if (!rawTeam || !rawRoom) {
+    let t: Team | null = null;
+    let room: { code: string } | null = null;
+    try {
+      t = rawTeam && rawTeam !== "undefined" && rawTeam !== "null" ? (JSON.parse(rawTeam) as Team) : null;
+      room = rawRoom && rawRoom !== "undefined" && rawRoom !== "null" ? (JSON.parse(rawRoom) as { code: string }) : null;
+    } catch {}
+    if (!t || !room) {
       navigate("/");
       return;
     }
-    const t = JSON.parse(rawTeam) as Team;
-    const room = JSON.parse(rawRoom) as { code: string };
     setTeam(t);
 
     const run = async () => {
