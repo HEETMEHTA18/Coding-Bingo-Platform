@@ -27,7 +27,7 @@ export default function GamePage() {
   const navigate = useNavigate();
   const team = useTeam();
   const [room, setRoom] = useState<Room | null>(useRoom());
-  const [questions, setQuestions] = useState<GameStateResponse["questions"]>([]);
+  const [questions, setQuestions] = useState<GameStateResponse["questions"]>([] as GameStateResponse["questions"]);
   const [solved, setSolved] = useState<string[]>([]);
   const [selectedQid, setSelectedQid] = useState<number | null>(null);
   const [answer, setAnswer] = useState("");
@@ -42,14 +42,16 @@ export default function GamePage() {
   const loadState = async () => {
     if (!team) return;
     const res = await fetch(`/api/game-state?teamId=${encodeURIComponent(team.team_id)}`);
-    const data = (await res.json()) as GameStateResponse;
-    setRoom(data.room);
+    if (!res.ok) return; // keep previous state
+    const data = (await res.json()) as Partial<GameStateResponse> & Record<string, unknown>;
+    if (!data || !Array.isArray(data.questions) || !data.room || !Array.isArray(data.solved_positions)) return;
+    setRoom(data.room as GameStateResponse["room"]);
     localStorage.setItem("bingo.room", JSON.stringify(data.room));
-    setQuestions(data.questions);
-    setSolved(data.solved_positions);
+    setQuestions(data.questions as GameStateResponse["questions"]);
+    setSolved(data.solved_positions as string[]);
     // derive lines
-    setLines(computeLines(data.solved_positions));
-    if (data.room.roundEndAt && Date.now() > data.room.roundEndAt) setDisabled(true);
+    setLines(computeLines(data.solved_positions as string[]));
+    if ((data.room as GameStateResponse["room"]).roundEndAt && Date.now() > (data.room as GameStateResponse["room"]).roundEndAt!) setDisabled(true);
   };
 
   useEffect(() => {
@@ -60,7 +62,7 @@ export default function GamePage() {
   }, []);
 
   const selectedQuestion = useMemo(
-    () => questions.find((q) => q.question_id === selectedQid) || null,
+    () => (questions ?? []).find((q) => q.question_id === selectedQid) || null,
     [questions, selectedQid],
   );
 
