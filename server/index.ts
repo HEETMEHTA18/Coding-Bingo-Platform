@@ -9,6 +9,7 @@ import type {
   LoginRequest,
   LoginResponse,
   Question,
+  QuestionID,
   Room,
   RoomCode,
   SubmissionResult,
@@ -21,6 +22,7 @@ const rooms = new Map<RoomCode, Room>();
 const roomQuestions = new Map<RoomCode, Question[]>();
 const teamsByRoom = new Map<RoomCode, Map<TeamID, Team>>();
 const teamSolvedPositions = new Map<TeamID, Set<string>>(); // e.g., A1..E5 per team
+const teamSolvedQuestions = new Map<TeamID, Set<QuestionID>>(); // solved question ids per team
 
 const GRID_POSITIONS = (() => {
   const letters = ["A", "B", "C", "D", "E"];
@@ -197,6 +199,7 @@ export function createServer() {
     };
     teamMap.set(id, team);
     teamSolvedPositions.set(id, new Set());
+    teamSolvedQuestions.set(id, new Set());
 
     const resp: LoginResponse = { ok: true, team, room };
     res.json(resp);
@@ -273,12 +276,13 @@ export function createServer() {
     if (!q) return res.status(400).json({ ok: false, error: "Invalid question" } satisfies ErrorResponse);
 
     const solvedSet = teamSolvedPositions.get(teamId)!;
+    const solvedQs = teamSolvedQuestions.get(teamId)!;
 
-    if (q.is_real && q.assigned_grid_pos && solvedSet.has(q.assigned_grid_pos)) {
+    if (solvedQs.has(questionId)) {
       const resp: SubmissionResult = {
         status: "already_solved",
         is_real: q.is_real,
-        filled_cell: q.assigned_grid_pos,
+        filled_cell: null,
         lines_completed: team.lines_completed,
         win: Boolean(team.end_time),
         solved_positions: Array.from(solvedSet),
@@ -316,8 +320,14 @@ export function createServer() {
       return res.json(resp);
     }
 
-    // Correct real answer
-    if (q.assigned_grid_pos) solvedSet.add(q.assigned_grid_pos);
+    // Correct real answer → fill a random unused bingo cell for this team
+    const available = GRID_POSITIONS.filter((p) => !solvedSet.has(p));
+    let chosen: string | null = null;
+    if (available.length > 0) {
+      chosen = available[Math.floor(Math.random() * available.length)];
+      solvedSet.add(chosen);
+      teamSolvedQuestions.get(teamId)!.add(questionId);
+    }
 
     const positions = Array.from(solvedSet);
     const lines = getLinesCompletedFromPositions(positions);
@@ -332,7 +342,7 @@ export function createServer() {
     const resp: SubmissionResult = {
       status: "correct",
       is_real: true,
-      filled_cell: q.assigned_grid_pos ?? null,
+      filled_cell: chosen,
       lines_completed: lines,
       win,
       solved_positions: positions,
