@@ -42,7 +42,18 @@ export default function GamePage() {
   const loadState = async () => {
     if (!team) return;
     const res = await fetch(`/api/game-state?teamId=${encodeURIComponent(team.team_id)}`);
-    if (!res.ok) return; // keep previous state
+    if (!res.ok) {
+      // If team not found, clear stale localStorage and send back to login
+      try {
+        const err = (await res.json()) as { error?: string };
+        if (res.status === 404 || err?.error === "Team not found") {
+          localStorage.removeItem("bingo.team");
+          localStorage.removeItem("bingo.room");
+          navigate("/");
+        }
+      } catch {}
+      return; // keep previous state
+    }
     const data = (await res.json()) as Partial<GameStateResponse> & Record<string, unknown>;
     if (!data || !Array.isArray(data.questions) || !data.room || !Array.isArray(data.solved_positions)) return;
     setRoom(data.room as GameStateResponse["room"]);
