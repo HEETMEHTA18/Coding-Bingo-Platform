@@ -130,12 +130,20 @@ export default function AdminPage() {
               Manage rooms, questions, and timer
             </p>
           </div>
-          <a
-            href={`/leaderboard?room=${encodeURIComponent(roomCode.toUpperCase())}`}
-            className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90"
-          >
-            Live Leaderboard
-          </a>
+          <div className="flex items-center gap-2">
+            <a
+              href={`/leaderboard?room=${encodeURIComponent(roomCode.toUpperCase())}`}
+              className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90"
+            >
+              Live Leaderboard
+            </a>
+            <a
+              href="/leaderboard-all"
+              className="px-3 py-1.5 rounded-lg border font-medium hover:bg-blue-50"
+            >
+              All Rooms
+            </a>
+          </div>
         </div>
       </header>
 
