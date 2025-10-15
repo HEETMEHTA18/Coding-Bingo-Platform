@@ -67,10 +67,10 @@ export default function LeaderboardPage() {
             )}
           </div>
           <a
-            href="/game"
+            href={isAdmin ? "/admin" : "/game"}
             className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90"
           >
-            Back to Game
+            {isAdmin ? "Back to Dashboard" : "Back to Game"}
           </a>
         </div>
       </header>
