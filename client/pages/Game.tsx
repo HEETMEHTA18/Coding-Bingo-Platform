@@ -207,7 +207,7 @@ export default function GamePage() {
       <main className="container py-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
         <section className="bg-white border rounded-xl p-4 shadow-sm">
           <h2 className="font-semibold text-slate-800 mb-3">Questions (35)</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-[60vh] overflow-auto pr-1">
+          <div className="hidden">
             {questions.map((q) => (
               <button
                 key={q.question_id}
@@ -236,12 +236,13 @@ export default function GamePage() {
           {selectedQuestion && (
             <>
               <div className="mt-4">
-                <div className="text-xs font-medium text-slate-500 mb-1">Selected Question</div>
+                <div className="text-xs font-medium text-slate-500 mb-1">Question {Math.max(0, (questions ?? []).findIndex((q)=> q.question_id === selectedQid)) + 1}</div>
                 <pre className="whitespace-pre-wrap font-mono text-sm bg-slate-50 border border-slate-200 rounded-lg p-3 max-h-80 overflow-auto">{selectedQuestion.question_text}</pre>
               </div>
               <div className="mt-3 flex items-center gap-2">
-                <button type="button" onClick={() => selectByDelta(-1)} className="px-3 py-2 rounded-lg border font-semibold hover:bg-blue-50">Previous</button>
+                <button type="button" onClick={() => selectByDelta(-1)} className="px-3 py-2 rounded-lg border font-semibold hover:bg-blue-50 mr-auto">Previous</button>
                 <button type="button" onClick={() => selectByDelta(1)} className="px-3 py-2 rounded-lg border font-semibold hover:bg-blue-50">Skip</button>
+                <button type="button" onClick={() => selectByDelta(1)} className="px-3 py-2 rounded-lg border font-semibold hover:bg-blue-50 ml-auto">Next</button>
               </div>
               <form onSubmit={onSubmit} className="mt-3 flex gap-2">
                 <input
