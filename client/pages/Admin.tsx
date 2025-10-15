@@ -209,7 +209,7 @@ export default function AdminPage() {
               name="ans"
               required
               placeholder="Correct output"
-              className="md:col-span-2 rounded-lg border px-3 py-2"
+              className="md:col-span-1 rounded-lg border px-3 py-2"
             />
             <label className="flex items-center gap-2 md:col-span-1 text-sm">
               <input
