@@ -39,6 +39,7 @@ export default function GamePage() {
   } | null>(null);
   const [lines, setLines] = useState<number>(0);
   const [disabled, setDisabled] = useState<boolean>(false);
+  const [now, setNow] = useState<number>(Date.now());
 
   useEffect(() => {
     if (!team) navigate("/");
@@ -86,7 +87,11 @@ export default function GamePage() {
   useEffect(() => {
     loadState();
     const id = setInterval(loadState, 5000);
-    return () => clearInterval(id);
+    const tick = setInterval(() => setNow(Date.now()), 1000);
+    return () => {
+      clearInterval(id);
+      clearInterval(tick);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -170,11 +175,11 @@ export default function GamePage() {
 
   const timeLeft = useMemo(() => {
     if (!room?.roundEndAt) return null;
-    const ms = Math.max(0, room.roundEndAt - Date.now());
+    const ms = Math.max(0, room.roundEndAt - now);
     const m = Math.floor(ms / 60000);
     const s = Math.floor((ms % 60000) / 1000);
     return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
-  }, [room?.roundEndAt]);
+  }, [room?.roundEndAt, now]);
 
   const isSolvedPos = (pos: string) => solved.includes(pos);
 
