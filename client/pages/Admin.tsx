@@ -198,11 +198,12 @@ export default function AdminPage() {
             onSubmit={addQuestion}
             className="grid grid-cols-1 md:grid-cols-6 gap-3"
           >
-            <input
+            <textarea
               name="qt"
               required
-              placeholder="C question text (output only)"
-              className="md:col-span-3 rounded-lg border px-3 py-2"
+              placeholder="Paste full C code here (question)."
+              rows={8}
+              className="md:col-span-4 rounded-lg border px-3 py-2 font-mono whitespace-pre-wrap"
             />
             <input
               name="ans"
