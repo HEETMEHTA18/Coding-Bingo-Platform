@@ -4,10 +4,17 @@ import type { LeaderboardResponse, Room } from "@shared/api";
 
 export default function LeaderboardPage() {
   const navigate = useNavigate();
-  const isAdmin = typeof window !== "undefined" && localStorage.getItem("bingo.admin") === "true";
+  const isAdmin =
+    typeof window !== "undefined" &&
+    localStorage.getItem("bingo.admin") === "true";
   const [room, setRoom] = useState<Room | null>(() => {
     const fromQuery = new URLSearchParams(window.location.search).get("room");
-    if (fromQuery) return { code: fromQuery.toUpperCase(), title: fromQuery.toUpperCase(), roundEndAt: null } as Room;
+    if (fromQuery)
+      return {
+        code: fromQuery.toUpperCase(),
+        title: fromQuery.toUpperCase(),
+        roundEndAt: null,
+      } as Room;
     const raw = localStorage.getItem("bingo.room");
     try {
       return raw && raw !== "undefined" && raw !== "null"
@@ -46,14 +53,18 @@ export default function LeaderboardPage() {
           <div className="flex items-center gap-3">
             <div>
               <h1 className="font-bold text-slate-800">Live Leaderboard</h1>
-              <p className="text-sm text-slate-500">Room: {room?.code ?? "—"}</p>
+              <p className="text-sm text-slate-500">
+                Room: {room?.code ?? "—"}
+              </p>
             </div>
             {isAdmin && (
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
                   const form = e.currentTarget as HTMLFormElement;
-                  const input = form.elements.namedItem("code") as HTMLInputElement;
+                  const input = form.elements.namedItem(
+                    "code",
+                  ) as HTMLInputElement;
                   const code = input.value.trim().toUpperCase();
                   if (!code) return;
                   setRoom({ code, title: code, roundEndAt: null } as Room);
@@ -61,8 +72,14 @@ export default function LeaderboardPage() {
                 }}
                 className="flex items-center gap-2"
               >
-                <input name="code" defaultValue={room?.code ?? "DEMO"} className="rounded-lg border px-2 py-1 text-sm" />
-                <button className="px-3 py-1.5 rounded-lg border text-sm font-medium hover:bg-blue-50">Load</button>
+                <input
+                  name="code"
+                  defaultValue={room?.code ?? "DEMO"}
+                  className="rounded-lg border px-2 py-1 text-sm"
+                />
+                <button className="px-3 py-1.5 rounded-lg border text-sm font-medium hover:bg-blue-50">
+                  Load
+                </button>
               </form>
             )}
           </div>

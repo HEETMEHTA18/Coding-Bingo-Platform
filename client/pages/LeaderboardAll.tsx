@@ -23,9 +23,16 @@ export default function LeaderboardAllPage() {
         <div className="container py-3 flex items-center justify-between">
           <div>
             <h1 className="font-bold text-slate-800">All Rooms Leaderboard</h1>
-            <p className="text-sm text-slate-500">Aggregated across all rooms</p>
+            <p className="text-sm text-slate-500">
+              Aggregated across all rooms
+            </p>
           </div>
-          <a href="/admin" className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90">Back to Dashboard</a>
+          <a
+            href="/admin"
+            className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90"
+          >
+            Back to Dashboard
+          </a>
         </div>
       </header>
 
@@ -39,7 +46,10 @@ export default function LeaderboardAllPage() {
             <div className="px-4 py-3">Time Taken</div>
           </div>
           {rows.map((r) => (
-            <div key={`${r.room_code}-${r.rank}`} className="grid grid-cols-5 gap-0 border-b last:border-b-0">
+            <div
+              key={`${r.room_code}-${r.rank}`}
+              className="grid grid-cols-5 gap-0 border-b last:border-b-0"
+            >
               <div className="px-4 py-3 font-semibold">#{r.rank}</div>
               <div className="px-4 py-3">{r.team_name}</div>
               <div className="px-4 py-3">{r.room_code}</div>

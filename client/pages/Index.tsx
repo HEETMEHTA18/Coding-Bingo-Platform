@@ -37,7 +37,10 @@ export default function Index() {
     }
 
     // Admin quick login
-    if (teamName.trim().toLowerCase() === "admin" && roomCode.trim().toUpperCase() === "ADMIN2907") {
+    if (
+      teamName.trim().toLowerCase() === "admin" &&
+      roomCode.trim().toUpperCase() === "ADMIN2907"
+    ) {
       localStorage.setItem("bingo.admin", "true");
       localStorage.removeItem("bingo.team");
       localStorage.removeItem("bingo.room");

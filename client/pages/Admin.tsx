@@ -255,7 +255,9 @@ export default function AdminPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
             {state?.questions.map((q) => (
               <div key={q.question_id} className="border rounded-lg p-3">
-                <pre className="text-sm text-slate-800 font-mono whitespace-pre-wrap">{q.question_text}</pre>
+                <pre className="text-sm text-slate-800 font-mono whitespace-pre-wrap">
+                  {q.question_text}
+                </pre>
                 <div className="mt-1 text-xs text-slate-500">
                   Answer: {q.correct_answer} ·{" "}
                   {q.is_real ? (

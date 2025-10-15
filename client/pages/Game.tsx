@@ -119,7 +119,12 @@ export default function GamePage() {
   const selectByDelta = (delta: number) => {
     if (!questions || questions.length === 0) return;
     const list = questions;
-    const idx = selectedQid ? Math.max(0, list.findIndex((q) => q.question_id === selectedQid)) : 0;
+    const idx = selectedQid
+      ? Math.max(
+          0,
+          list.findIndex((q) => q.question_id === selectedQid),
+        )
+      : 0;
     const nextIdx = (idx + delta + list.length) % list.length;
     onSelectQuestion(list[nextIdx].question_id);
   };
@@ -241,13 +246,41 @@ export default function GamePage() {
           {selectedQuestion && (
             <>
               <div className="mt-4">
-                <div className="text-xs font-medium text-slate-500 mb-1">Question {Math.max(0, (questions ?? []).findIndex((q)=> q.question_id === selectedQid)) + 1}</div>
-                <pre className="whitespace-pre-wrap font-mono text-sm bg-slate-50 border border-slate-200 rounded-lg p-3 max-h-80 overflow-auto">{selectedQuestion.question_text}</pre>
+                <div className="text-xs font-medium text-slate-500 mb-1">
+                  Question{" "}
+                  {Math.max(
+                    0,
+                    (questions ?? []).findIndex(
+                      (q) => q.question_id === selectedQid,
+                    ),
+                  ) + 1}
+                </div>
+                <pre className="whitespace-pre-wrap font-mono text-sm bg-slate-50 border border-slate-200 rounded-lg p-3 max-h-80 overflow-auto">
+                  {selectedQuestion.question_text}
+                </pre>
               </div>
               <div className="mt-3 flex items-center gap-2">
-                <button type="button" onClick={() => selectByDelta(-1)} className="px-3 py-2 rounded-lg border font-semibold hover:bg-blue-50 mr-auto">Previous</button>
-                <button type="button" onClick={() => selectByDelta(1)} className="px-3 py-2 rounded-lg border font-semibold hover:bg-blue-50">Skip</button>
-                <button type="button" onClick={() => selectByDelta(1)} className="px-3 py-2 rounded-lg border font-semibold hover:bg-blue-50 ml-auto">Next</button>
+                <button
+                  type="button"
+                  onClick={() => selectByDelta(-1)}
+                  className="px-3 py-2 rounded-lg border font-semibold hover:bg-blue-50 mr-auto"
+                >
+                  Previous
+                </button>
+                <button
+                  type="button"
+                  onClick={() => selectByDelta(1)}
+                  className="px-3 py-2 rounded-lg border font-semibold hover:bg-blue-50"
+                >
+                  Skip
+                </button>
+                <button
+                  type="button"
+                  onClick={() => selectByDelta(1)}
+                  className="px-3 py-2 rounded-lg border font-semibold hover:bg-blue-50 ml-auto"
+                >
+                  Next
+                </button>
               </div>
               <form onSubmit={onSubmit} className="mt-3 flex gap-2">
                 <input
