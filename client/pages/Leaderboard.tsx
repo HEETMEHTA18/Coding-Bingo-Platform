@@ -4,7 +4,10 @@ import type { LeaderboardResponse, Room } from "@shared/api";
 
 export default function LeaderboardPage() {
   const navigate = useNavigate();
+  const isAdmin = typeof window !== "undefined" && localStorage.getItem("bingo.admin") === "true";
   const [room, setRoom] = useState<Room | null>(() => {
+    const fromQuery = new URLSearchParams(window.location.search).get("room");
+    if (fromQuery) return { code: fromQuery.toUpperCase(), title: fromQuery.toUpperCase(), roundEndAt: null } as Room;
     const raw = localStorage.getItem("bingo.room");
     try {
       return raw && raw !== "undefined" && raw !== "null"
@@ -26,23 +29,42 @@ export default function LeaderboardPage() {
   };
 
   useEffect(() => {
-    if (!room) navigate("/");
-  }, [room, navigate]);
+    if (!room && !isAdmin) navigate("/");
+  }, [room, isAdmin, navigate]);
 
   useEffect(() => {
     load();
     const id = setInterval(load, 3000);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [room?.code]);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-white to-blue-50">
       <header className="sticky top-0 bg-white/80 backdrop-blur border-b">
         <div className="container py-3 flex items-center justify-between">
-          <div>
-            <h1 className="font-bold text-slate-800">Live Leaderboard</h1>
-            <p className="text-sm text-slate-500">Room: {room?.code}</p>
+          <div className="flex items-center gap-3">
+            <div>
+              <h1 className="font-bold text-slate-800">Live Leaderboard</h1>
+              <p className="text-sm text-slate-500">Room: {room?.code ?? "—"}</p>
+            </div>
+            {isAdmin && (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const form = e.currentTarget as HTMLFormElement;
+                  const input = form.elements.namedItem("code") as HTMLInputElement;
+                  const code = input.value.trim().toUpperCase();
+                  if (!code) return;
+                  setRoom({ code, title: code, roundEndAt: null } as Room);
+                  setRows([]);
+                }}
+                className="flex items-center gap-2"
+              >
+                <input name="code" defaultValue={room?.code ?? "DEMO"} className="rounded-lg border px-2 py-1 text-sm" />
+                <button className="px-3 py-1.5 rounded-lg border text-sm font-medium hover:bg-blue-50">Load</button>
+              </form>
+            )}
           </div>
           <a
             href="/game"
