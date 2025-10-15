@@ -1,3 +1,4 @@
+// server/routes/demo.ts (keep existing)
 import { RequestHandler } from "express";
 import { DemoResponse } from "@shared/api";
 

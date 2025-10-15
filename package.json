@@ -16,13 +16,20 @@
     "build:client": "vite build",
     "build:server": "vite build --config vite.config.server.ts",
     "start": "node dist/server/node-build.mjs",
+    "generate": "drizzle-kit generate",
+    "migrate": "drizzle-kit migrate",
     "test": "vitest --run",
     "format.fix": "prettier --write .",
     "typecheck": "tsc"
   },
   "dependencies": {
+    "@types/pg": "^8.15.5",
     "dotenv": "^17.2.1",
+    "drizzle-kit": "^0.31.5",
+    "drizzle-orm": "^0.44.6",
     "express": "^5.1.0",
+    "pg": "^8.16.3",
+    "postgres": "^3.4.7",
     "zod": "^3.25.76"
   },
   "devDependencies": {

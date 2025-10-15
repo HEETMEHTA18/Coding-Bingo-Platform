@@ -110,10 +110,7 @@ export default function GamePage() {
   const onSelectQuestion = (qid: number) => {
     setSelectedQid(qid);
     setAnswer("");
-    const q = (questions ?? []).find((x) => x.question_id === qid);
-    if (q && !q.is_real)
-      setStatus({ type: "warn", text: "Fake Question – No Bingo Point" });
-    else setStatus(null);
+    setStatus(null);
   };
 
   const selectByDelta = (delta: number) => {

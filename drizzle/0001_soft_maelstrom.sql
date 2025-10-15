@@ -1,0 +1,1 @@
+ALTER TABLE "questions" DROP COLUMN "assigned_grid_pos";

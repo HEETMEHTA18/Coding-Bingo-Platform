@@ -1,0 +1,133 @@
+// server/controllers/AdminController.ts
+import { Request, Response } from "express";
+import { RoomService } from "../services/RoomService";
+import { QuestionService } from "../services/QuestionService";
+import { TeamService } from "../services/TeamService";
+import { RoomModel } from "../models/Room";
+import type {
+  AdminCreateRoomRequest,
+  AdminStateResponse,
+  AdminAddQuestionRequest,
+  AdminDeleteQuestionRequest,
+  AdminStartRequest,
+  AdminForceEndRequest,
+  ErrorResponse,
+} from "@shared/api";
+
+export class AdminController {
+  static async createRoom(req: Request, res: Response) {
+    const { code, title, durationMinutes } = (req.body || {}) as AdminCreateRoomRequest;
+
+    if (!code || !title) {
+      return res.status(400).json({
+        ok: false,
+        error: "Missing code/title",
+      } as ErrorResponse);
+    }
+
+    const room = await RoomService.createRoom(code, title, durationMinutes);
+    res.json(room);
+  }
+
+  static async seedDemo(req: Request, res: Response) {
+    const code = String(req.body.room || "").toUpperCase();
+
+    if (!code) {
+      return res.status(400).json({
+        ok: false,
+        error: "Missing room",
+      } as ErrorResponse);
+    }
+
+    await RoomService.seedDemoRoom(code);
+    res.json({ ok: true });
+  }
+
+  static async getState(req: Request, res: Response) {
+    const code = String(req.query.room || "").toUpperCase();
+
+    const room = await RoomService.getRoomByCode(code);
+    if (!room) {
+      return res.status(404).json({
+        ok: false,
+        error: "Invalid room code",
+      } as ErrorResponse);
+    }
+
+    const questions = await QuestionService.getQuestionsByRoom(code);
+    const teams = await TeamService.getTeamsByRoom(code);
+
+    const response: AdminStateResponse = {
+      room,
+      questions,
+      teams,
+    };
+
+    res.json(response);
+  }
+
+  static async addQuestion(req: Request, res: Response) {
+    const { room, question_text, correct_answer, is_real } = (req.body || {}) as AdminAddQuestionRequest;
+    const code = String(room || "").toUpperCase();
+
+    if (!(await RoomService.getRoomByCode(code))) {
+      return res.status(404).json({
+        ok: false,
+        error: "Invalid room",
+      } as ErrorResponse);
+    }
+
+    const question = await QuestionService.addQuestion(code, question_text, correct_answer, is_real);
+    res.json(question);
+  }
+
+  static async deleteQuestion(req: Request, res: Response) {
+    const { room, question_id } = (req.body || {}) as AdminDeleteQuestionRequest;
+    const code = String(room || "").toUpperCase();
+
+    if (!(await RoomService.getRoomByCode(code))) {
+      return res.status(404).json({
+        ok: false,
+        error: "Invalid room",
+      } as ErrorResponse);
+    }
+
+    const success = await QuestionService.deleteQuestion(code, Number(question_id));
+    res.json({ ok: success });
+  }
+
+  static async startTimer(req: Request, res: Response) {
+    const { room, minutes } = (req.body || {}) as AdminStartRequest;
+    const code = String(room || "").toUpperCase();
+
+    const existingRoom = await RoomService.getRoomByCode(code);
+    if (!existingRoom) {
+      return res.status(404).json({
+        ok: false,
+        error: "Invalid room",
+      } as ErrorResponse);
+    }
+
+    const updatedRoom = await RoomModel.update(code, {
+      roundEndAt: Date.now() + Number(minutes || 0) * 60 * 1000
+    });
+
+    res.json(updatedRoom);
+  }
+
+  static async forceEnd(req: Request, res: Response) {
+    const { room } = (req.body || {}) as AdminForceEndRequest;
+    const code = String(room || "").toUpperCase();
+
+    const updatedRoom = await RoomService.forceEndRoom(code);
+
+    if (!updatedRoom) {
+      return res.status(404).json({
+        ok: false,
+        error: "Invalid room",
+      } as ErrorResponse);
+    }
+
+    res.json(updatedRoom);
+  }
+}
