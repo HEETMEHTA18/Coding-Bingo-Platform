@@ -131,7 +131,7 @@ export default function AdminPage() {
             </p>
           </div>
           <a
-            href="/leaderboard"
+            href={`/leaderboard?room=${encodeURIComponent(roomCode.toUpperCase())}`}
             className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90"
           >
             Live Leaderboard
