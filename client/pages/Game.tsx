@@ -90,6 +90,13 @@ export default function GamePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    if (!selectedQid && questions && questions.length > 0) {
+      onSelectQuestion(questions[0].question_id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [questions]);
+
   const selectedQuestion = useMemo(
     () => (questions ?? []).find((q) => q.question_id === selectedQid) || null,
     [questions, selectedQid],
@@ -98,10 +105,18 @@ export default function GamePage() {
   const onSelectQuestion = (qid: number) => {
     setSelectedQid(qid);
     setAnswer("");
-    const q = questions.find((x) => x.question_id === qid);
+    const q = (questions ?? []).find((x) => x.question_id === qid);
     if (q && !q.is_real)
       setStatus({ type: "warn", text: "Fake Question – No Bingo Point" });
     else setStatus(null);
+  };
+
+  const selectByDelta = (delta: number) => {
+    if (!questions || questions.length === 0) return;
+    const list = questions;
+    const idx = selectedQid ? Math.max(0, list.findIndex((q) => q.question_id === selectedQid)) : 0;
+    const nextIdx = (idx + delta + list.length) % list.length;
+    onSelectQuestion(list[nextIdx].question_id);
   };
 
   const onSubmit = async (e: React.FormEvent) => {
@@ -219,21 +234,31 @@ export default function GamePage() {
             ))}
           </div>
           {selectedQuestion && (
-            <form onSubmit={onSubmit} className="mt-4 flex gap-2">
-              <input
-                disabled={disabled}
-                value={answer}
-                onChange={(e) => setAnswer(e.target.value)}
-                placeholder="Enter output only"
-                className="flex-1 rounded-lg border border-slate-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary"
-              />
-              <button
-                disabled={disabled}
-                className="px-4 py-2 rounded-lg bg-primary text-primary-foreground font-semibold hover:bg-primary/90 disabled:opacity-60"
-              >
-                Submit
-              </button>
-            </form>
+            <>
+              <div className="mt-4">
+                <div className="text-xs font-medium text-slate-500 mb-1">Selected Question</div>
+                <pre className="whitespace-pre-wrap font-mono text-sm bg-slate-50 border border-slate-200 rounded-lg p-3 max-h-80 overflow-auto">{selectedQuestion.question_text}</pre>
+              </div>
+              <div className="mt-3 flex items-center gap-2">
+                <button type="button" onClick={() => selectByDelta(-1)} className="px-3 py-2 rounded-lg border font-semibold hover:bg-blue-50">Previous</button>
+                <button type="button" onClick={() => selectByDelta(1)} className="px-3 py-2 rounded-lg border font-semibold hover:bg-blue-50">Skip</button>
+              </div>
+              <form onSubmit={onSubmit} className="mt-3 flex gap-2">
+                <input
+                  disabled={disabled}
+                  value={answer}
+                  onChange={(e) => setAnswer(e.target.value)}
+                  placeholder="Enter output only"
+                  className="flex-1 rounded-lg border border-slate-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+                <button
+                  disabled={disabled}
+                  className="px-4 py-2 rounded-lg bg-primary text-primary-foreground font-semibold hover:bg-primary/90 disabled:opacity-60"
+                >
+                  Submit
+                </button>
+              </form>
+            </>
           )}
           {status && (
             <div
