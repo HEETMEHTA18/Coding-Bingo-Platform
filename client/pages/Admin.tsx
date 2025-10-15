@@ -8,8 +8,14 @@ import type {
 } from "@shared/api";
 
 export default function AdminPage() {
+  const navigate = useNavigate();
   const [roomCode, setRoomCode] = useState("DEMO");
   const [state, setState] = useState<AdminStateResponse | null>(null);
+
+  useEffect(() => {
+    const isAdmin = localStorage.getItem("bingo.admin") === "true";
+    if (!isAdmin) navigate("/");
+  }, [navigate]);
 
   const load = async (code: string) => {
     const res = await fetch(
