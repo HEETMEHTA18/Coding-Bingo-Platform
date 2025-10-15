@@ -10,6 +10,7 @@ import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import Game from "./pages/Game";
 import Leaderboard from "./pages/Leaderboard";
+import LeaderboardAll from "./pages/LeaderboardAll";
 import Congratulations from "./pages/Congratulations";
 import Admin from "./pages/Admin";
 
