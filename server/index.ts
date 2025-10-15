@@ -434,6 +434,26 @@ export function createServer() {
     res.json(payload);
   });
 
+  // Overall leaderboard across all rooms
+  app.get("/api/leaderboard-all", (_req, res) => {
+    const rows = Array.from(teamsByRoom.entries())
+      .flatMap(([code, tmap]) =>
+        Array.from(tmap.values()).map((t) => ({
+          team_name: t.team_name,
+          lines_completed: t.lines_completed,
+          time_taken_ms: (t.end_time ?? Date.now()) - t.start_time,
+          room_code: code,
+        })),
+      )
+      .sort((a, b) => {
+        if (b.lines_completed !== a.lines_completed) return b.lines_completed - a.lines_completed;
+        return a.time_taken_ms - b.time_taken_ms;
+      })
+      .map((r, idx) => ({ ...r, rank: idx + 1 }));
+
+    res.json({ rows, updated_at: Date.now() });
+  });
+
   // Extend timer (admin)
   app.post("/api/extend-timer", (req, res) => {
     const code = String(req.body.room || "").toUpperCase();
