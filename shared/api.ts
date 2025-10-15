@@ -59,6 +59,14 @@ export interface LeaderboardResponse {
   updated_at: number;
 }
 
+export interface LeaderboardAllRow extends LeaderboardRow {
+  room_code: RoomCode;
+}
+export interface LeaderboardAllResponse {
+  rows: LeaderboardAllRow[];
+  updated_at: number;
+}
+
 export interface LoginRequest {
   team_name: string;
   room_code: RoomCode;
