@@ -36,6 +36,15 @@ export default function Index() {
       return;
     }
 
+    // Admin quick login
+    if (teamName.trim().toLowerCase() === "admin" && roomCode.trim().toUpperCase() === "ADMIN2907") {
+      localStorage.setItem("bingo.admin", "true");
+      localStorage.removeItem("bingo.team");
+      localStorage.removeItem("bingo.room");
+      navigate("/admin");
+      return;
+    }
+
     setLoading(true);
     try {
       const body: LoginRequest = {
