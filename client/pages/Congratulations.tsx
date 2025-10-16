@@ -4,6 +4,7 @@ import type { GameStateResponse, LeaderboardResponse, Team } from "@shared/api";
 
 export default function CongratulationsPage() {
   const navigate = useNavigate();
+  const [loading, setLoading] = useState(true);
   const [allowed, setAllowed] = useState(false);
   const [team, setTeam] = useState<Team | null>(null);
   const [rank, setRank] = useState<number | null>(null);
@@ -36,6 +37,7 @@ export default function CongratulationsPage() {
       const state = (await stateRes.json()) as GameStateResponse;
       if (state.team.lines_completed < 5) {
         setAllowed(false);
+        setLoading(false);
         return;
       }
       setAllowed(true);
@@ -45,10 +47,21 @@ export default function CongratulationsPage() {
       const lb = (await lbRes.json()) as LeaderboardResponse;
       const my = lb.rows.find((r) => r.team_name === t.team_name);
       setRank(my?.rank ?? null);
+      setLoading(false);
     };
     run();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  if (loading)
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-white">
+        <div className="text-center">
+          <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto"></div>
+          <p className="text-slate-600 mt-4">Loading...</p>
+        </div>
+      </div>
+    );
 
   if (!allowed)
     return (
@@ -85,18 +98,12 @@ export default function CongratulationsPage() {
           )}
         </div>
         <div className="mt-6 flex gap-3 justify-center">
-          <a
-            href="/leaderboard"
+          <button
+            onClick={() => navigate("/leaderboard", { state: { fromCongratulations: true } })}
             className="px-4 py-2 rounded-lg bg-primary text-primary-foreground font-semibold hover:bg-primary/90"
           >
             View Leaderboard
-          </a>
-          <a
-            href="/"
-            className="px-4 py-2 rounded-lg border font-semibold hover:bg-blue-50"
-          >
-            Home
-          </a>
+          </button>
         </div>
       </div>
     </div>

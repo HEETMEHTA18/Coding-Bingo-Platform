@@ -1,12 +1,24 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import type { LeaderboardResponse, Room } from "@shared/api";
+import { useNavigate, useLocation } from "react-router-dom";
+import type { LeaderboardResponse, Room, GameStateResponse, Team } from "@shared/api";
 
 export default function LeaderboardPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const isAdmin =
     typeof window !== "undefined" &&
     localStorage.getItem("bingo.admin") === "true";
+  const fromCongratulations = location.state?.fromCongratulations || false;
+  const [team, setTeam] = useState<Team | null>(() => {
+    const raw = localStorage.getItem("bingo.team");
+    try {
+      return raw && raw !== "undefined" && raw !== "null"
+        ? (JSON.parse(raw) as Team)
+        : null;
+    } catch {
+      return null;
+    }
+  });
   const [room, setRoom] = useState<Room | null>(() => {
     const fromQuery = new URLSearchParams(window.location.search).get("room");
     if (fromQuery)
@@ -26,6 +38,7 @@ export default function LeaderboardPage() {
   });
   const [rows, setRows] = useState<LeaderboardResponse["rows"]>([]);
   const [loading, setLoading] = useState<{ [key: string]: boolean }>({});
+  const [gameCompleted, setGameCompleted] = useState<boolean>(false);
 
   const load = async () => {
     if (!room) return;
@@ -34,6 +47,15 @@ export default function LeaderboardPage() {
     );
     const data = (await res.json()) as LeaderboardResponse;
     setRows(data.rows);
+
+    // Check game completion if from congratulations and team exists
+    if (fromCongratulations && team) {
+      const stateRes = await fetch(
+        `/api/game-state?teamId=${encodeURIComponent(team.team_id)}`,
+      );
+      const state = (await stateRes.json()) as GameStateResponse;
+      setGameCompleted(state.team.lines_completed >= 5);
+    }
   };
 
   useEffect(() => {
@@ -97,7 +119,9 @@ export default function LeaderboardPage() {
           </div>
           <a
             href={isAdmin ? "/admin" : "/game"}
-            className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90"
+            className={`px-3 py-1.5 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90 ${
+              fromCongratulations && gameCompleted ? "hidden" : ""
+            }`}
           >
             {isAdmin ? "Back to Dashboard" : "Back to Game"}
           </a>
