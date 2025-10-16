@@ -1,4 +1,3 @@
-
 // server/services/QuestionService.ts
 import { QuestionModel } from "../models/Question";
 import type { Question, QuestionID, RoomCode } from "@shared/api";
@@ -82,7 +81,7 @@ export class QuestionService {
     return await QuestionModel.findById(roomCode.toUpperCase() as RoomCode, questionId);
   }
 
-  static async deleteQuestion(roomCode: string, questionId: QuestionID): Promise<boolean> {
-    return await QuestionModel.delete(roomCode.toUpperCase() as RoomCode, questionId);
+  static async deleteQuestion(_roomCode: string, questionId: QuestionID): Promise<boolean> {
+    return await QuestionModel.delete(questionId);
   }
 }

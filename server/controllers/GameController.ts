@@ -6,6 +6,7 @@ import { RoomService } from "../services/RoomService";
 import { GameService } from "../services/GameService";
 import { ProgressModel } from "../models/Progress";
 import type { GameStateResponse, ErrorResponse } from "@shared/api";
+import { seededShuffle } from "../utils/seededShuffle";
 
 export class GameController {
   static async getGameState(req: Request, res: Response) {
@@ -37,10 +38,14 @@ export class GameController {
     const questions = await QuestionService.getQuestionsByRoom(team.room_code);
     const solvedPositions = await ProgressModel.getSolvedPositions(teamId);
 
+    // Deterministically shuffle questions for this team in this room
+    const seed = `${team.team_id}:${team.room_code}`;
+    const shuffledQuestions = seededShuffle(questions, seed);
+
     const response: GameStateResponse = {
       team,
       room,
-      questions: questions.map(q => ({
+      questions: shuffledQuestions.map(q => ({
         question_id: q.question_id,
         question_text: q.question_text,
         is_real: q.is_real,

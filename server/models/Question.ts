@@ -86,9 +86,9 @@ export class QuestionModel {
     };
   }
 
-  static async delete(roomCode: RoomCode, questionId: QuestionID): Promise<boolean> {
-    const result = await db.delete(questions).where(and(eq(questions.roomCode, roomCode), eq(questions.questionId, questionId)));
-    return true; // Drizzle returns void, assume success if no error
+  static async delete(questionId: QuestionID): Promise<boolean> {
+    await db.delete(questions).where(eq(questions.questionId, questionId));
+    return true;
   }
 
   static async getNextId(roomCode: RoomCode): Promise<number> {
