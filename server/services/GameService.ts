@@ -59,14 +59,26 @@ export class GameService {
 
     // Handle fake questions
     if (!question.is_real) {
-      return {
-        status: "fake",
-        is_real: false,
-        filled_cell: null,
-        lines_completed: team.lines_completed,
-        win: Boolean(team.end_time),
-        solved_positions: await ProgressModel.getSolvedPositions(teamId),
-      };
+      const isCorrect = answer.trim().toLowerCase() === question.correct_answer.trim().toLowerCase();
+      if (isCorrect) {
+        return {
+          status: "fake",
+          is_real: false,
+          filled_cell: null,
+          lines_completed: team.lines_completed,
+          win: Boolean(team.end_time),
+          solved_positions: await ProgressModel.getSolvedPositions(teamId),
+        };
+      } else {
+        return {
+          status: "incorrect",
+          is_real: false,
+          filled_cell: null,
+          lines_completed: team.lines_completed,
+          win: Boolean(team.end_time),
+          solved_positions: await ProgressModel.getSolvedPositions(teamId),
+        };
+      }
     }
 
     // Check answer correctness
