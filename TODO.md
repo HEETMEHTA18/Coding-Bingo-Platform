@@ -1,4 +1,0 @@
-- [x] Modify Game.tsx loadState to dynamically enable/disable input and submit button based on current timer status
-- [x] Add loading animation to submit button during submission request
-- [ ] Add loading animations to all request-triggering elements in Admin.tsx (create room, start timer, extend timer, force end, seed demo, add question, delete question)
-- [ ] Add loading animations to other pages if needed (e.g., Index.tsx, Leaderboard.tsx)
