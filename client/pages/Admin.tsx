@@ -9,7 +9,7 @@ import type {
 
 export default function AdminPage() {
   const navigate = useNavigate();
-  const [roomCode, setRoomCode] = useState("DEMO");
+  const [roomCode, setRoomCode] = useState("");
   const [state, setState] = useState<AdminStateResponse | null>(null);
   const [loading, setLoading] = useState<{ [key: string]: boolean }>({});
 
@@ -108,19 +108,7 @@ export default function AdminPage() {
       setLoading(prev => ({ ...prev, forceEnd: false }));
     }
   };
-  const seedDemo = async () => {
-    setLoading(prev => ({ ...prev, seedDemo: true }));
-    try {
-      await fetch("/api/admin/seed-demo", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ room: roomCode.toUpperCase() }),
-      });
-      await load(roomCode);
-    } finally {
-      setLoading(prev => ({ ...prev, seedDemo: false }));
-    }
-  };
+
 
   const addQuestion = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -207,7 +195,7 @@ export default function AdminPage() {
                 value={roomCode}
                 onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
                 className="rounded-lg border px-3 py-2"
-                placeholder="DEMO"
+                placeholder="ABC123"
               />
             </div>
             <button
@@ -219,17 +207,7 @@ export default function AdminPage() {
               )}
               Create/Load Room
             </button>
-            <button
-              type="button"
-              onClick={seedDemo}
-              disabled={loading.seedDemo}
-              className="px-4 py-2 rounded-lg border font-semibold hover:bg-blue-50 disabled:opacity-60 flex items-center gap-2"
-            >
-              {loading.seedDemo && (
-                <div className="w-4 h-4 border-2 border-slate-600 border-t-transparent rounded-full animate-spin"></div>
-              )}
-              Seed Demo Questions
-            </button>
+
             <button
               type="button"
               onClick={() => setShowStartTimer(true)}

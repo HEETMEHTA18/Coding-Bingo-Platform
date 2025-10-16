@@ -48,19 +48,7 @@ export class RoomService {
     });
   }
 
-  static async seedDemoRoom(code: string): Promise<void> {
-    const roomCode = code.toUpperCase() as RoomCode;
 
-    if (!(await RoomModel.exists(roomCode))) {
-      await this.createRoom(roomCode, `${roomCode} Room`);
-    }
-
-    const existingQuestions = await QuestionModel.getByRoom(roomCode);
-    if (existingQuestions.length === 0) {
-      const questions = QuestionService.generateDemoQuestions();
-      await QuestionModel.createBatchWithIds(roomCode, questions);
-    }
-  }
 
   static isTimerExpired(room: Room): boolean {
     if (!room.roundEndAt) return false;

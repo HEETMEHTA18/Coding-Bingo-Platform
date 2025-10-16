@@ -32,19 +32,7 @@ export class AdminController {
     res.json(room);
   }
 
-  static async seedDemo(req: Request, res: Response) {
-    const code = String(req.body.room || "").toUpperCase();
 
-    if (!code) {
-      return res.status(400).json({
-        ok: false,
-        error: "Missing room",
-      } as ErrorResponse);
-    }
-
-    await RoomService.seedDemoRoom(code);
-    res.json({ ok: true });
-  }
 
   static async getState(req: Request, res: Response) {
     const code = String(req.query.room || "").toUpperCase();

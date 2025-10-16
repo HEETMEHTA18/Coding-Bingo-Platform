@@ -257,7 +257,7 @@ export default function GamePage() {
                     ),
                   ) + 1}
                 </div>
-                <pre className="whitespace-pre-wrap font-mono text-sm bg-slate-50 border border-slate-200 rounded-lg p-3 max-h-80 overflow-auto">
+                <pre className="whitespace-pre-wrap font-mono text-sm bg-slate-50 border border-slate-200 rounded-lg p-3 min-h-[60vh] max-h-[60vh] overflow-auto">
                   {selectedQuestion.question_text}
                 </pre>
               </div>

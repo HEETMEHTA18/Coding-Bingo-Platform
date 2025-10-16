@@ -5,7 +5,7 @@ import type { ErrorResponse, LoginRequest, LoginResponse } from "@shared/api";
 export default function Index() {
   const navigate = useNavigate();
   const [teamName, setTeamName] = useState("");
-  const [roomCode, setRoomCode] = useState("DEMO");
+  const [roomCode, setRoomCode] = useState("");
   const [error, setError] = useState<string>("");
   const [loading, setLoading] = useState(false);
 
@@ -110,7 +110,7 @@ export default function Index() {
             </label>
             <input
               className="w-full rounded-lg border border-slate-200 px-3 py-2 uppercase tracking-wider focus:outline-none focus:ring-2 focus:ring-primary"
-              placeholder="e.g. DEMO"
+              placeholder="e.g. ABC123"
               value={roomCode}
               onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
             />
@@ -130,9 +130,7 @@ export default function Index() {
             )}
             {loading ? "Joining..." : "Join Game"}
           </button>
-          <p className="text-xs text-slate-500 text-center">
-            Use room code DEMO to try it now
-          </p>
+
         </form>
       </div>
     </div>

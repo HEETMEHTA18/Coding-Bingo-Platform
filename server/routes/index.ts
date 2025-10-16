@@ -5,7 +5,6 @@ import roomRoutes from "./roomRoutes";
 import gameRoutes from "./gameRoutes";
 import leaderboardRoutes from "./leaderboardRoutes";
 import adminRoutes from "./adminRoutes";
-import { handleDemo } from "./demo";
 
 const router = Router();
 
@@ -14,9 +13,6 @@ router.get("/ping", (_req, res) => {
   const ping = process.env.PING_MESSAGE ?? "ping";
   res.json({ message: ping });
 });
-
-// Demo endpoint
-router.get("/demo", handleDemo);
 
 // Route modules
 router.use("/", authRoutes);

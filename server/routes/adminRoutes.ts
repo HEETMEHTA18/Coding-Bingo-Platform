@@ -5,7 +5,6 @@ import { AdminController } from "../controllers/AdminController";
 const router = Router();
 
 router.post("/create-room", AdminController.createRoom);
-router.post("/seed-demo", AdminController.seedDemo);
 router.get("/state", AdminController.getState);
 router.post("/add-question", AdminController.addQuestion);
 router.post("/delete-question", AdminController.deleteQuestion);
