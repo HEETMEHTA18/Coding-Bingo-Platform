@@ -17,6 +17,7 @@ export class QuestionModel {
 
   static async create(roomCode: RoomCode, question: QuestionType): Promise<QuestionType> {
     const result = await db.insert(questions).values({
+      // Don't include questionId - let it auto-generate
       roomCode,
       questionText: question.question_text,
       isReal: question.is_real,

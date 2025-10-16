@@ -61,11 +61,10 @@ export class QuestionService {
     correctAnswer: string,
     isReal: boolean
   ): Promise<Question> {
-    const code = roomCode.toUpperCase() as RoomCode;
-    const questionId = await QuestionModel.getNextId(code);
+    const code = roomCode.toUpperCase() as  RoomCode;
 
     const question: Question = {
-      question_id: questionId,
+      question_id: 0, // Will be auto-generated
       question_text: questionText.trim(),
       is_real: isReal,
       correct_answer: correctAnswer.trim(),
