@@ -1,13 +1,4 @@
-# TODO: Implement Database Persistence
-
-## Tasks
-- [ ] Update RoomModel to use database queries instead of in-memory Map
-- [ ] Update QuestionModel to use database queries
-- [ ] Update TeamModel to use database queries
-- [ ] Update ProgressModel to use database queries for solved positions and questions
-- [ ] Test login and data persistence
-- [ ] Run database migrations if needed
-- [ ] Verify demo room seeding works with database
-
-## Progress
-- Started with RoomModel
+- [x] Modify Game.tsx loadState to dynamically enable/disable input and submit button based on current timer status
+- [x] Add loading animation to submit button during submission request
+- [ ] Add loading animations to all request-triggering elements in Admin.tsx (create room, start timer, extend timer, force end, seed demo, add question, delete question)
+- [ ] Add loading animations to other pages if needed (e.g., Index.tsx, Leaderboard.tsx)

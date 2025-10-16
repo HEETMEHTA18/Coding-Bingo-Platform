@@ -25,6 +25,7 @@ export default function LeaderboardPage() {
     }
   });
   const [rows, setRows] = useState<LeaderboardResponse["rows"]>([]);
+  const [loading, setLoading] = useState<{ [key: string]: boolean }>({});
 
   const load = async () => {
     if (!room) return;
@@ -59,7 +60,7 @@ export default function LeaderboardPage() {
             </div>
             {isAdmin && (
               <form
-                onSubmit={(e) => {
+                onSubmit={async (e) => {
                   e.preventDefault();
                   const form = e.currentTarget as HTMLFormElement;
                   const input = form.elements.namedItem(
@@ -67,8 +68,13 @@ export default function LeaderboardPage() {
                   ) as HTMLInputElement;
                   const code = input.value.trim().toUpperCase();
                   if (!code) return;
-                  setRoom({ code, title: code, roundEndAt: null } as Room);
-                  setRows([]);
+                  setLoading(prev => ({ ...prev, loadRoom: true }));
+                  try {
+                    setRoom({ code, title: code, roundEndAt: null } as Room);
+                    setRows([]);
+                  } finally {
+                    setLoading(prev => ({ ...prev, loadRoom: false }));
+                  }
                 }}
                 className="flex items-center gap-2"
               >
@@ -77,7 +83,13 @@ export default function LeaderboardPage() {
                   defaultValue={room?.code ?? "DEMO"}
                   className="rounded-lg border px-2 py-1 text-sm"
                 />
-                <button className="px-3 py-1.5 rounded-lg border text-sm font-medium hover:bg-blue-50">
+                <button
+                  disabled={loading.loadRoom}
+                  className="px-3 py-1.5 rounded-lg border text-sm font-medium hover:bg-blue-50 disabled:opacity-60 flex items-center gap-2"
+                >
+                  {loading.loadRoom && (
+                    <div className="w-3 h-3 border-2 border-slate-600 border-t-transparent rounded-full animate-spin"></div>
+                  )}
                   Load
                 </button>
               </form>

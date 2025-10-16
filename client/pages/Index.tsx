@@ -17,7 +17,10 @@ export default function Index() {
         saved && saved !== "undefined" && saved !== "null"
           ? JSON.parse(saved)
           : null;
-      if (parsed && parsed.team_id) navigate("/game");
+      if (parsed && parsed.team_id) {
+        localStorage.removeItem("bingo.admin");
+        navigate("/game");
+      }
     } catch {
       // ignore corrupted data
     }
@@ -68,6 +71,7 @@ export default function Index() {
       const success = data as LoginResponse;
       localStorage.setItem("bingo.team", JSON.stringify(success.team));
       localStorage.setItem("bingo.room", JSON.stringify(success.room));
+      localStorage.removeItem("bingo.admin");
       navigate("/game");
     } catch (err) {
       setError("Network error");
@@ -119,8 +123,11 @@ export default function Index() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-primary text-primary-foreground rounded-lg py-2.5 font-semibold hover:bg-primary/90 disabled:opacity-60"
+            className="w-full bg-primary text-primary-foreground rounded-lg py-2.5 font-semibold hover:bg-primary/90 disabled:opacity-60 flex items-center justify-center gap-2"
           >
+            {loading && (
+              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+            )}
             {loading ? "Joining..." : "Join Game"}
           </button>
           <p className="text-xs text-slate-500 text-center">

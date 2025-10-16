@@ -39,6 +39,7 @@ export default function GamePage() {
   } | null>(null);
   const [lines, setLines] = useState<number>(0);
   const [disabled, setDisabled] = useState<boolean>(false);
+  const [submitting, setSubmitting] = useState<boolean>(false);
   const [now, setNow] = useState<number>(Date.now());
 
   useEffect(() => {
@@ -77,16 +78,15 @@ export default function GamePage() {
     setSolved(data.solved_positions as string[]);
     // derive lines
     setLines(computeLines(data.solved_positions as string[]));
-    if (
-      (data.room as GameStateResponse["room"]).roundEndAt &&
-      Date.now() > (data.room as GameStateResponse["room"]).roundEndAt!
-    )
-      setDisabled(true);
+    // Dynamically enable/disable based on current timer status
+    const currentRoom = data.room as GameStateResponse["room"];
+    const isExpired = currentRoom.roundEndAt && Date.now() > currentRoom.roundEndAt;
+    setDisabled(isExpired);
   };
 
   useEffect(() => {
     loadState();
-    const id = setInterval(loadState, 5000);
+    const id = setInterval(loadState, 5000); // Check for timer updates every 5 seconds
     const tick = setInterval(() => setNow(Date.now()), 1000);
     return () => {
       clearInterval(id);
@@ -128,50 +128,55 @@ export default function GamePage() {
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!team || !selectedQid) return;
+    if (!team || !selectedQid || submitting) return;
     setStatus(null);
+    setSubmitting(true);
 
-    const res = await fetch("/api/submit", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        teamId: team.team_id,
-        questionId: selectedQid,
-        answer,
-      }),
-    });
-    const data = (await res.json()) as SubmissionResult;
+    try {
+      const res = await fetch("/api/submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          teamId: team.team_id,
+          questionId: selectedQid,
+          answer,
+        }),
+      });
+      const data = (await res.json()) as SubmissionResult;
 
-    if (data.status === "disabled") {
-      setDisabled(true);
-      setStatus({ type: "error", text: "Time over – submissions disabled" });
-      return;
-    }
-    if (data.status === "empty") {
-      setStatus({ type: "error", text: "Answer cannot be empty" });
-      return;
-    }
-    if (data.status === "already_solved") {
-      setSolved(data.solved_positions);
-      setLines(data.lines_completed);
-      setStatus({ type: "info", text: "Already Completed" });
-      return;
-    }
-    if (data.status === "fake") {
-      setStatus({ type: "warn", text: "Fake Question – No Bingo Point" });
-      return;
-    }
-    if (data.status === "incorrect") {
-      setStatus({ type: "error", text: "Incorrect! Try again" });
-      return;
-    }
-    if (data.status === "correct") {
-      setSolved(data.solved_positions);
-      setLines(data.lines_completed);
-      setStatus({ type: "success", text: "Correct Answer!" });
-      if (data.win) {
-        navigate("/congratulations");
+      if (data.status === "disabled") {
+        setDisabled(true);
+        setStatus({ type: "error", text: "Time over – submissions disabled" });
+        return;
       }
+      if (data.status === "empty") {
+        setStatus({ type: "error", text: "Answer cannot be empty" });
+        return;
+      }
+      if (data.status === "already_solved") {
+        setSolved(data.solved_positions);
+        setLines(data.lines_completed);
+        setStatus({ type: "info", text: "Already Completed" });
+        return;
+      }
+      if (data.status === "fake") {
+        setStatus({ type: "warn", text: "Fake Question – No Bingo Point" });
+        return;
+      }
+      if (data.status === "incorrect") {
+        setStatus({ type: "error", text: "Incorrect! Try again" });
+        return;
+      }
+      if (data.status === "correct") {
+        setSolved(data.solved_positions);
+        setLines(data.lines_completed);
+        setStatus({ type: "success", text: "Correct Answer!" });
+        if (data.win) {
+          navigate("/congratulations");
+        }
+      }
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -281,16 +286,19 @@ export default function GamePage() {
               </div>
               <form onSubmit={onSubmit} className="mt-3 flex gap-2">
                 <input
-                  disabled={disabled}
+                  disabled={disabled || submitting}
                   value={answer}
                   onChange={(e) => setAnswer(e.target.value)}
                   placeholder="Enter output only"
-                  className="flex-1 rounded-lg border border-slate-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary"
+                  className="flex-1 rounded-lg border border-slate-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-60"
                 />
                 <button
-                  disabled={disabled}
-                  className="px-4 py-2 rounded-lg bg-primary text-primary-foreground font-semibold hover:bg-primary/90 disabled:opacity-60"
+                  disabled={disabled || submitting}
+                  className="px-4 py-2 rounded-lg bg-primary text-primary-foreground font-semibold hover:bg-primary/90 disabled:opacity-60 flex items-center gap-2"
                 >
+                  {submitting && (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  )}
                   Submit
                 </button>
               </form>

@@ -4,6 +4,9 @@ import { RoomService } from "../services/RoomService";
 import { QuestionService } from "../services/QuestionService";
 import { TeamService } from "../services/TeamService";
 import { RoomModel } from "../models/Room";
+import { db } from "../db";
+import { rooms, teams } from "../schema";
+import { eq } from "drizzle-orm";
 import type {
   AdminCreateRoomRequest,
   AdminStateResponse,
@@ -97,37 +100,52 @@ export class AdminController {
   }
 
   static async startTimer(req: Request, res: Response) {
-    const { room, minutes } = (req.body || {}) as AdminStartRequest;
-    const code = String(room || "").toUpperCase();
+    const { minutes } = (req.body || {}) as AdminStartRequest;
 
-    const existingRoom = await RoomService.getRoomByCode(code);
-    if (!existingRoom) {
-      return res.status(404).json({
+    if (!minutes || minutes <= 0) {
+      return res.status(400).json({
         ok: false,
-        error: "Invalid room",
+        error: "Invalid minutes",
       } as ErrorResponse);
     }
 
-    const updatedRoom = await RoomModel.update(code, {
-      roundEndAt: Date.now() + Number(minutes || 0) * 60 * 1000
-    });
+    const now = Date.now();
+    const endTime = now + Number(minutes) * 60 * 1000;
 
-    res.json(updatedRoom);
+    await db.update(rooms).set({ roundEndAt: new Date(endTime) });
+
+    res.json({ ok: true, endTime });
+  }
+
+  static async extendTimer(req: Request, res: Response) {
+    const { minutes } = req.body || {};
+
+    if (!minutes || minutes <= 0) {
+      return res.status(400).json({
+        ok: false,
+        error: "Invalid minutes",
+      } as ErrorResponse);
+    }
+
+    const addMs = Number(minutes) * 60 * 1000;
+    const now = Date.now();
+
+    const allRooms = await db.select().from(rooms);
+    for (const room of allRooms) {
+      let newEnd = room.roundEndAt ? room.roundEndAt.getTime() + addMs : now + addMs;
+      if (newEnd < now) newEnd = now + addMs;
+      await db.update(rooms).set({ roundEndAt: new Date(newEnd) }).where(eq(rooms.code, room.code));
+    }
+
+    res.json({ ok: true });
   }
 
   static async forceEnd(req: Request, res: Response) {
-    const { room } = (req.body || {}) as AdminForceEndRequest;
-    const code = String(room || "").toUpperCase();
+    const now = new Date();
 
-    const updatedRoom = await RoomService.forceEndRoom(code);
+    await db.update(rooms).set({ roundEndAt: now });
+    await db.update(teams).set({ endTime: now }).where(eq(teams.endTime, null));
 
-    if (!updatedRoom) {
-      return res.status(404).json({
-        ok: false,
-        error: "Invalid room",
-      } as ErrorResponse);
-    }
-
-    res.json(updatedRoom);
+    res.json({ ok: true });
   }
 }

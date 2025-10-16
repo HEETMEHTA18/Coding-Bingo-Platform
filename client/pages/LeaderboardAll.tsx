@@ -5,7 +5,7 @@ export default function LeaderboardAllPage() {
   const [rows, setRows] = useState<LeaderboardAllResponse["rows"]>([]);
 
   const load = async () => {
-    const res = await fetch("/api/leaderboard-all");
+    const res = await fetch("/api/leaderboard/all");
     if (!res.ok) return;
     const data = (await res.json()) as LeaderboardAllResponse;
     setRows(data.rows);
