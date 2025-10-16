@@ -30,8 +30,7 @@
     "express": "^5.1.0",
     "pg": "^8.16.3",
     "postgres": "^3.4.7",
-    "zod": "^3.25.76",
-    "serverless-http": "^3.2.0"
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@hookform/resolvers": "^5.2.1",
