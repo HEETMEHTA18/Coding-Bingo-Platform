@@ -3,7 +3,7 @@ import express from "express";
 
 const app = express();
 
-// Simple test endpoint
+// Simple test endpoint - doesn't require database
 app.get("/test", (req, res) => {
   res.json({
     message: "Serverless function is working!",
@@ -12,6 +12,7 @@ app.get("/test", (req, res) => {
       NODE_ENV: process.env.NODE_ENV,
       hasDatabaseUrl: !!process.env.DATABASE_URL,
       hasAdminSecret: !!process.env.ADMIN_SECRET,
+      databaseUrlLength: process.env.DATABASE_URL?.length || 0,
     }
   });
 });
