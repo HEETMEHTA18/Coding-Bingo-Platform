@@ -1,36 +1,32 @@
-// Test server import
+// Test minimal server creation
 export const handler = async (event: any, context: any) => {
   try {
-    console.log('Testing server import...');
+    console.log('Testing minimal server creation...');
 
-    // Try importing the server module
-    const serverModule = await import("../../server");
-    console.log('Server module imported successfully');
+    // Try creating a minimal express server
+    const express = (await import("express")).default;
+    const app = express();
 
-    return {
-      statusCode: 200,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        message: "Server module imported successfully!",
-        timestamp: new Date().toISOString(),
-        hasCreateServer: !!serverModule.createServer,
-        env: {
-          hasDatabaseUrl: !!process.env.DATABASE_URL,
-          hasAdminSecret: !!process.env.ADMIN_SECRET,
-        }
-      }),
-    };
+    app.get('/api/test', (req, res) => {
+      res.json({ message: 'Minimal server works!' });
+    });
+
+    // Try serverless-http
+    const serverless = (await import("serverless-http")).default;
+    const handler = serverless(app);
+
+    // Call the handler directly for testing
+    return await handler(event, context);
+
   } catch (error) {
-    console.error('Server import error:', error);
+    console.error('Minimal server error:', error);
     return {
       statusCode: 500,
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        error: 'Server import failed',
+        error: 'Minimal server creation failed',
         message: error instanceof Error ? error.message : String(error),
         timestamp: new Date().toISOString(),
       }),
