@@ -5,7 +5,7 @@ import type {
   LoginResponse,
   SubmitRequest,
   SubmissionResult,
-} from "@shared/api";
+} from "../../shared/api";
 import { db } from "../db.js";
 import {
   rooms,
