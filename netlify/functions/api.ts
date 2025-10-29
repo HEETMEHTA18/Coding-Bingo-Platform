@@ -1,11 +1,29 @@
-// Test server import without calling createServer
+// Test basic server dependencies
 export const handler = async (event: any, context: any) => {
   try {
-    console.log('Testing server import without createServer...');
+    console.log('Testing basic server dependencies...');
 
-    // Import the server module but don't call createServer
-    await import("../../server/index.js");
-    console.log('Server index imported successfully');
+    // Test individual imports that are in server/index.ts
+    await import("dotenv/config");
+    console.log('dotenv imported');
+
+    const express = (await import("express")).default;
+    console.log('express imported');
+
+    await import("cors");
+    console.log('cors imported');
+
+    await import("multer");
+    console.log('multer imported');
+
+    await import("compression");
+    console.log('compression imported');
+
+    await import("helmet");
+    console.log('helmet imported');
+
+    const rateLimit = await import("express-rate-limit");
+    console.log('express-rate-limit imported');
 
     return {
       statusCode: 200,
@@ -13,23 +31,19 @@ export const handler = async (event: any, context: any) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        message: "Server index imported successfully!",
+        message: "Basic server dependencies imported successfully!",
         timestamp: new Date().toISOString(),
-        env: {
-          hasDatabaseUrl: !!process.env.DATABASE_URL,
-          hasAdminSecret: !!process.env.ADMIN_SECRET,
-        }
       }),
     };
   } catch (error) {
-    console.error('Server index import error:', error);
+    console.error('Basic dependencies import error:', error);
     return {
       statusCode: 500,
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        error: 'Server index import failed',
+        error: 'Basic dependencies import failed',
         message: error instanceof Error ? error.message : String(error),
         stack: error instanceof Error ? error.stack : undefined,
         timestamp: new Date().toISOString(),
