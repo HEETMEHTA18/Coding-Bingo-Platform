@@ -1,33 +1,37 @@
-// Test minimal server creation
+// Test server import without calling createServer
 export const handler = async (event: any, context: any) => {
   try {
-    console.log('Testing minimal server creation...');
+    console.log('Testing server import without createServer...');
 
-    // Try creating a minimal express server
-    const express = (await import("express")).default;
-    const app = express();
+    // Import the server module but don't call createServer
+    await import("../../server/index.js");
+    console.log('Server index imported successfully');
 
-    app.get('/api/test', (req, res) => {
-      res.json({ message: 'Minimal server works!' });
-    });
-
-    // Try serverless-http
-    const serverless = (await import("serverless-http")).default;
-    const handler = serverless(app);
-
-    // Call the handler directly for testing
-    return await handler(event, context);
-
+    return {
+      statusCode: 200,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        message: "Server index imported successfully!",
+        timestamp: new Date().toISOString(),
+        env: {
+          hasDatabaseUrl: !!process.env.DATABASE_URL,
+          hasAdminSecret: !!process.env.ADMIN_SECRET,
+        }
+      }),
+    };
   } catch (error) {
-    console.error('Minimal server error:', error);
+    console.error('Server index import error:', error);
     return {
       statusCode: 500,
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        error: 'Minimal server creation failed',
+        error: 'Server index import failed',
         message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
         timestamp: new Date().toISOString(),
       }),
     };
