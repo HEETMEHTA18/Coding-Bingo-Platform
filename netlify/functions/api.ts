@@ -2,13 +2,13 @@
 export const handler = async (event: any, context: any) => {
   console.log('API Function called:', event.path, event.httpMethod);
 
-  // Extract the API path (remove the function base path)
-  const apiPath = event.path.replace('/.netlify/functions/api', '') || '/';
+  // The event.path should already be the API path thanks to the redirect
+  const apiPath = event.path;
 
-  console.log('Extracted API path:', apiPath);
+  console.log('API path:', apiPath);
 
   // Handle different routes
-  if (apiPath === '/admin/create-room' && event.httpMethod === 'POST') {
+  if (apiPath === '/api/admin/create-room' && event.httpMethod === 'POST') {
     return {
       statusCode: 200,
       headers: {
@@ -23,7 +23,7 @@ export const handler = async (event: any, context: any) => {
     };
   }
 
-  if (apiPath === '/admin/state' && event.httpMethod === 'GET') {
+  if (apiPath === '/api/admin/state' && event.httpMethod === 'GET') {
     return {
       statusCode: 200,
       headers: {
