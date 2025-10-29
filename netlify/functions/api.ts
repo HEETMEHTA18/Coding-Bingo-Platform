@@ -1,29 +1,15 @@
-// Test basic server dependencies
+// Test calling createServer
 export const handler = async (event: any, context: any) => {
   try {
-    console.log('Testing basic server dependencies...');
+    console.log('Testing createServer call...');
 
-    // Test individual imports that are in server/index.ts
-    await import("dotenv/config");
-    console.log('dotenv imported');
+    // Import the server module
+    const serverModule = await import("../../server/index.js");
+    console.log('Server module imported');
 
-    const express = (await import("express")).default;
-    console.log('express imported');
-
-    await import("cors");
-    console.log('cors imported');
-
-    await import("multer");
-    console.log('multer imported');
-
-    await import("compression");
-    console.log('compression imported');
-
-    await import("helmet");
-    console.log('helmet imported');
-
-    const rateLimit = await import("express-rate-limit");
-    console.log('express-rate-limit imported');
+    // Try calling createServer
+    const app = serverModule.createServer();
+    console.log('createServer called successfully');
 
     return {
       statusCode: 200,
@@ -31,19 +17,23 @@ export const handler = async (event: any, context: any) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        message: "Basic server dependencies imported successfully!",
+        message: "createServer called successfully!",
         timestamp: new Date().toISOString(),
+        env: {
+          hasDatabaseUrl: !!process.env.DATABASE_URL,
+          hasAdminSecret: !!process.env.ADMIN_SECRET,
+        }
       }),
     };
   } catch (error) {
-    console.error('Basic dependencies import error:', error);
+    console.error('createServer error:', error);
     return {
       statusCode: 500,
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        error: 'Basic dependencies import failed',
+        error: 'createServer failed',
         message: error instanceof Error ? error.message : String(error),
         stack: error instanceof Error ? error.stack : undefined,
         timestamp: new Date().toISOString(),
