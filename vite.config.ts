@@ -6,8 +6,15 @@ import { createServer } from "./server";
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
   server: {
-    host: "::",
+    // Bind to all IPv4 interfaces by default to be compatible with tunnels (ngrok) and Docker
+    host: process.env.DEV_HOST || "0.0.0.0",
     port: 8080,
+    // Allow additional hosts (comma-separated) for temporary tunnels like ngrok
+    // Example: set ALLOWED_HOSTS=675fd24d6f73.ngrok-free.app
+    allowedHosts: (process.env.ALLOWED_HOSTS || "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
     fs: {
       allow: ["./client", "./shared", "./index.html"],
       deny: [".env", ".env.*", "*.{crt,pem}", "**/.git/**", "server/**"],

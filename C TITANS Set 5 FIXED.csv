@@ -1,0 +1,411 @@
+question_number,question_title,question_code,expected_output,difficulty,points
+1,"Nested Loop Break Pattern","#include <stdio.h>
+int main() {
+    int sum = 0;
+    for(int i = 3; i <= 9; i++) {
+        for(int j = 3; j <= 9; j++) {
+            if(i == j)
+                break;
+            sum++;
+        }
+    }
+    printf(""%d"", sum);
+    return 0;
+}","21","Easy",5
+2,"Power Function","#include <stdio.h>
+int power(int base, int exp) {
+    int result = 1;
+    for(int i = 0; i < exp; i++)
+        result *= base;
+    return result;
+}
+int main() {
+    printf(""%d"", power(3, 4));
+    return 0;
+}","81","Easy",5
+3,"Even Index Character Print","#include <stdio.h>
+int main() {
+    char str[] = ""TESTING"";
+    int i = 0;
+    while(str[i] != '\0') {
+        if(i % 2 == 0)
+            printf(""%c"", str[i]);
+        i++;
+    }
+    return 0;
+}","TSIG","Easy",5
+4,"Divisibility Check","#include <stdio.h>
+int main() {
+    int x = 18, y = 27;
+    if(x % 9 == 0 && y % 9 == 0)
+        printf(""%d"", (x + y) / 9);
+    else if(x % 3 == 0 || y % 3 == 0)
+        printf(""%d"", x * y);
+    else
+        printf(""%d"", x - y);
+    return 0;
+}","5","Easy",5
+5,"While with Skip Pattern","#include <stdio.h>
+int main() {
+    int i = 5, total = 0;
+    while(i <= 15) {
+        if(i % 5 == 0) {
+            i += 2;
+            continue;
+        }
+        total += i;
+        i += 2;
+    }
+    printf(""%d"", total);
+    return 0;
+}","35","Easy",5
+6,"Array Division Sum","#include <stdio.h>
+int main() {
+    int arr[] = {12, 18, 24, 30, 36};
+    int result = 0;
+    for(int i = 0; i < 5; i++) {
+        if(arr[i] % 12 == 0)
+            result += arr[i] / 6;
+    }
+    printf(""%d"", result);
+    return 0;
+}","18","Easy",5
+7,"Switch Level System","#include <stdio.h>
+int main() {
+    int level = 2;
+    switch(level) {
+        case 1: printf(""Beginner "");
+        case 2: printf(""Intermediate "");
+        case 3: printf(""Advanced "");
+                break;
+        default: printf(""Expert"");
+    }
+    return 0;
+}","Intermediate Advanced","Easy",5
+8,"Do While Factorial","#include <stdio.h>
+int main() {
+    int n = 2, fact = 1;
+    do {
+        fact *= n;
+        n++;
+    } while(n <= 5);
+    printf(""%d"", fact);
+    return 0;
+}","120","Easy",5
+9,"2D Array Column Sum","#include <stdio.h>
+int main() {
+    int arr[3][2] = {{3, 6}, {9, 12}, {15, 18}};
+    int sum = 0;
+    for(int i = 0; i < 3; i++)
+        sum += arr[i][1];
+    printf(""%d"", sum);
+    return 0;
+}","36","Easy",5
+10,"For Loop with Skip","#include <stdio.h>
+int main() {
+    int val = 0;
+    for(int i = 4; i <= 16; i += 4) {
+        if(i == 12)
+            continue;
+        val += i;
+    }
+    printf(""%d"", val);
+    return 0;
+}","28","Easy",5
+11,"Switch Color Fall Through","#include <stdio.h>
+int main() {
+    int code = 3;
+    switch(code) {
+        case 1: printf(""Red"");
+        case 2: printf(""Green"");
+        case 3: printf(""Blue"");
+        case 4: printf(""Yellow"");
+                break;
+        default: printf(""Black"");
+    }
+    return 0;
+}","BlueYellow","Easy",5
+12,"Do While Divisible Sum","#include <stdio.h>
+int main() {
+    int m = 0, sum = 0;
+    do {
+        m++;
+        if(m % 4 != 0)
+            continue;
+        sum += m;
+    } while(m < 12);
+    printf(""%d"", sum);
+    return 0;
+}","24","Easy",5
+13,"2D Array Count","#include <stdio.h>
+int main() {
+    int data[2][3] = {{8, 16, 24}, {32, 40, 48}};
+    int count = 0;
+    for(int i = 0; i < 2; i++)
+        for(int j = 0; j < 3; j++)
+            if(data[i][j] % 8 == 0)
+                count++;
+    printf(""%d"", count);
+    return 0;
+}","6","Easy",5
+14,"Complex Nested Conditions","#include <stdio.h>
+int main() {
+    int a = 35, b = 28, c = 21;
+    if(a > b)
+        if(b > c)
+            if(a % 7 == 0 && b % 7 == 0)
+                printf(""%d"", (a + b) / 7);
+            else
+                printf(""%d"", a - b);
+        else
+            printf(""%d"", b);
+    else
+        printf(""%d"", c);
+    return 0;
+}","9","Easy",5
+15,"Complex Array Conditions","#include <stdio.h>
+int main() {
+    int arr[] = {15, 30, 45, 60, 75, 90};
+    int result = 0;
+    for(int i = 0; i < 6; i++) {
+        if(arr[i] % 15 == 0 && i % 2 == 0)
+            result += arr[i] / 15;
+        else if(i % 2 == 1)
+            result -= arr[i] / 30;
+    }
+    printf(""%d"", result);
+    return 0;
+}","6","Hard",10
+16,"Vowel Counter","#include <stdio.h>
+int main() {
+    char str[] = ""PROGRAMMING"";
+    int len = 0, vowels = 0;
+    while(str[len] != '\0') {
+        if(str[len] == 'A' || str[len] == 'E' || str[len] == 'I' ||
+           str[len] == 'O' || str[len] == 'U')
+            vowels++;
+        len++;
+    }
+    printf(""%d"", len - vowels);
+    return 0;
+}","8","Hard",10
+17,"Static Recursive Sum","#include <stdio.h>
+int recursiveSum(int n) {
+    static int total = 0;
+    if(n > 0) {
+        total += n;
+        recursiveSum(n - 2);
+    }
+    return total;
+}
+int main() {
+    printf(""%d "", recursiveSum(10));
+    printf(""%d"", recursiveSum(5));
+    return 0;
+}","30 45","Hard",10
+18,"Matrix Diagonal and Center","#include <stdio.h>
+int main() {
+    int matrix[3][3] = {{1, 2, 3}, {4, 5, 6}, {7, 8, 9}};
+    int sum = 0;
+    for(int i = 0; i < 3; i++) {
+        for(int j = 0; j < 3; j++) {
+            if(i + j == 4 || (i == 1 && j == 1))
+                sum += matrix[i][j];
+        }
+    }
+    printf(""%d"", sum);
+    return 0;
+}","17","Hard",10
+19,"Array Conditional Modification","#include <stdio.h>
+void modifyArray(int *arr, int size) {
+    for(int i = 0; i < size; i++)
+        arr[i] = (arr[i] % 2 == 0) ? arr[i] * 3 : arr[i] + 5;
+}
+int main() {
+    int data[] = {2, 5, 8, 11};
+    modifyArray(data, 4);
+    printf(""%d"", data[1] + data[3]);
+    return 0;
+}","26","Hard",10
+20,"Switch Division Cases","#include <stdio.h>
+int main() {
+    int x = 42, y = 0;
+    switch(x / 7) {
+        case 6: y += 10;
+        case 5: y += 20;
+        case 4: y += 30; break;
+        case 3: y += 40;
+        default: y += 50;
+    }
+    printf(""%d"", y);
+    return 0;
+}","60","Hard",10
+21,"String ASCII Difference","#include <stdio.h>
+int main() {
+    char s1[] = ""HELLO"", s2[] = ""WORLD"";
+    int diff = 0;
+    for(int i = 0; i < 5; i++)
+        diff += (s1[i] - s2[i]);
+    printf(""%d"", diff);
+    return 0;
+}","-15","Hard",10
+22,"Static Global Interaction","#include <stdio.h>
+int globalVar = 100;
+void modify(int x) {
+    static int count = 0;
+    count += x;
+    globalVar -= x;
+    printf(""%d "", count + globalVar);
+}
+int main() {
+    modify(10);
+    modify(20);
+    return 0;
+}","100 100","Hard",10
+23,"Word Counter","#include <stdio.h>
+int main() {
+    char event[] = ""C TITANS BATTLE OF BEGINNERS"";
+    int words = 1;
+    for(int i = 0; event[i] != '\0'; i++) {
+        if(event[i] == ' ')
+            words++;
+    }
+    printf(""%d"", words);
+    return 0;
+}","5","Hard",10
+24,"Digit Processing","#include <stdio.h>
+int main() {
+    int n = 157, sum = 0;
+    while(n > 0) {
+        if(n % 10 > 5)
+            sum += (n % 10) * 2;
+        else
+            sum += n % 10;
+        n /= 10;
+    }
+    printf(""%d"", sum);
+    return 0;
+}","19","Hard",10
+25,"2D Array Conditional Sum","#include <stdio.h>
+int main() {
+    int arr[2][3] = {{10, 20, 30}, {40, 50, 60}};
+    int result = 0;
+    for(int i = 0; i < 2; i++) {
+        for(int j = 0; j < 3; j++) {
+            if((i == 0 && j % 2 == 0) || (i == 1 && j % 2 == 1))
+                result += arr[i][j];
+        }
+    }
+    printf(""%d"", result);
+    return 0;
+}","90","Hard",10
+26,"Three Way Maximum","#include <stdio.h>
+int calculate(int a, int b, int c) {
+    return (a > b) ? ((a > c) ? a : c) : ((b > c) ? b : c);
+}
+int main() {
+    printf(""%d"", calculate(15, 28, 22));
+    return 0;
+}","28","Hard",10
+27,"Digit Sum from String","#include <stdio.h>
+int main() {
+    char str[] = ""12A3B4C"";
+    int digitSum = 0;
+    for(int i = 0; str[i] != '\0'; i++) {
+        if(str[i] >= '0' && str[i] <= '9')
+            digitSum += (str[i] - '0');
+    }
+    printf(""%d"", digitSum);
+    return 0;
+}","10","Hard",10
+28,"Product Sum Conditions","#include <stdio.h>
+int main() {
+    int val = 0;
+    for(int i = 1; i <= 4; i++) {
+        for(int j = 1; j <= 4; j++) {
+            if(i * j % 2 == 0 && i != j)
+                val += i + j;
+        }
+    }
+    printf(""%d"", val);
+    return 0;
+}","48","Hard",10
+29,"XOR Swap","#include <stdio.h>
+void swap(int *a, int *b) {
+    *a = *a ^ *b;
+    *b = *a ^ *b;
+    *a = *a ^ *b;
+}
+int main() {
+    int x = 25, y = 40;
+    swap(&x, &y);
+    printf(""%d"", x + y);
+    return 0;
+}","65","Hard",10
+30,"Conditional Array Processing","#include <stdio.h>
+int main() {
+    int arr[] = {5, 10, 15, 20, 25, 30, 35};
+    int count = 0;
+    for(int i = 0; i < 7; i++) {
+        if(arr[i] % 5 == 0 && arr[i] > 12 && i % 2 != 0)
+            count += arr[i] / 5;
+    }
+    printf(""%d"", count);
+    return 0;
+}","10","Hard",10
+31,"Do While Modulo Skip","#include <stdio.h>
+int main() {
+    int n = 48, total = 0;
+    do {
+        if(n % 8 == 0) {
+            n -= 4;
+            continue;
+        }
+        total += n % 10;
+        n -= 4;
+    } while(n > 20);
+    printf(""%d"", total);
+    return 0;
+}","14","Hard",10
+32,"GCD Recursive","#include <stdio.h>
+int mystery(int x, int y) {
+    if(y == 0) return x;
+    return mystery(y, x % y);
+}
+int main() {
+    printf(""%d"", mystery(48, 18));
+    return 0;
+}","6","Hard",10
+33,"Case Conversion","#include <stdio.h>
+int main() {
+    char str1[] = ""CODE"", str2[10];
+    int i = 0, j = 0;
+    while(str1[i] != '\0') {
+        if(i % 2 == 0)
+            str2[j++] = str1[i] + 32;
+        else
+            str2[j++] = str1[i];
+        i++;
+    }
+    str2[j] = '\0';
+    printf(""%s"", str2);
+    return 0;
+}","cOdE","Hard",10
+34,"Matrix Diagonal Sum","#include <stdio.h>
+int main() {
+    int grid[3][3] = {{5, 10, 15}, {20, 25, 30}, {35, 40, 45}};
+    int sum = 0;
+    for(int i = 0; i < 3; i++) {
+        sum += grid[i][i];
+        sum += grid[i][2-i];
+    }
+    printf(""%d"", sum - grid[1][1]);
+    return 0;
+}","130","Hard",10
+35,"Ternary Nested Logic","#include <stdio.h>
+int main() {
+    int a = 7, b = 14, c = 21, d = 28;
+    int result = (a < b && b < c) ? ((c < d) ? d - a : c - b) : a + b;
+    printf(""%d"", result);
+    return 0;
+}","21","Hard",10

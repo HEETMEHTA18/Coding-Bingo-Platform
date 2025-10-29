@@ -17,7 +17,7 @@ import {
   teamQuestionMapping,
   wipeAudits,
 } from "../schema.js";
-import { eq } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 
 const upload = multer();
 
@@ -28,11 +28,78 @@ function parseCSVLine(line: string): string[] {
   for (let i = 0; i < line.length; i++) {
     const ch = line[i];
     if (ch === '"') {
-      if (inQuotes && line[i + 1] === '"') { cur += '"'; i++; } else { inQuotes = !inQuotes; }
-    } else if (ch === ',' && !inQuotes) { out.push(cur.trim()); cur = ""; } else { cur += ch; }
+      if (inQuotes && line[i + 1] === '"') {
+        cur += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (ch === "," && !inQuotes) {
+      out.push(cur.trim());
+      cur = "";
+    } else {
+      cur += ch;
+    }
   }
   out.push(cur.trim());
   return out;
+}
+
+function parseCSV(csvData: string): string[][] {
+  const lines: string[][] = [];
+  const rows = csvData.split("\n");
+  let currentRow: string[] = [];
+  let currentField = "";
+  let inQuotes = false;
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+
+    for (let j = 0; j < row.length; j++) {
+      const ch = row[j];
+
+      if (ch === '"') {
+        if (inQuotes && row[j + 1] === '"') {
+          // Escaped quote
+          currentField += '"';
+          j++; // Skip next quote
+        } else {
+          // Toggle quote state
+          inQuotes = !inQuotes;
+        }
+      } else if (ch === "," && !inQuotes) {
+        // Field separator
+        currentRow.push(currentField.trim());
+        currentField = "";
+      } else {
+        currentField += ch;
+      }
+    }
+
+    // Check if we're still in quotes (multiline field)
+    if (inQuotes) {
+      // Continue to next row, don't finish the current row yet
+      continue;
+    } else {
+      // Finish current row
+      currentRow.push(currentField.trim());
+      currentField = "";
+      if (currentRow.length > 0) {
+        lines.push(currentRow);
+      }
+      currentRow = [];
+    }
+  }
+
+  // Handle any remaining field if file ends with quoted field
+  if (currentField || currentRow.length > 0) {
+    currentRow.push(currentField.trim());
+    if (currentRow.length > 0) {
+      lines.push(currentRow);
+    }
+  }
+
+  return lines;
 }
 
 export const handleAdminState: RequestHandler = async (req, res) => {
@@ -41,19 +108,54 @@ export const handleAdminState: RequestHandler = async (req, res) => {
   try {
     const code = roomCode.toUpperCase();
     const [room] = await db.select().from(rooms).where(eq(rooms.code, code));
-    const questionsResult = await db.select().from(questionsTable).where(eq(questionsTable.roomCode, code));
-    const teamsResult = await db.select().from(teams).where(eq(teams.roomCode, code));
+
+    // Optimize queries by selecting only needed columns to reduce payload and query time
+    const questionsResult = await db
+      .select({
+        questionId: questionsTable.questionId,
+        questionText: questionsTable.questionText,
+        isReal: questionsTable.isReal,
+      })
+      .from(questionsTable)
+      .where(eq(questionsTable.roomCode, code));
+
+    const teamsResult = await db
+      .select({
+        teamId: teams.teamId,
+        teamName: teams.teamName,
+        linesCompleted: teams.linesCompleted,
+      })
+      .from(teams)
+      .where(eq(teams.roomCode, code));
+
     const response: AdminStateResponse = {
-      room: room ? { code: room.code, title: room.title, roundEndAt: room.roundEndAt?.toISOString() || null } : null,
-      questions: questionsResult.map((q: any) => ({ id: String(q.questionId), text: q.questionText, is_real: q.isReal })) as any,
-      teams: teamsResult.map((t: any) => ({ id: t.teamId, name: t.teamName, lines_completed: t.linesCompleted })) as any,
+      room: room
+        ? {
+            code: room.code,
+            title: room.title,
+            roundEndAt: room.roundEndAt?.toISOString() || null,
+          }
+        : null,
+      questions: questionsResult.map((q: any) => ({
+        id: String(q.questionId),
+        text: q.questionText,
+        is_real: q.isReal,
+      })) as any,
+      teams: teamsResult.map((t: any) => ({
+        id: t.teamId,
+        name: t.teamName,
+        lines_completed: t.linesCompleted,
+      })) as any,
       currentQuestionIndex: 0,
       gameStarted: false,
       gameEnded: false,
       timeRemaining: 0,
     };
     res.json(response);
-  } catch (err) { console.error(err); res.status(500).json({ error: "Internal server error" }); }
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Internal server error" });
+  }
 };
 
 export const handleCreateRoom: RequestHandler = async (req, res) => {
@@ -62,536 +164,40 @@ export const handleCreateRoom: RequestHandler = async (req, res) => {
   const code = body.code.toUpperCase();
   try {
     const existing = await db.select().from(rooms).where(eq(rooms.code, code));
-    if (existing.length > 0) return res.status(400).json({ error: "Room already exists" });
-    await db.insert(rooms).values({ code, title: body.title ?? null, roundEndAt: body.durationMinutes ? new Date(Date.now() + body.durationMinutes * 60 * 1000) : null });
+    if (existing.length > 0)
+      return res.status(400).json({ error: "Room already exists" });
+    await db.insert(rooms).values({
+      code,
+      title: body.title ?? null,
+      roundEndAt: body.durationMinutes
+        ? new Date(Date.now() + body.durationMinutes * 60 * 1000)
+        : null,
+    });
     res.json({ success: true });
-  } catch (err) { console.error(err); res.status(500).json({ error: "Internal server error" }); }
-};
-
-export const handleStartGame: RequestHandler = async (req, res) => {
-  const { minutes } = req.body;
-  const roomCode = (req.body?.room as string) || (req.query.room as string);
-  if (!roomCode || !minutes || typeof minutes !== 'number' || minutes <= 0) return res.status(400).json({ error: "room and valid minutes required" });
-  try {
-    const code = roomCode.toUpperCase();
-    const roomResult = await db.select().from(rooms).where(eq(rooms.code, code));
-    if (roomResult.length === 0) return res.status(404).json({ error: "Room not found" });
-    const endTime = new Date(Date.now() + minutes * 60 * 1000);
-    await db.update(rooms).set({ roundEndAt: endTime }).where(eq(rooms.code, code));
-    res.json({ success: true, endTime: endTime.toISOString() });
-  } catch (err) { console.error("handleStartGame", err); res.status(500).json({ error: "Internal server error" }); }
-};
-
-export const handleExtendTimer: RequestHandler = async (req, res) => {
-  const { minutes } = req.body;
-  const roomCode = (req.body?.room as string) || (req.query.room as string);
-  if (!roomCode || !minutes || typeof minutes !== 'number' || minutes <= 0) return res.status(400).json({ error: "room and valid minutes required" });
-  try {
-    const code = roomCode.toUpperCase();
-    const roomResult = await db.select().from(rooms).where(eq(rooms.code, code));
-    if (roomResult.length === 0) return res.status(404).json({ error: "Room not found" });
-    const currentRoom = roomResult[0];
-    let newEndTime: Date;
-    if (currentRoom.roundEndAt && currentRoom.roundEndAt > new Date()) newEndTime = new Date(currentRoom.roundEndAt.getTime() + minutes * 60 * 1000); else newEndTime = new Date(Date.now() + minutes * 60 * 1000);
-    await db.update(rooms).set({ roundEndAt: newEndTime }).where(eq(rooms.code, code));
-    res.json({ success: true, endTime: newEndTime.toISOString() });
-  } catch (err) { console.error(err); res.status(500).json({ error: "Internal server error" }); }
-};
-
-export const handleForceEnd: RequestHandler = async (req, res) => {
-  const roomCode = (req.body?.room as string) || (req.query.room as string);
-  if (!roomCode) return res.status(400).json({ error: "room required" });
-  try {
-    const code = roomCode.toUpperCase();
-    const roomResult = await db.select().from(rooms).where(eq(rooms.code, code));
-    if (roomResult.length === 0) return res.status(404).json({ error: "Room not found" });
-    const endTime = new Date();
-    await db.update(rooms).set({ roundEndAt: endTime }).where(eq(rooms.code, code));
-    res.json({ success: true, endTime: endTime.toISOString() });
-  } catch (err) { console.error(err); res.status(500).json({ error: "Internal server error" }); }
-};
-
-export const handleAddQuestion: RequestHandler = async (req, res) => {
-  const body: AdminAddQuestionRequest = req.body;
-  if (!body?.room || !body?.question) return res.status(400).json({ error: "room and question required" });
-  try {
-    const code = body.room.toUpperCase();
-    const roomResult = await db.select().from(rooms).where(eq(rooms.code, code));
-    if (roomResult.length === 0) return res.status(404).json({ error: "Room not found" });
-    const result = await db.insert(questionsTable).values({ roomCode: code, questionText: body.question.text, isReal: true, correctAnswer: String(body.question.correctAnswer) }).returning();
-    const newQuestion: Question = { id: String(result[0].questionId), text: body.question.text, options: body.question.options ?? [], correctAnswer: body.question.correctAnswer, points: body.question.points ?? 0 } as any;
-    res.json({ success: true, question: newQuestion });
-  } catch (err) { console.error(err); res.status(500).json({ error: "Internal server error" }); }
-};
-
-export const handleDeleteQuestion: RequestHandler = async (req, res) => {
-  const body: AdminDeleteQuestionRequest = req.body;
-  if (!body || !body.questionId) return res.status(400).json({ error: "questionId required" });
-  const questionIdInt = parseInt(String(body.questionId), 10);
-  if (Number.isNaN(questionIdInt)) return res.status(400).json({ error: "Invalid questionId" });
-  try { await db.delete(questionsTable).where(eq(questionsTable.questionId, questionIdInt)); res.json({ success: true }); } catch (err) { console.error(err); res.status(500).json({ error: "Internal server error" }); }
-};
-
-export const handleUploadQuestions = [upload.single('file'), async (req: any, res: any) => {
-  try {
-    const room = req.body.room as string;
-    const file = req.file;
-    if (!room) return res.status(400).json({ error: "Room code required" });
-    if (!file || !file.buffer) return res.status(400).json({ error: "File is required" });
-    const code = room.toUpperCase();
-    const roomResult = await db.select().from(rooms).where(eq(rooms.code, code));
-    if (roomResult.length === 0) return res.status(404).json({ error: "Room not found" });
-    const csvData = file.buffer.toString('utf-8');
-    const lines = csvData.trim().split('\n');
-    if (lines.length < 2) return res.status(400).json({ error: "CSV must have at least a header row and one data row" });
-    const headers = parseCSVLine(lines[0]).map(h => h.toLowerCase());
-    const questionTextIndex = headers.indexOf('question_text') !== -1 ? headers.indexOf('question_text') : headers.indexOf('code') !== -1 ? headers.indexOf('code') : -1;
-    const correctAnswerIndex = headers.indexOf('correct_answer') !== -1 ? headers.indexOf('correct_answer') : headers.indexOf('answer') !== -1 ? headers.indexOf('answer') : -1;
-    if (questionTextIndex === -1 || correctAnswerIndex === -1) return res.status(400).json({ error: "CSV missing columns" });
-    const questionsToInsert: any[] = [];
-    for (let i = 1; i < lines.length; i++) {
-      const values = parseCSVLine(lines[i]);
-      if (values.length <= Math.max(questionTextIndex, correctAnswerIndex)) continue;
-      const questionText = values[questionTextIndex].replace(/^"|"$/g, '');
-      const correctAnswer = values[correctAnswerIndex].replace(/^"|"$/g, '');
-      if (questionText && correctAnswer) questionsToInsert.push({ roomCode: code, questionText, isReal: true, correctAnswer });
-    }
-    if (questionsToInsert.length === 0) return res.status(400).json({ error: "No valid questions found in CSV" });
-    await db.insert(questionsTable).values(questionsToInsert);
-    res.json({ success: true, importedCount: questionsToInsert.length });
-  } catch (err) { console.error(err); res.status(500).json({ error: "Internal server error" }); }
-}];
-
-export const handleWipeUserData: RequestHandler = async (req, res) => {
-  try {
-    const body = (req.body || {}) as any;
-    const confirm = String(body.confirm || "").trim();
-    const adminSecretHeader = String(req.header("x-admin-secret") || "");
-    const envSecret = process.env.ADMIN_SECRET || "";
-    if (confirm !== "WIPE" || (!envSecret && process.env.NODE_ENV !== "development" && !adminSecretHeader)) {
-      return res.status(400).json({ error: "Confirmation 'WIPE' and admin secret required" });
-    }
-    if (envSecret && adminSecretHeader !== envSecret) return res.status(403).json({ error: "Invalid admin secret" });
-
-    const preserveRooms: string[] = Array.isArray(body.preserveRooms) ? body.preserveRooms.map(String) : [];
-    const purgeRooms = !!body.purgeRooms;
-    const purgeQuestions = !!body.purgeQuestions;
-    const softDelete = !!body.softDelete;
-    const initiatedBy = String(body.initiatedBy || req.header("x-initiated-by") || "admin");
-
-    const deleted: Record<string, number> = {};
-    const auditOptions = { preserveRooms, purgeRooms, purgeQuestions, softDelete };
-
-    await db.transaction(async tx => {
-      if (softDelete) {
-        const r1 = await tx.update(teamSolvedPositions).set({ isDeleted: true }).execute() as any;
-        deleted.team_solved_positions = typeof r1 === 'number' ? r1 : (r1?.rowCount ?? r1?.length ?? 0);
-        const r2 = await tx.update(teamSolvedQuestions).set({ isDeleted: true }).execute() as any;
-        deleted.team_solved_questions = typeof r2 === 'number' ? r2 : (r2?.rowCount ?? r2?.length ?? 0);
-        const r3 = await tx.update(teamQuestionMapping).set({ isDeleted: true }).execute() as any;
-        deleted.team_question_mapping = typeof r3 === 'number' ? r3 : (r3?.rowCount ?? r3?.length ?? 0);
-        if (preserveRooms.length > 0) {
-          const teamsAll = await tx.select().from(teams).execute();
-          const teamIdsToMark = teamsAll.filter((t: any) => !preserveRooms.map((r: string) => r.toUpperCase()).includes(String(t.roomCode).toUpperCase())).map((t: any) => t.teamId);
-          if (teamIdsToMark.length > 0) { const r4 = await tx.update(teams).set({ isDeleted: true }).where((teams.teamId as any).in(teamIdsToMark)).execute() as any; deleted.teams = typeof r4 === 'number' ? r4 : (r4?.rowCount ?? r4?.length ?? 0); } else deleted.teams = 0;
-        } else { const r4 = await tx.update(teams).set({ isDeleted: true }).execute() as any; deleted.teams = typeof r4 === 'number' ? r4 : (r4?.rowCount ?? r4?.length ?? 0); }
-      } else {
-        if (!purgeQuestions) {
-          const r1 = await tx.delete(teamSolvedPositions).execute() as any; deleted.team_solved_positions = typeof r1 === 'number' ? r1 : (r1?.rowCount ?? r1?.length ?? 0);
-          const r2 = await tx.delete(teamSolvedQuestions).execute() as any; deleted.team_solved_questions = typeof r2 === 'number' ? r2 : (r2?.rowCount ?? r2?.length ?? 0);
-          const r3 = await tx.delete(teamQuestionMapping).execute() as any; deleted.team_question_mapping = typeof r3 === 'number' ? r3 : (r3?.rowCount ?? r3?.length ?? 0);
-          if (preserveRooms.length > 0) {
-            const teamsAll = await tx.select().from(teams).execute();
-            const toDelete = teamsAll.filter((t: any) => !preserveRooms.map((r: string) => r.toUpperCase()).includes(String(t.roomCode).toUpperCase())).map((t: any) => t.teamId);
-            if (toDelete.length > 0) { const r4 = await tx.delete(teams).where((teams.teamId as any).in(toDelete)).execute() as any; deleted.teams = typeof r4 === 'number' ? r4 : (r4?.rowCount ?? r4?.length ?? 0); } else deleted.teams = 0;
-          } else { const r4 = await tx.delete(teams).execute() as any; deleted.teams = typeof r4 === 'number' ? r4 : (r4?.rowCount ?? r4?.length ?? 0); }
-        } else {
-          const r1 = await tx.delete(teamSolvedPositions).execute() as any; deleted.team_solved_positions = typeof r1 === 'number' ? r1 : (r1?.rowCount ?? r1?.length ?? 0);
-          const r2 = await tx.delete(teamSolvedQuestions).execute() as any; deleted.team_solved_questions = typeof r2 === 'number' ? r2 : (r2?.rowCount ?? r2?.length ?? 0);
-          const r3 = await tx.delete(teamQuestionMapping).execute() as any; deleted.team_question_mapping = typeof r3 === 'number' ? r3 : (r3?.rowCount ?? r3?.length ?? 0);
-          const r4 = await tx.delete(teams).execute() as any; deleted.teams = typeof r4 === 'number' ? r4 : (r4?.rowCount ?? r4?.length ?? 0);
-          const r5 = await tx.delete(questionsTable).execute() as any; deleted.questions = typeof r5 === 'number' ? r5 : (r5?.rowCount ?? r5?.length ?? 0);
-          if (purgeRooms) { const r6 = await tx.delete(rooms).execute() as any; deleted.rooms = typeof r6 === 'number' ? r6 : (r6?.rowCount ?? r6?.length ?? 0); }
-        }
-      }
-      try { await tx.insert(wipeAudits).values({ initiatedBy, initiatedAt: new Date(), options: JSON.stringify(auditOptions), deletedCounts: JSON.stringify(deleted) }).execute(); } catch (err) { console.error("Failed to insert wipe audit", err); }
-    });
-
-    res.json({ success: true, deleted });
-  } catch (err) { console.error(err); res.status(500).json({ error: "Internal server error" }); }
-};
-import { RequestHandler } from "express";
-import { db } from "../db.js";
-import { rooms, questions as questionsTable, teams, teamSolvedQuestions, teamSolvedPositions, teamQuestionMapping, wipeAudits } from "../schema.js";
-
-// Single clean handler for wiping user/team data. Keep minimal to avoid duplication issues.
-export const handleWipeUserData: RequestHandler = async (req, res) => {
-  try {
-    const body = req.body || {};
-    const confirm = String(body.confirm || "").trim();
-    const adminSecretHeader = String(req.header("x-admin-secret") || "");
-    const envSecret = process.env.ADMIN_SECRET || "";
-    if (confirm !== "WIPE" || (!envSecret && process.env.NODE_ENV !== "development" && !adminSecretHeader)) {
-      return res.status(400).json({ error: "Confirmation 'WIPE' and admin secret required" });
-    }
-    if (envSecret && adminSecretHeader !== envSecret) return res.status(403).json({ error: "Invalid admin secret" });
-
-    const preserveRooms: string[] = Array.isArray(body.preserveRooms) ? body.preserveRooms.map(String) : [];
-    const purgeRooms = !!body.purgeRooms;
-    const purgeQuestions = !!body.purgeQuestions;
-    const softDelete = !!body.softDelete;
-    const initiatedBy = String(body.initiatedBy || req.header("x-initiated-by") || "admin");
-
-    const deleted: Record<string, number> = {};
-    const auditOptions = { preserveRooms, purgeRooms, purgeQuestions, softDelete };
-
-    await db.transaction(async tx => {
-      if (softDelete) {
-        await tx.update(teamSolvedPositions).set({ isDeleted: true }).execute();
-        await tx.update(teamSolvedQuestions).set({ isDeleted: true }).execute();
-        await tx.update(teamQuestionMapping).set({ isDeleted: true }).execute();
-        await tx.update(teams).set({ isDeleted: true }).execute();
-      } else {
-        await tx.delete(teamSolvedPositions).execute();
-        await tx.delete(teamSolvedQuestions).execute();
-        await tx.delete(teamQuestionMapping).execute();
-        await tx.delete(teams).execute();
-        if (purgeQuestions) await tx.delete(questionsTable).execute();
-        if (purgeRooms) await tx.delete(rooms).execute();
-      }
-      try {
-        await tx.insert(wipeAudits).values({ initiatedBy, initiatedAt: new Date(), options: JSON.stringify(auditOptions), deletedCounts: JSON.stringify(deleted) }).execute();
-      } catch (err) { console.error("Failed to insert wipe audit", err); }
-    });
-
-    res.json({ success: true, deleted });
   } catch (err) {
-    console.error("handleWipeUserData", err);
+    console.error(err);
     res.status(500).json({ error: "Internal server error" });
   }
 };
-import { RequestHandler } from "express";
-import { db } from "../db.js";
-import { rooms, questions as questionsTable, teams, teamSolvedQuestions, teamSolvedPositions, teamQuestionMapping, wipeAudits } from "../schema.js";
-import { eq } from "drizzle-orm";
-
-// WARNING: destructive endpoint. Requires explicit confirm string and ADMIN_SECRET header.
-export const handleWipeUserData: RequestHandler = async (req, res) => {
-  try {
-    const body = (req.body || {}) as any;
-    const confirm = String(body.confirm || "").trim();
-    const adminSecretHeader = String(req.header("x-admin-secret") || "");
-    const envSecret = process.env.ADMIN_SECRET || "";
-    if (confirm !== "WIPE" || (!envSecret && process.env.NODE_ENV !== "development" && !adminSecretHeader)) {
-      return res.status(400).json({ error: "Confirmation 'WIPE' and admin secret required" });
-    }
-    if (envSecret && adminSecretHeader !== envSecret) return res.status(403).json({ error: "Invalid admin secret" });
-
-    const preserveRooms: string[] = Array.isArray(body.preserveRooms) ? body.preserveRooms.map(String) : [];
-    const purgeRooms = !!body.purgeRooms;
-    const purgeQuestions = !!body.purgeQuestions;
-    const softDelete = !!body.softDelete;
-    const initiatedBy = String(body.initiatedBy || req.header("x-initiated-by") || "admin");
-
-    const deleted: Record<string, number> = {};
-    const auditOptions = { preserveRooms, purgeRooms, purgeQuestions, softDelete };
-
-    await db.transaction(async tx => {
-      if (softDelete) {
-        const r1 = await tx.update(teamSolvedPositions).set({ isDeleted: true }).execute() as any;
-        deleted.team_solved_positions = typeof r1 === 'number' ? r1 : (r1?.rowCount ?? r1?.length ?? 0);
-        const r2 = await tx.update(teamSolvedQuestions).set({ isDeleted: true }).execute() as any;
-        deleted.team_solved_questions = typeof r2 === 'number' ? r2 : (r2?.rowCount ?? r2?.length ?? 0);
-        const r3 = await tx.update(teamQuestionMapping).set({ isDeleted: true }).execute() as any;
-        deleted.team_question_mapping = typeof r3 === 'number' ? r3 : (r3?.rowCount ?? r3?.length ?? 0);
-        if (preserveRooms.length > 0) {
-          const teamsAll = await tx.select().from(teams).execute();
-          const teamIdsToMark = teamsAll.filter((t: any) => !preserveRooms.map((r: string) => r.toUpperCase()).includes(String(t.roomCode).toUpperCase())).map((t: any) => t.teamId);
-          if (teamIdsToMark.length > 0) { const r4 = await tx.update(teams).set({ isDeleted: true }).where((teams.teamId as any).in(teamIdsToMark)).execute() as any; deleted.teams = typeof r4 === 'number' ? r4 : (r4?.rowCount ?? r4?.length ?? 0); } else deleted.teams = 0;
-        } else { const r4 = await tx.update(teams).set({ isDeleted: true }).execute() as any; deleted.teams = typeof r4 === 'number' ? r4 : (r4?.rowCount ?? r4?.length ?? 0); }
-      } else {
-        if (!purgeQuestions) {
-          const r1 = await tx.delete(teamSolvedPositions).execute() as any; deleted.team_solved_positions = typeof r1 === 'number' ? r1 : (r1?.rowCount ?? r1?.length ?? 0);
-          const r2 = await tx.delete(teamSolvedQuestions).execute() as any; deleted.team_solved_questions = typeof r2 === 'number' ? r2 : (r2?.rowCount ?? r2?.length ?? 0);
-          const r3 = await tx.delete(teamQuestionMapping).execute() as any; deleted.team_question_mapping = typeof r3 === 'number' ? r3 : (r3?.rowCount ?? r3?.length ?? 0);
-          if (preserveRooms.length > 0) {
-            const teamsAll = await tx.select().from(teams).execute();
-            const toDelete = teamsAll.filter((t: any) => !preserveRooms.map((r: string) => r.toUpperCase()).includes(String(t.roomCode).toUpperCase())).map((t: any) => t.teamId);
-            if (toDelete.length > 0) { const r4 = await tx.delete(teams).where((teams.teamId as any).in(toDelete)).execute() as any; deleted.teams = typeof r4 === 'number' ? r4 : (r4?.rowCount ?? r4?.length ?? 0); } else deleted.teams = 0;
-          } else { const r4 = await tx.delete(teams).execute() as any; deleted.teams = typeof r4 === 'number' ? r4 : (r4?.rowCount ?? r4?.length ?? 0); }
-        } else {
-          const r1 = await tx.delete(teamSolvedPositions).execute() as any; deleted.team_solved_positions = typeof r1 === 'number' ? r1 : (r1?.rowCount ?? r1?.length ?? 0);
-          const r2 = await tx.delete(teamSolvedQuestions).execute() as any; deleted.team_solved_questions = typeof r2 === 'number' ? r2 : (r2?.rowCount ?? r2?.length ?? 0);
-          const r3 = await tx.delete(teamQuestionMapping).execute() as any; deleted.team_question_mapping = typeof r3 === 'number' ? r3 : (r3?.rowCount ?? r3?.length ?? 0);
-          const r4 = await tx.delete(teams).execute() as any; deleted.teams = typeof r4 === 'number' ? r4 : (r4?.rowCount ?? r4?.length ?? 0);
-          const r5 = await tx.delete(questionsTable).execute() as any; deleted.questions = typeof r5 === 'number' ? r5 : (r5?.rowCount ?? r5?.length ?? 0);
-          if (purgeRooms) { const r6 = await tx.delete(rooms).execute() as any; deleted.rooms = typeof r6 === 'number' ? r6 : (r6?.rowCount ?? r6?.length ?? 0); }
-        }
-      }
-      try { await tx.insert(wipeAudits).values({ initiatedBy, initiatedAt: new Date(), options: JSON.stringify(auditOptions), deletedCounts: JSON.stringify(deleted) }).execute(); } catch (err) { console.error("Failed to insert wipe audit", err); }
-    });
-    res.json({ success: true, deleted });
-  } catch (err) { console.error(err); res.status(500).json({ error: "Internal server error" }); }
-};
-
-import { RequestHandler } from "express";
-import multer from "multer";
-import type {
-  AdminStateResponse,
-  AdminCreateRoomRequest,
-  AdminAddQuestionRequest,
-  AdminDeleteQuestionRequest,
-  Question,
-} from "@shared/api";
-import { db } from "../db.js";
-import {
-  rooms,
-  questions as questionsTable,
-  teams,
-  teamSolvedQuestions,
-  teamSolvedPositions,
-  teamQuestionMapping,
-  wipeAudits,
-} from "../schema.js";
-import { eq } from "drizzle-orm";
-
-const upload = multer();
-
-function parseCSVLine(line: string): string[] {
-  const result: string[] = [];
-  import { } from "express";
-}
-  import multer from "multer";
-  import type {
-    AdminStateResponse,
-    AdminCreateRoomRequest,
-    AdminAddQuestionRequest,
-    AdminDeleteQuestionRequest,
-    Question,
-  } from "@shared/api";
-  import { db } from "../db.js";
-  import {
-    rooms,
-    questions as questionsTable,
-    teams,
-    teamSolvedQuestions,
-    teamSolvedPositions,
-    teamQuestionMapping,
-    wipeAudits,
-  } from "../schema.js";
-  import { eq } from "drizzle-orm";
-
-  const upload = multer();
-
-  // Small, single-file admin route implementations. Kept intentionally compact.
-
-  function parseCSVLine(line: string): string[] {
-    const out: string[] = [];
-    let cur = "";
-    let inQuotes = false;
-    for (let i = 0; i < line.length; i++) {
-      const ch = line[i];
-      if (ch === '"') {
-        if (inQuotes && line[i + 1] === '"') { cur += '"'; i++; } else { inQuotes = !inQuotes; }
-      } else if (ch === ',' && !inQuotes) { out.push(cur.trim()); cur = ""; } else { cur += ch; }
-    }
-    out.push(cur.trim());
-    return out;
-  }
-
-  export const handleAdminState: RequestHandler = async (req, res) => {
-    const roomCode = (req.query.room as string) || (req.body?.room as string);
-    if (!roomCode) return res.status(400).json({ error: "Room code required" });
-    try {
-      const code = roomCode.toUpperCase();
-      const [room] = await db.select().from(rooms).where(eq(rooms.code, code));
-      const questionsResult = await db.select().from(questionsTable).where(eq(questionsTable.roomCode, code));
-      const teamsResult = await db.select().from(teams).where(eq(teams.roomCode, code));
-      const response: AdminStateResponse = {
-        room: room ? { code: room.code, title: room.title, roundEndAt: room.roundEndAt?.toISOString() || null } : null,
-        questions: questionsResult.map((q: any) => ({ id: String(q.questionId), text: q.questionText, is_real: q.isReal })) as any,
-        teams: teamsResult.map((t: any) => ({ id: t.teamId, name: t.teamName, lines_completed: t.linesCompleted })) as any,
-        currentQuestionIndex: 0,
-        gameStarted: false,
-        gameEnded: false,
-        timeRemaining: 0,
-      };
-      res.json(response);
-    } catch (err) { console.error(err); res.status(500).json({ error: "Internal server error" }); }
-  };
-
-  export const handleCreateRoom: RequestHandler = async (req, res) => {
-    const body: AdminCreateRoomRequest = req.body;
-    if (!body?.code) return res.status(400).json({ error: "code required" });
-    const code = body.code.toUpperCase();
-    try {
-      const existing = await db.select().from(rooms).where(eq(rooms.code, code));
-      if (existing.length > 0) return res.status(400).json({ error: "Room already exists" });
-      await db.insert(rooms).values({ code, title: body.title ?? null, roundEndAt: body.durationMinutes ? new Date(Date.now() + body.durationMinutes * 60 * 1000) : null });
-      res.json({ success: true });
-    } catch (err) { console.error(err); res.status(500).json({ error: "Internal server error" }); }
-  };
-
-  export const handleStartGame: RequestHandler = async (req, res) => {
-    const { minutes } = req.body;
-    const roomCode = (req.body?.room as string) || (req.query.room as string);
-    if (!roomCode || !minutes || typeof minutes !== 'number' || minutes <= 0) return res.status(400).json({ error: "room and valid minutes required" });
-    try {
-      const code = roomCode.toUpperCase();
-      const roomResult = await db.select().from(rooms).where(eq(rooms.code, code));
-      if (roomResult.length === 0) return res.status(404).json({ error: "Room not found" });
-      const endTime = new Date(Date.now() + minutes * 60 * 1000);
-      await db.update(rooms).set({ roundEndAt: endTime }).where(eq(rooms.code, code));
-      res.json({ success: true, endTime: endTime.toISOString() });
-    } catch (err) { console.error(err); res.status(500).json({ error: "Internal server error" }); }
-  };
-
-  export const handleExtendTimer: RequestHandler = async (req, res) => {
-    const { minutes } = req.body;
-    const roomCode = (req.body?.room as string) || (req.query.room as string);
-    if (!roomCode || !minutes || typeof minutes !== 'number' || minutes <= 0) return res.status(400).json({ error: "room and valid minutes required" });
-    try {
-      const code = roomCode.toUpperCase();
-      const roomResult = await db.select().from(rooms).where(eq(rooms.code, code));
-      if (roomResult.length === 0) return res.status(404).json({ error: "Room not found" });
-      const currentRoom = roomResult[0];
-      let newEndTime: Date;
-      if (currentRoom.roundEndAt && currentRoom.roundEndAt > new Date()) newEndTime = new Date(currentRoom.roundEndAt.getTime() + minutes * 60 * 1000); else newEndTime = new Date(Date.now() + minutes * 60 * 1000);
-      await db.update(rooms).set({ roundEndAt: newEndTime }).where(eq(rooms.code, code));
-      res.json({ success: true, endTime: newEndTime.toISOString() });
-    } catch (err) { console.error(err); res.status(500).json({ error: "Internal server error" }); }
-  };
-
-  export const handleForceEnd: RequestHandler = async (req, res) => {
-    const roomCode = (req.body?.room as string) || (req.query.room as string);
-    if (!roomCode) return res.status(400).json({ error: "room required" });
-    try {
-      const code = roomCode.toUpperCase();
-      const roomResult = await db.select().from(rooms).where(eq(rooms.code, code));
-      if (roomResult.length === 0) return res.status(404).json({ error: "Room not found" });
-      const endTime = new Date();
-      await db.update(rooms).set({ roundEndAt: endTime }).where(eq(rooms.code, code));
-      res.json({ success: true, endTime: endTime.toISOString() });
-    } catch (err) { console.error(err); res.status(500).json({ error: "Internal server error" }); }
-  };
-
-  export const handleAddQuestion: RequestHandler = async (req, res) => {
-    const body: AdminAddQuestionRequest = req.body;
-    if (!body?.room || !body?.question) return res.status(400).json({ error: "room and question required" });
-    try {
-      const code = body.room.toUpperCase();
-      const roomResult = await db.select().from(rooms).where(eq(rooms.code, code));
-      if (roomResult.length === 0) return res.status(404).json({ error: "Room not found" });
-      const result = await db.insert(questionsTable).values({ roomCode: code, questionText: body.question.text, isReal: true, correctAnswer: String(body.question.correctAnswer) }).returning();
-      const newQuestion: Question = { id: String(result[0].questionId), text: body.question.text, options: body.question.options ?? [], correctAnswer: body.question.correctAnswer, points: body.question.points ?? 0 } as any;
-      res.json({ success: true, question: newQuestion });
-    } catch (err) { console.error(err); res.status(500).json({ error: "Internal server error" }); }
-  };
-
-  export const handleDeleteQuestion: RequestHandler = async (req, res) => {
-    const body: AdminDeleteQuestionRequest = req.body;
-    if (!body || !body.questionId) return res.status(400).json({ error: "questionId required" });
-    const questionIdInt = parseInt(String(body.questionId), 10);
-    if (Number.isNaN(questionIdInt)) return res.status(400).json({ error: "Invalid questionId" });
-    try { await db.delete(questionsTable).where(eq(questionsTable.questionId, questionIdInt)); res.json({ success: true }); } catch (err) { console.error(err); res.status(500).json({ error: "Internal server error" }); }
-  };
-
-  export const handleUploadQuestions = [upload.single('file'), async (req: any, res: any) => {
-    try {
-      const room = req.body.room as string;
-      const file = req.file;
-      if (!room) return res.status(400).json({ error: "Room code required" });
-      if (!file || !file.buffer) return res.status(400).json({ error: "File is required" });
-      const code = room.toUpperCase();
-      const roomResult = await db.select().from(rooms).where(eq(rooms.code, code));
-      if (roomResult.length === 0) return res.status(404).json({ error: "Room not found" });
-      const csvData = file.buffer.toString('utf-8');
-      const lines = csvData.trim().split('\n');
-      if (lines.length < 2) return res.status(400).json({ error: "CSV must have at least a header row and one data row" });
-      const headers = parseCSVLine(lines[0]).map(h => h.toLowerCase());
-      const questionTextIndex = headers.indexOf('question_text') !== -1 ? headers.indexOf('question_text') : headers.indexOf('code') !== -1 ? headers.indexOf('code') : -1;
-      const correctAnswerIndex = headers.indexOf('correct_answer') !== -1 ? headers.indexOf('correct_answer') : headers.indexOf('answer') !== -1 ? headers.indexOf('answer') : -1;
-      if (questionTextIndex === -1 || correctAnswerIndex === -1) return res.status(400).json({ error: "CSV missing columns" });
-      const questionsToInsert: any[] = [];
-      for (let i = 1; i < lines.length; i++) {
-        const values = parseCSVLine(lines[i]);
-        if (values.length <= Math.max(questionTextIndex, correctAnswerIndex)) continue;
-        const questionText = values[questionTextIndex].replace(/^"|"$/g, '');
-        const correctAnswer = values[correctAnswerIndex].replace(/^"|"$/g, '');
-        if (questionText && correctAnswer) questionsToInsert.push({ roomCode: code, questionText, isReal: true, correctAnswer });
-      }
-      if (questionsToInsert.length === 0) return res.status(400).json({ error: "No valid questions found in CSV" });
-      await db.insert(questionsTable).values(questionsToInsert);
-      res.json({ success: true, importedCount: questionsToInsert.length });
-    } catch (err) { console.error(err); res.status(500).json({ error: "Internal server error" }); }
-  }];
-
-  export const handleWipeUserData: RequestHandler = async (req, res) => {
-    try {
-      const body = (req.body || {}) as any;
-      const confirm = String(body.confirm || "").trim();
-      const adminSecretHeader = String(req.header("x-admin-secret") || "");
-      const envSecret = process.env.ADMIN_SECRET || "";
-      if (confirm !== "WIPE" || (!envSecret && process.env.NODE_ENV !== "development" && !adminSecretHeader)) return res.status(400).json({ error: "Confirmation 'WIPE' and admin secret required" });
-      if (envSecret && adminSecretHeader !== envSecret) return res.status(403).json({ error: "Invalid admin secret" });
-
-      const preserveRooms: string[] = Array.isArray(body.preserveRooms) ? body.preserveRooms.map(String) : [];
-      const purgeRooms = !!body.purgeRooms;
-      const purgeQuestions = !!body.purgeQuestions;
-      const softDelete = !!body.softDelete;
-      const initiatedBy = String(body.initiatedBy || req.header("x-initiated-by") || "admin");
-
-      const deleted: Record<string, number> = {};
-      const auditOptions = { preserveRooms, purgeRooms, purgeQuestions, softDelete };
-
-      await db.transaction(async tx => {
-        if (softDelete) {
-          const r1 = await tx.update(teamSolvedPositions).set({ isDeleted: true }).execute() as any;
-          deleted.team_solved_positions = typeof r1 === 'number' ? r1 : (r1?.rowCount ?? r1?.length ?? 0);
-          const r2 = await tx.update(teamSolvedQuestions).set({ isDeleted: true }).execute() as any;
-          deleted.team_solved_questions = typeof r2 === 'number' ? r2 : (r2?.rowCount ?? r2?.length ?? 0);
-          const r3 = await tx.update(teamQuestionMapping).set({ isDeleted: true }).execute() as any;
-          deleted.team_question_mapping = typeof r3 === 'number' ? r3 : (r3?.rowCount ?? r3?.length ?? 0);
-          if (preserveRooms.length > 0) {
-            const teamsAll = await tx.select().from(teams).execute();
-            const teamIdsToMark = teamsAll.filter((t: any) => !preserveRooms.map((r: string) => r.toUpperCase()).includes(String(t.roomCode).toUpperCase())).map((t: any) => t.teamId);
-            if (teamIdsToMark.length > 0) { const r4 = await tx.update(teams).set({ isDeleted: true }).where((teams.teamId as any).in(teamIdsToMark)).execute() as any; deleted.teams = typeof r4 === 'number' ? r4 : (r4?.rowCount ?? r4?.length ?? 0); } else deleted.teams = 0;
-          } else { const r4 = await tx.update(teams).set({ isDeleted: true }).execute() as any; deleted.teams = typeof r4 === 'number' ? r4 : (r4?.rowCount ?? r4?.length ?? 0); }
-        } else {
-          if (!purgeQuestions) {
-            const r1 = await tx.delete(teamSolvedPositions).execute() as any; deleted.team_solved_positions = typeof r1 === 'number' ? r1 : (r1?.rowCount ?? r1?.length ?? 0);
-            const r2 = await tx.delete(teamSolvedQuestions).execute() as any; deleted.team_solved_questions = typeof r2 === 'number' ? r2 : (r2?.rowCount ?? r2?.length ?? 0);
-            const r3 = await tx.delete(teamQuestionMapping).execute() as any; deleted.team_question_mapping = typeof r3 === 'number' ? r3 : (r3?.rowCount ?? r3?.length ?? 0);
-            if (preserveRooms.length > 0) {
-              const teamsAll = await tx.select().from(teams).execute();
-              const toDelete = teamsAll.filter((t: any) => !preserveRooms.map((r: string) => r.toUpperCase()).includes(String(t.roomCode).toUpperCase())).map((t: any) => t.teamId);
-              if (toDelete.length > 0) { const r4 = await tx.delete(teams).where((teams.teamId as any).in(toDelete)).execute() as any; deleted.teams = typeof r4 === 'number' ? r4 : (r4?.rowCount ?? r4?.length ?? 0); } else deleted.teams = 0;
-            } else { const r4 = await tx.delete(teams).execute() as any; deleted.teams = typeof r4 === 'number' ? r4 : (r4?.rowCount ?? r4?.length ?? 0); }
-          } else {
-            const r1 = await tx.delete(teamSolvedPositions).execute() as any; deleted.team_solved_positions = typeof r1 === 'number' ? r1 : (r1?.rowCount ?? r1?.length ?? 0);
-            const r2 = await tx.delete(teamSolvedQuestions).execute() as any; deleted.team_solved_questions = typeof r2 === 'number' ? r2 : (r2?.rowCount ?? r2?.length ?? 0);
-            const r3 = await tx.delete(teamQuestionMapping).execute() as any; deleted.team_question_mapping = typeof r3 === 'number' ? r3 : (r3?.rowCount ?? r3?.length ?? 0);
-            const r4 = await tx.delete(teams).execute() as any; deleted.teams = typeof r4 === 'number' ? r4 : (r4?.rowCount ?? r4?.length ?? 0);
-            const r5 = await tx.delete(questionsTable).execute() as any; deleted.questions = typeof r5 === 'number' ? r5 : (r5?.rowCount ?? r5?.length ?? 0);
-            if (purgeRooms) { const r6 = await tx.delete(rooms).execute() as any; deleted.rooms = typeof r6 === 'number' ? r6 : (r6?.rowCount ?? r6?.length ?? 0); }
-          }
-        }
-        try { await tx.insert(wipeAudits).values({ initiatedBy, initiatedAt: new Date(), options: JSON.stringify(auditOptions), deletedCounts: JSON.stringify(deleted) }).execute(); } catch (err) { console.error("Failed to insert wipe audit", err); }
-      });
-      res.json({ success: true, deleted });
-    } catch (err) { console.error(err); res.status(500).json({ error: "Internal server error" }); }
-  };
 
 export const handleStartGame: RequestHandler = async (req, res) => {
   const { minutes } = req.body;
   const roomCode = (req.body?.room as string) || (req.query.room as string);
-  if (!roomCode || !minutes || typeof minutes !== 'number' || minutes <= 0) return res.status(400).json({ error: "room and valid minutes required" });
+  if (!roomCode || !minutes || typeof minutes !== "number" || minutes <= 0)
+    return res.status(400).json({ error: "room and valid minutes required" });
   try {
     const code = roomCode.toUpperCase();
-    const roomResult = await db.select().from(rooms).where(eq(rooms.code, code));
-    if (roomResult.length === 0) return res.status(404).json({ error: "Room not found" });
+    const roomResult = await db
+      .select()
+      .from(rooms)
+      .where(eq(rooms.code, code));
+    if (roomResult.length === 0)
+      return res.status(404).json({ error: "Room not found" });
     const endTime = new Date(Date.now() + minutes * 60 * 1000);
-    await db.update(rooms).set({ roundEndAt: endTime }).where(eq(rooms.code, code));
+    await db
+      .update(rooms)
+      .set({ roundEndAt: endTime })
+      .where(eq(rooms.code, code));
     res.json({ success: true, endTime: endTime.toISOString() });
   } catch (err) {
     console.error("handleStartGame", err);
@@ -602,18 +208,30 @@ export const handleStartGame: RequestHandler = async (req, res) => {
 export const handleExtendTimer: RequestHandler = async (req, res) => {
   const { minutes } = req.body;
   const roomCode = (req.body?.room as string) || (req.query.room as string);
-  if (!roomCode || !minutes || typeof minutes !== 'number' || minutes <= 0) return res.status(400).json({ error: "room and valid minutes required" });
+  if (!roomCode || !minutes || typeof minutes !== "number" || minutes <= 0)
+    return res.status(400).json({ error: "room and valid minutes required" });
   try {
     const code = roomCode.toUpperCase();
-    const roomResult = await db.select().from(rooms).where(eq(rooms.code, code));
-    if (roomResult.length === 0) return res.status(404).json({ error: "Room not found" });
+    const roomResult = await db
+      .select()
+      .from(rooms)
+      .where(eq(rooms.code, code));
+    if (roomResult.length === 0)
+      return res.status(404).json({ error: "Room not found" });
     const currentRoom = roomResult[0];
     let newEndTime: Date;
-    if (currentRoom.roundEndAt && currentRoom.roundEndAt > new Date()) newEndTime = new Date(currentRoom.roundEndAt.getTime() + minutes * 60 * 1000); else newEndTime = new Date(Date.now() + minutes * 60 * 1000);
-    await db.update(rooms).set({ roundEndAt: newEndTime }).where(eq(rooms.code, code));
+    if (currentRoom.roundEndAt && currentRoom.roundEndAt > new Date())
+      newEndTime = new Date(
+        currentRoom.roundEndAt.getTime() + minutes * 60 * 1000,
+      );
+    else newEndTime = new Date(Date.now() + minutes * 60 * 1000);
+    await db
+      .update(rooms)
+      .set({ roundEndAt: newEndTime })
+      .where(eq(rooms.code, code));
     res.json({ success: true, endTime: newEndTime.toISOString() });
   } catch (err) {
-    console.error("handleExtendTimer", err);
+    console.error(err);
     res.status(500).json({ error: "Internal server error" });
   }
 };
@@ -623,1310 +241,331 @@ export const handleForceEnd: RequestHandler = async (req, res) => {
   if (!roomCode) return res.status(400).json({ error: "room required" });
   try {
     const code = roomCode.toUpperCase();
-    const roomResult = await db.select().from(rooms).where(eq(rooms.code, code));
-    if (roomResult.length === 0) return res.status(404).json({ error: "Room not found" });
+    const roomResult = await db
+      .select()
+      .from(rooms)
+      .where(eq(rooms.code, code));
+    if (roomResult.length === 0)
+      return res.status(404).json({ error: "Room not found" });
     const endTime = new Date();
-    await db.update(rooms).set({ roundEndAt: endTime }).where(eq(rooms.code, code));
+    await db
+      .update(rooms)
+      .set({ roundEndAt: endTime })
+      .where(eq(rooms.code, code));
     res.json({ success: true, endTime: endTime.toISOString() });
   } catch (err) {
-    console.error("handleForceEnd", err);
+    console.error(err);
     res.status(500).json({ error: "Internal server error" });
   }
 };
 
 export const handleAddQuestion: RequestHandler = async (req, res) => {
   const body: AdminAddQuestionRequest = req.body;
-  if (!body?.room || !body?.question) return res.status(400).json({ error: "room and question required" });
+  if (!body?.room || !body?.question)
+    return res.status(400).json({ error: "room and question required" });
   try {
     const code = body.room.toUpperCase();
-    const roomResult = await db.select().from(rooms).where(eq(rooms.code, code));
-    if (roomResult.length === 0) return res.status(404).json({ error: "Room not found" });
-    const result = await db.insert(questionsTable).values({ roomCode: code, questionText: body.question.text, isReal: true, correctAnswer: String(body.question.correctAnswer) }).returning();
-    const newQuestion: Question = { id: String(result[0].questionId), text: body.question.text, options: body.question.options ?? [], correctAnswer: body.question.correctAnswer, points: body.question.points ?? 0 } as any;
-    res.json({ success: true, question: newQuestion });
-  } catch (err) {
-    console.error("handleAddQuestion", err);
-    res.status(500).json({ error: "Internal server error" });
-  }
-};
-
-export const handleDeleteQuestion: RequestHandler = async (req, res) => {
-  const body: AdminDeleteQuestionRequest = req.body;
-  if (!body || !body.questionId) return res.status(400).json({ error: "questionId required" });
-  const questionIdInt = parseInt(String(body.questionId), 10);
-  if (Number.isNaN(questionIdInt)) return res.status(400).json({ error: "Invalid questionId" });
-  try { await db.delete(questionsTable).where(eq(questionsTable.questionId, questionIdInt)); res.json({ success: true }); } catch (err) { console.error("handleDeleteQuestion", err); res.status(500).json({ error: "Internal server error" }); }
-};
-
-export const handleUploadQuestions = [upload.single('file'), async (req: any, res: any) => {
-  try {
-    const room = req.body.room as string;
-    const file = req.file;
-    if (!room) return res.status(400).json({ error: "Room code required" });
-    if (!file || !file.buffer) return res.status(400).json({ error: "File is required" });
-    const code = room.toUpperCase();
-    const roomResult = await db.select().from(rooms).where(eq(rooms.code, code));
-    if (roomResult.length === 0) return res.status(404).json({ error: "Room not found" });
-    const csvData = file.buffer.toString('utf-8');
-    const lines = csvData.trim().split('\n');
-    if (lines.length < 2) return res.status(400).json({ error: "CSV must have at least a header row and one data row" });
-    const headers = parseCSVLine(lines[0]).map(h => h.toLowerCase());
-    const questionTextIndex = headers.indexOf('question_text') !== -1 ? headers.indexOf('question_text') : headers.indexOf('code') !== -1 ? headers.indexOf('code') : -1;
-    const correctAnswerIndex = headers.indexOf('correct_answer') !== -1 ? headers.indexOf('correct_answer') : headers.indexOf('answer') !== -1 ? headers.indexOf('answer') : -1;
-    if (questionTextIndex === -1 || correctAnswerIndex === -1) return res.status(400).json({ error: "CSV missing columns" });
-    const questionsToInsert: any[] = [];
-    for (let i = 1; i < lines.length; i++) {
-      const values = parseCSVLine(lines[i]);
-      if (values.length <= Math.max(questionTextIndex, correctAnswerIndex)) continue;
-      const questionText = values[questionTextIndex].replace(/^"|"$/g, '');
-      const correctAnswer = values[correctAnswerIndex].replace(/^"|"$/g, '');
-      if (questionText && correctAnswer) questionsToInsert.push({ roomCode: code, questionText, isReal: true, correctAnswer });
-    }
-    if (questionsToInsert.length === 0) return res.status(400).json({ error: "No valid questions found in CSV" });
-    await db.insert(questionsTable).values(questionsToInsert);
-    res.json({ success: true, importedCount: questionsToInsert.length });
-  } catch (err) { console.error("handleUploadQuestions", err); res.status(500).json({ error: "Internal server error" }); }
-}];
-
-// Wipe handler with soft-delete, preserve, purge and audit
-export const handleWipeUserData: RequestHandler = async (req, res) => {
-  try {
-    const body = (req.body || {}) as any;
-    const confirm = String(body.confirm || "").trim();
-    const adminSecretHeader = String(req.header("x-admin-secret") || "");
-    const envSecret = process.env.ADMIN_SECRET || "";
-    if (confirm !== "WIPE" || (!envSecret && process.env.NODE_ENV !== "development" && !adminSecretHeader)) return res.status(400).json({ error: "Confirmation 'WIPE' and admin secret required" });
-    if (envSecret && adminSecretHeader !== envSecret) return res.status(403).json({ error: "Invalid admin secret" });
-
-    const preserveRooms: string[] = Array.isArray(body.preserveRooms) ? body.preserveRooms.map(String) : [];
-    const purgeRooms = !!body.purgeRooms;
-    const purgeQuestions = !!body.purgeQuestions;
-    const softDelete = !!body.softDelete;
-    const initiatedBy = String(body.initiatedBy || req.header("x-initiated-by") || "admin");
-
-    const deleted: Record<string, number> = {};
-    const auditOptions = { preserveRooms, purgeRooms, purgeQuestions, softDelete };
-
-    await db.transaction(async tx => {
-      // Soft-delete mode: set isDeleted = true on relevant tables
-      if (softDelete) {
-        const r1 = await tx.update(teamSolvedPositions).set({ isDeleted: true }).execute() as any;
-        deleted.team_solved_positions = typeof r1 === 'number' ? r1 : (r1?.rowCount ?? r1?.length ?? 0);
-        const r2 = await tx.update(teamSolvedQuestions).set({ isDeleted: true }).execute() as any;
-        deleted.team_solved_questions = typeof r2 === 'number' ? r2 : (r2?.rowCount ?? r2?.length ?? 0);
-        const r3 = await tx.update(teamQuestionMapping).set({ isDeleted: true }).execute() as any;
-        deleted.team_question_mapping = typeof r3 === 'number' ? r3 : (r3?.rowCount ?? r3?.length ?? 0);
-        if (preserveRooms.length > 0) {
-          const teamsAll = await tx.select().from(teams).execute();
-          const teamIdsToMark = teamsAll.filter((t: any) => !preserveRooms.map((r: string) => r.toUpperCase()).includes(String(t.roomCode).toUpperCase())).map((t: any) => t.teamId);
-          if (teamIdsToMark.length > 0) {
-            const r4 = await tx.update(teams).set({ isDeleted: true }).where((teams.teamId as any).in(teamIdsToMark)).execute() as any;
-            deleted.teams = typeof r4 === 'number' ? r4 : (r4?.rowCount ?? r4?.length ?? 0);
-          } else deleted.teams = 0;
-        } else {
-          const r4 = await tx.update(teams).set({ isDeleted: true }).execute() as any;
-          deleted.teams = typeof r4 === 'number' ? r4 : (r4?.rowCount ?? r4?.length ?? 0);
-        }
-      } else {
-        // Hard-delete paths
-        if (!purgeQuestions) {
-          const r1 = await tx.delete(teamSolvedPositions).execute() as any;
-          deleted.team_solved_positions = typeof r1 === 'number' ? r1 : (r1?.rowCount ?? r1?.length ?? 0);
-          const r2 = await tx.delete(teamSolvedQuestions).execute() as any;
-          deleted.team_solved_questions = typeof r2 === 'number' ? r2 : (r2?.rowCount ?? r2?.length ?? 0);
-          const r3 = await tx.delete(teamQuestionMapping).execute() as any;
-          deleted.team_question_mapping = typeof r3 === 'number' ? r3 : (r3?.rowCount ?? r3?.length ?? 0);
-          if (preserveRooms.length > 0) {
-            const teamsAll = await tx.select().from(teams).execute();
-            const toDelete = teamsAll.filter((t: any) => !preserveRooms.map((r: string) => r.toUpperCase()).includes(String(t.roomCode).toUpperCase())).map((t: any) => t.teamId);
-            if (toDelete.length > 0) { const r4 = await tx.delete(teams).where((teams.teamId as any).in(toDelete)).execute() as any; deleted.teams = typeof r4 === 'number' ? r4 : (r4?.rowCount ?? r4?.length ?? 0); } else deleted.teams = 0;
-          } else { const r4 = await tx.delete(teams).execute() as any; deleted.teams = typeof r4 === 'number' ? r4 : (r4?.rowCount ?? r4?.length ?? 0); }
-        } else {
-          const r1 = await tx.delete(teamSolvedPositions).execute() as any; deleted.team_solved_positions = typeof r1 === 'number' ? r1 : (r1?.rowCount ?? r1?.length ?? 0);
-          const r2 = await tx.delete(teamSolvedQuestions).execute() as any; deleted.team_solved_questions = typeof r2 === 'number' ? r2 : (r2?.rowCount ?? r2?.length ?? 0);
-          const r3 = await tx.delete(teamQuestionMapping).execute() as any; deleted.team_question_mapping = typeof r3 === 'number' ? r3 : (r3?.rowCount ?? r3?.length ?? 0);
-          const r4 = await tx.delete(teams).execute() as any; deleted.teams = typeof r4 === 'number' ? r4 : (r4?.rowCount ?? r4?.length ?? 0);
-          const r5 = await tx.delete(questionsTable).execute() as any; deleted.questions = typeof r5 === 'number' ? r5 : (r5?.rowCount ?? r5?.length ?? 0);
-          if (purgeRooms) { const r6 = await tx.delete(rooms).execute() as any; deleted.rooms = typeof r6 === 'number' ? r6 : (r6?.rowCount ?? r6?.length ?? 0); }
-        }
-      }
-
-      // Write audit (best-effort)
-      try { await tx.insert(wipeAudits).values({ initiatedBy, initiatedAt: new Date(), options: JSON.stringify(auditOptions), deletedCounts: JSON.stringify(deleted) }).execute(); } catch (err) { console.error("Failed to insert wipe audit", err); }
-    });
-
-    res.json({ success: true, deleted });
-  } catch (err) {
-    console.error("handleWipeUserData", err);
-    res.status(500).json({ error: "Internal server error" });
-  }
-};
-
-// export default is not used; individual handlers are imported where needed
-
-
-import { RequestHandler } from "express";
-import multer from "multer";
-import type {
-  AdminStateResponse,
-  AdminCreateRoomRequest,
-  AdminAddQuestionRequest,
-  AdminDeleteQuestionRequest,
-  Room,
-  Question,
-} from "@shared/api";
-import { db } from "../db.js";
-import {
-  rooms,
-  questions as questionsTable,
-  teams,
-  teamSolvedQuestions,
-  teamSolvedPositions,
-  teamQuestionMapping,
-  wipeAudits,
-} from "../schema.js";
-import { eq } from "drizzle-orm";
-
-// Clean single-file implementation
-export const handleAdminState: RequestHandler = async (req, res) => {
-  const roomCode = req.query.room as string;
-  if (!roomCode) return res.status(400).json({ error: "Room code required" });
-  try {
-    const code = roomCode.toUpperCase();
-    const roomResult = await db.select().from(rooms).where(eq(rooms.code, code));
-    const room = roomResult[0];
-    const questionsResult = await db.select().from(questionsTable).where(eq(questionsTable.roomCode, code));
-    const roomQuestions = questionsResult.map(q => ({ id: String(q.questionId), text: q.questionText, is_real: q.isReal }));
-    const teamsResult = await db.select().from(teams).where(eq(teams.roomCode, code));
-    const roomTeams = teamsResult.map(t => ({ id: t.teamId, name: t.teamName, lines_completed: t.linesCompleted }));
-    const response: AdminStateResponse = { room: room ? { code: room.code, title: room.title, roundEndAt: room.roundEndAt?.toISOString() || null } : null, questions: roomQuestions as any, teams: roomTeams as any, currentQuestionIndex: 0, gameStarted: false, gameEnded: false, timeRemaining: 0 };
-    res.json(response);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Internal server error" });
-  }
-};
-
-export const handleCreateRoom: RequestHandler = async (req, res) => {
-  const body: AdminCreateRoomRequest = req.body;
-  const code = body.code.toUpperCase();
-  try {
-    const existing = await db.select().from(rooms).where(eq(rooms.code, code));
-    if (existing.length > 0) return res.status(400).json({ error: "Room already exists" });
-    await db.insert(rooms).values({ code, title: body.title, roundEndAt: body.durationMinutes ? new Date(Date.now() + body.durationMinutes * 60 * 1000) : null });
-    res.json({ success: true });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Internal server error" });
-  }
-};
-
-export const handleStartGame: RequestHandler = async (req, res) => {
-  const { minutes, room } = req.body;
-  if (!minutes || typeof minutes !== 'number' || minutes <= 0) return res.status(400).json({ error: "Valid minutes required" });
-  const roomCode = room || req.query.room as string;
-  if (!roomCode) return res.status(400).json({ error: "Room code required" });
-  try {
-    const code = roomCode.toUpperCase();
-    const roomResult = await db.select().from(rooms).where(eq(rooms.code, code));
-    if (roomResult.length === 0) return res.status(404).json({ error: "Room not found" });
-    const endTime = new Date(Date.now() + minutes * 60 * 1000);
-    await db.update(rooms).set({ roundEndAt: endTime }).where(eq(rooms.code, code));
-    res.json({ success: true, endTime: endTime.toISOString() });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Internal server error" });
-  }
-};
-
-export const handleExtendTimer: RequestHandler = async (req, res) => {
-  const { minutes, room } = req.body;
-  if (!minutes || typeof minutes !== 'number' || minutes <= 0) return res.status(400).json({ error: "Valid minutes required" });
-  const roomCode = room || req.query.room as string;
-  if (!roomCode) return res.status(400).json({ error: "Room code required" });
-  try {
-    const code = roomCode.toUpperCase();
-    const roomResult = await db.select().from(rooms).where(eq(rooms.code, code));
-    if (roomResult.length === 0) return res.status(404).json({ error: "Room not found" });
-    const currentRoom = roomResult[0];
-    let newEndTime: Date;
-    if (currentRoom.roundEndAt && currentRoom.roundEndAt > new Date()) newEndTime = new Date(currentRoom.roundEndAt.getTime() + minutes * 60 * 1000); else newEndTime = new Date(Date.now() + minutes * 60 * 1000);
-    await db.update(rooms).set({ roundEndAt: newEndTime }).where(eq(rooms.code, code));
-    res.json({ success: true, endTime: newEndTime.toISOString() });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Internal server error" });
-  }
-};
-
-export const handleForceEnd: RequestHandler = async (req, res) => {
-  const { room } = req.body;
-  const roomCode = room || req.query.room as string;
-  if (!roomCode) return res.status(400).json({ error: "Room code required" });
-  try {
-    const code = roomCode.toUpperCase();
-    const roomResult = await db.select().from(rooms).where(eq(rooms.code, code));
-    if (roomResult.length === 0) return res.status(404).json({ error: "Room not found" });
-    const endTime = new Date();
-    await db.update(rooms).set({ roundEndAt: endTime }).where(eq(rooms.code, code));
-    res.json({ success: true, endTime: endTime.toISOString() });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Internal server error" });
-  }
-};
-
-export const handleAddQuestion: RequestHandler = async (req, res) => {
-  const body: AdminAddQuestionRequest = req.body;
-  const code = body.room.toUpperCase();
-  try {
-    const roomResult = await db.select().from(rooms).where(eq(rooms.code, code));
-    if (roomResult.length === 0) return res.status(404).json({ error: "Room not found" });
-    const result = await db.insert(questionsTable).values({ roomCode: code, questionText: body.question.text, isReal: true, correctAnswer: body.question.correctAnswer.toString() }).returning();
-    const newQuestion: Question = { id: result[0].questionId.toString(), text: body.question.text, options: body.question.options, correctAnswer: body.question.correctAnswer, points: body.question.points };
-    res.json({ success: true, question: newQuestion });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Internal server error" });
-  }
-};
-
-export const handleDeleteQuestion: RequestHandler = async (req, res) => {
-  const body: AdminDeleteQuestionRequest = req.body;
-  if (!body || !body.questionId) return res.status(400).json({ error: "questionId required" });
-  const questionIdInt = parseInt(String(body.questionId), 10);
-  if (Number.isNaN(questionIdInt)) return res.status(400).json({ error: "Invalid questionId" });
-  try {
-    await db.delete(questionsTable).where(eq(questionsTable.questionId, questionIdInt));
-    res.json({ success: true });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Internal server error" });
-  }
-};
-
-// Wipe handler with options + audit
-export const handleWipeUserData: RequestHandler = async (req, res) => {
-  try {
-    const body = (req.body || {}) as any;
-    const confirm = String(body.confirm || "").trim();
-    const adminSecretHeader = String(req.header("x-admin-secret") || "");
-    const envSecret = process.env.ADMIN_SECRET || "";
-    if (confirm !== "WIPE" || (!envSecret && process.env.NODE_ENV !== "development" && !adminSecretHeader)) return res.status(400).json({ error: "Confirmation 'WIPE' and admin secret required" });
-    if (envSecret && adminSecretHeader !== envSecret) return res.status(403).json({ error: "Invalid admin secret" });
-
-    const preserveRooms: string[] = Array.isArray(body.preserveRooms) ? body.preserveRooms.map(String) : [];
-    const purgeRooms = !!body.purgeRooms;
-    const purgeQuestions = !!body.purgeQuestions;
-    const softDelete = !!body.softDelete;
-    const initiatedBy = String(body.initiatedBy || req.header("x-initiated-by") || "admin");
-
-    const deleted: Record<string, number> = {};
-    const auditOptions = { preserveRooms, purgeRooms, purgeQuestions, softDelete };
-
-    await db.transaction(async tx => {
-      if (softDelete) {
-        const r1 = await tx.update(teamSolvedPositions).set({ isDeleted: true }).execute() as any;
-        deleted.team_solved_positions = typeof r1 === 'number' ? r1 : (r1?.rowCount ?? r1?.length ?? 0);
-
-        const r2 = await tx.update(teamSolvedQuestions).set({ isDeleted: true }).execute() as any;
-        deleted.team_solved_questions = typeof r2 === 'number' ? r2 : (r2?.rowCount ?? r2?.length ?? 0);
-
-        const r3 = await tx.update(teamQuestionMapping).set({ isDeleted: true }).execute() as any;
-        deleted.team_question_mapping = typeof r3 === 'number' ? r3 : (r3?.rowCount ?? r3?.length ?? 0);
-
-        if (preserveRooms.length > 0) {
-          const teamsToMark = await tx.select().from(teams).execute();
-          const teamIdsToMark = teamsToMark.filter((t: any) => !preserveRooms.map((r: string) => r.toUpperCase()).includes(String(t.roomCode).toUpperCase())).map((t: any) => t.teamId);
-          if (teamIdsToMark.length > 0) {
-            const r4 = await tx.update(teams).set({ isDeleted: true }).where((teams.teamId as any).in(teamIdsToMark)).execute() as any;
-            deleted.teams = typeof r4 === 'number' ? r4 : (r4?.rowCount ?? r4?.length ?? 0);
-          } else deleted.teams = 0;
-        } else {
-          const r4 = await tx.update(teams).set({ isDeleted: true }).execute() as any;
-          deleted.teams = typeof r4 === 'number' ? r4 : (r4?.rowCount ?? r4?.length ?? 0);
-        }
-      } else {
-        if (!purgeQuestions) {
-          const r1 = await tx.delete(teamSolvedPositions).execute() as any;
-          deleted.team_solved_positions = typeof r1 === 'number' ? r1 : (r1?.rowCount ?? r1?.length ?? 0);
-
-          const r2 = await tx.delete(teamSolvedQuestions).execute() as any;
-          deleted.team_solved_questions = typeof r2 === 'number' ? r2 : (r2?.rowCount ?? r2?.length ?? 0);
-
-          const r3 = await tx.delete(teamQuestionMapping).execute() as any;
-          deleted.team_question_mapping = typeof r3 === 'number' ? r3 : (r3?.rowCount ?? r3?.length ?? 0);
-
-          if (preserveRooms.length > 0) {
-            const teamsAll = await tx.select().from(teams).execute();
-            const toDelete = teamsAll.filter((t: any) => !preserveRooms.map((r: string) => r.toUpperCase()).includes(String(t.roomCode).toUpperCase())).map((t: any) => t.teamId);
-            if (toDelete.length > 0) {
-              const r4 = await tx.delete(teams).where((teams.teamId as any).in(toDelete)).execute() as any;
-              deleted.teams = typeof r4 === 'number' ? r4 : (r4?.rowCount ?? r4?.length ?? 0);
-            } else deleted.teams = 0;
-          } else {
-            const r4 = await tx.delete(teams).execute() as any;
-            deleted.teams = typeof r4 === 'number' ? r4 : (r4?.rowCount ?? r4?.length ?? 0);
-          }
-        } else {
-          const r1 = await tx.delete(teamSolvedPositions).execute() as any;
-          deleted.team_solved_positions = typeof r1 === 'number' ? r1 : (r1?.rowCount ?? r1?.length ?? 0);
-
-          const r2 = await tx.delete(teamSolvedQuestions).execute() as any;
-          deleted.team_solved_questions = typeof r2 === 'number' ? r2 : (r2?.rowCount ?? r2?.length ?? 0);
-
-          const r3 = await tx.delete(teamQuestionMapping).execute() as any;
-          deleted.team_question_mapping = typeof r3 === 'number' ? r3 : (r3?.rowCount ?? r3?.length ?? 0);
-
-          const r4 = await tx.delete(teams).execute() as any;
-          deleted.teams = typeof r4 === 'number' ? r4 : (r4?.rowCount ?? r4?.length ?? 0);
-
-          const r5 = await tx.delete(questionsTable).execute() as any;
-          deleted.questions = typeof r5 === 'number' ? r5 : (r5?.rowCount ?? r5?.length ?? 0);
-
-          if (purgeRooms) {
-            const r6 = await tx.delete(rooms).execute() as any;
-            deleted.rooms = typeof r6 === 'number' ? r6 : (r6?.rowCount ?? r6?.length ?? 0);
-          }
-        }
-      }
-
-      try {
-        await tx.insert(wipeAudits).values({ initiatedBy, initiatedAt: new Date(), options: JSON.stringify(auditOptions), deletedCounts: JSON.stringify(deleted) }).execute();
-      } catch (err) { console.error("Failed to insert wipe audit", err); }
-    });
-
-    res.json({ success: true, deleted });
-  } catch (err) { console.error("handleWipeUserData", err); res.status(500).json({ error: "Internal server error" }); }
-};
-
-export const handleUploadQuestions: RequestHandler = async (req, res) => {
-  try {
-    const room = req.body.room as string;
-    const file = req.file;
-    if (!room) return res.status(400).json({ error: "Room code required" });
-    if (!file) return res.status(400).json({ error: "File is required" });
-    const code = room.toUpperCase();
-    const roomResult = await db.select().from(rooms).where(eq(rooms.code, code));
-    if (roomResult.length === 0) return res.status(404).json({ error: "Room not found" });
-    const csvData = file.buffer.toString('utf-8');
-    const lines = csvData.trim().split('\n');
-    if (lines.length < 2) return res.status(400).json({ error: "CSV must have at least a header row and one data row" });
-    const parseCSVLine = (line: string): string[] => { const result: string[] = []; let current = ''; let inQuotes = false; let i = 0; while (i < line.length) { const char = line[i]; if (char === '"') { if (inQuotes && line[i + 1] === '"') { current += '"'; i += 2; } else { inQuotes = !inQuotes; i++; } } else if (char === ',' && !inQuotes) { result.push(current.trim()); current = ''; i++; } else { current += char; i++; } } result.push(current.trim()); return result; };
-    const headers = parseCSVLine(lines[0]).map(h => h.toLowerCase());
-    const questionTextIndex = headers.indexOf('question_text') !== -1 ? headers.indexOf('question_text') : headers.indexOf('code') !== -1 ? headers.indexOf('code') : -1;
-    const correctAnswerIndex = headers.indexOf('correct_answer') !== -1 ? headers.indexOf('correct_answer') : headers.indexOf('answer') !== -1 ? headers.indexOf('answer') : -1;
-    const isRealIndex = headers.indexOf('is_real') !== -1 ? headers.indexOf('is_real') : headers.indexOf('difficulty') !== -1 ? headers.indexOf('difficulty') : -1;
-    if (questionTextIndex === -1 || correctAnswerIndex === -1) return res.status(400).json({ error: "CSV missing columns" });
-    const questionsToInsert: any[] = [];
-    for (let i = 1; i < lines.length; i++) {
-      const values = parseCSVLine(lines[i]);
-      if (values.length <= Math.max(questionTextIndex, correctAnswerIndex)) continue;
-      const questionText = values[questionTextIndex].replace(/^"|"$/g, '');
-      const correctAnswer = values[correctAnswerIndex].replace(/^"|"$/g, '');
-      const isReal = isRealIndex !== -1 ? values[isRealIndex].toLowerCase() === 'true' || values[isRealIndex] === '1' : true;
-      if (questionText && correctAnswer) questionsToInsert.push({ roomCode: code, questionText, isReal, correctAnswer });
-    }
-    if (questionsToInsert.length === 0) return res.status(400).json({ error: "No valid questions found in CSV" });
-    await db.insert(questionsTable).values(questionsToInsert);
-    res.json({ success: true, importedCount: questionsToInsert.length });
-  } catch (err) { console.error(err); res.status(500).json({ error: "Internal server error" }); }
-};
-import { RequestHandler } from "express";
-import multer from "multer";
-import type {
-  AdminStateResponse,
-  AdminCreateRoomRequest,
-  AdminAddQuestionRequest,
-  AdminDeleteQuestionRequest,
-  Room,
-  Question,
-  Team,
-} from "@shared/api";
-import { db } from "../db.js";
-import {
-  rooms,
-  questions as questionsTable,
-  teams,
-  teamSolvedQuestions,
-  teamSolvedPositions,
-  teamQuestionMapping,
-  wipeAudits,
-} from "../schema.js";
-import { eq } from "drizzle-orm";
-
-export const handleAdminState: RequestHandler = async (req, res) => {
-  const roomCode = req.query.room as string;
-  if (!roomCode) {
-    return res.status(400).json({ error: "Room code required" });
-  }
-
-  try {
-    const code = roomCode.toUpperCase();
-
-    // Get room
-    const roomResult = await db.select().from(rooms).where(eq(rooms.code, code));
-    const room = roomResult[0];
-
-    // Get questions
-    const questionsResult = await db.select().from(questionsTable).where(eq(questionsTable.roomCode, code));
-    const roomQuestions = questionsResult.map(q => ({
-      id: q.questionId.toString(),
-      text: q.questionText,
-      options: [], // TODO: add options if needed
-      correctAnswer: 0, // TODO: parse correct answer
-      points: 10, // default points
-      question_id: q.questionId,
-      question_text: q.questionText,
-      correct_answer: q.correctAnswer,
-      is_real: q.isReal,
-    }));
-
-    // Get teams
-    const teamsResult = await db.select().from(teams).where(eq(teams.roomCode, code));
-    const roomTeams = teamsResult.map(t => ({
-      id: t.teamId,
-      name: t.teamName,
-      score: t.linesCompleted * 10, // approximate score
-      completedAt: t.endTime?.toISOString() || null,
-      isWinner: false, // TODO: determine winner
-      team_id: t.teamId,
-      team_name: t.teamName,
-      lines_completed: t.linesCompleted,
-      start_time: t.startTime.toISOString(),
-      end_time: t.endTime?.toISOString() || null,
-    }));
-
-    const response: AdminStateResponse = {
-      room: room ? {
-        code: room.code,
-        title: room.title,
-        roundEndAt: room.roundEndAt?.toISOString() || null,
-      } : null,
-      questions: roomQuestions,
-      teams: roomTeams,
-      currentQuestionIndex: 0, // TODO: track current question
-      gameStarted: false, // TODO: track game state
-      gameEnded: false,
-      timeRemaining: 0,
-    };
-
-    res.json(response);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-};
-
-export const handleCreateRoom: RequestHandler = async (req, res) => {
-  const body: AdminCreateRoomRequest = req.body;
-  const code = body.code.toUpperCase();
-
-  try {
-    // Check if room exists
-    const existing = await db.select().from(rooms).where(eq(rooms.code, code));
-    if (existing.length > 0) {
-      return res.status(400).json({ error: "Room already exists" });
-    }
-
-    await db.insert(rooms).values({
-      code,
-      title: body.title,
-      roundEndAt: body.durationMinutes ? new Date(Date.now() + body.durationMinutes * 60 * 1000) : null,
-    });
-
-    res.json({ success: true });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-};
-
-export const handleStartGame: RequestHandler = async (req, res) => {
-  const { minutes, room } = req.body;
-  if (!minutes || typeof minutes !== 'number' || minutes <= 0) {
-    return res.status(400).json({ error: "Valid minutes required" });
-  }
-
-  const roomCode = room || req.query.room as string;
-  if (!roomCode) {
-    return res.status(400).json({ error: "Room code required" });
-  }
-
-  try {
-    const code = roomCode.toUpperCase();
-
-    // Check if room exists
-    const roomResult = await db.select().from(rooms).where(eq(rooms.code, code));
-    if (roomResult.length === 0) {
-      return res.status(404).json({ error: "Room not found" });
-    }
-
-    // Calculate end time
-    const endTime = new Date(Date.now() + minutes * 60 * 1000);
-
-    // Update room with timer
-    await db.update(rooms)
-      .set({ roundEndAt: endTime })
+    const roomResult = await db
+      .select()
+      .from(rooms)
       .where(eq(rooms.code, code));
-
-    res.json({ success: true, endTime: endTime.toISOString() });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-};
-
-export const handleExtendTimer: RequestHandler = async (req, res) => {
-  const { minutes, room } = req.body;
-  if (!minutes || typeof minutes !== 'number' || minutes <= 0) {
-    return res.status(400).json({ error: "Valid minutes required" });
-  }
-
-  const roomCode = room || req.query.room as string;
-  if (!roomCode) {
-    return res.status(400).json({ error: "Room code required" });
-  }
-
-  try {
-    const code = roomCode.toUpperCase();
-
-    // Check if room exists
-    const roomResult = await db.select().from(rooms).where(eq(rooms.code, code));
-    if (roomResult.length === 0) {
+    if (roomResult.length === 0)
       return res.status(404).json({ error: "Room not found" });
-    }
-
-    const currentRoom = roomResult[0];
-    let newEndTime: Date;
-
-    if (currentRoom.roundEndAt && currentRoom.roundEndAt > new Date()) {
-      // Extend existing timer
-      newEndTime = new Date(currentRoom.roundEndAt.getTime() + minutes * 60 * 1000);
-    } else {
-      // Start new timer
-      newEndTime = new Date(Date.now() + minutes * 60 * 1000);
-    }
-
-    // Update room with extended timer
-    await db.update(rooms)
-      .set({ roundEndAt: newEndTime })
-      .where(eq(rooms.code, code));
-
-    res.json({ success: true, endTime: newEndTime.toISOString() });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-};
-
-export const handleForceEnd: RequestHandler = async (req, res) => {
-  const { room } = req.body;
-  const roomCode = room || req.query.room as string;
-  if (!roomCode) {
-    return res.status(400).json({ error: "Room code required" });
-  }
-
-  try {
-    const code = roomCode.toUpperCase();
-
-    // Check if room exists
-    const roomResult = await db.select().from(rooms).where(eq(rooms.code, code));
-    if (roomResult.length === 0) {
-      return res.status(404).json({ error: "Room not found" });
-    }
-
-    // Set timer to end immediately (current time)
-    const endTime = new Date();
-
-    // Update room with immediate end time
-    await db.update(rooms)
-      .set({ roundEndAt: endTime })
-      .where(eq(rooms.code, code));
-
-    res.json({ success: true, endTime: endTime.toISOString() });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-};
-
-export const handleAddQuestion: RequestHandler = async (req, res) => {
-  const body: AdminAddQuestionRequest = req.body;
-  const code = body.room.toUpperCase();
-
-  try {
-    // Check if room exists
-    const roomResult = await db.select().from(rooms).where(eq(rooms.code, code));
-    if (roomResult.length === 0) {
-      return res.status(404).json({ error: "Room not found" });
-    }
-
-    const result = await db.insert(questionsTable).values({
-      roomCode: code,
-      questionText: body.question.text,
-      isReal: true, // assuming all questions are real
-      correctAnswer: body.question.correctAnswer.toString(),
-    }).returning();
-
+    const result = await db
+      .insert(questionsTable)
+      .values({
+        roomCode: code,
+        questionText: body.question.text,
+        isReal: true,
+        correctAnswer: String(body.question.correctAnswer),
+      })
+      .returning();
     const newQuestion: Question = {
-      id: result[0].questionId.toString(),
+      id: String(result[0].questionId),
       text: body.question.text,
-      options: body.question.options,
+      options: body.question.options ?? [],
       correctAnswer: body.question.correctAnswer,
-      points: body.question.points,
-    };
-
+      points: body.question.points ?? 0,
+    } as any;
     res.json({ success: true, question: newQuestion });
-  } catch (error) {
-    console.error(error);
+  } catch (err) {
+    console.error(err);
     res.status(500).json({ error: "Internal server error" });
   }
 };
 
 export const handleDeleteQuestion: RequestHandler = async (req, res) => {
   const body: AdminDeleteQuestionRequest = req.body;
-  const code = body.room?.toUpperCase?.();
-
-  if (!body || !body.questionId) {
-    return res.status(400).json({ error: "questionId required" });
-  }
-
+  if (!body || !body.questionId || !body.room)
+    return res.status(400).json({ error: "room and questionId required" });
   const questionIdInt = parseInt(String(body.questionId), 10);
-  if (Number.isNaN(questionIdInt)) {
+  if (Number.isNaN(questionIdInt))
     return res.status(400).json({ error: "Invalid questionId" });
-  }
-
   try {
-    await db.delete(questionsTable).where(eq(questionsTable.questionId, questionIdInt));
+    await db
+      .delete(questionsTable)
+      .where(eq(questionsTable.questionId, questionIdInt));
     res.json({ success: true });
-  } catch (error) {
-    console.error(error);
+  } catch (err) {
+    console.error(err);
     res.status(500).json({ error: "Internal server error" });
   }
 };
 
-// Wipe handler (supports soft-delete, preserve rooms, purge options and auditing)
-export const handleWipeUserData: RequestHandler = async (req, res) => {
-  try {
-    const body = (req.body || {}) as any;
+export const handleUploadQuestions = [
+  upload.single("file"),
+  async (req: any, res: any) => {
+    try {
+      const room = req.body.room as string;
+      const file = req.file;
+      console.log("Upload request:", { room, file: file ? { name: file.originalname, size: file.size } : null });
 
-    // Basic protection: require explicit confirmation string and admin secret
-    const confirm = String(body.confirm || "").trim();
-    const adminSecretHeader = String(req.header("x-admin-secret") || "");
-
-    const envSecret = process.env.ADMIN_SECRET || "";
-
-    if (confirm !== "WIPE" || (!envSecret && process.env.NODE_ENV !== "development" && !adminSecretHeader)) {
-      return res.status(400).json({ error: "Confirmation 'WIPE' and admin secret required" });
-    }
-
-    if (envSecret && adminSecretHeader !== envSecret) {
-      return res.status(403).json({ error: "Invalid admin secret" });
-    }
-
-    // Parse options
-    const preserveRooms: string[] = Array.isArray(body.preserveRooms) ? body.preserveRooms.map(String) : [];
-    const purgeRooms = !!body.purgeRooms;
-    const purgeQuestions = !!body.purgeQuestions;
-    const softDelete = !!body.softDelete;
-    const initiatedBy = String(body.initiatedBy || req.header("x-initiated-by") || "admin");
-
-    const deleted: Record<string, number> = {};
-    const auditOptions = { preserveRooms, purgeRooms, purgeQuestions, softDelete };
-
-    await db.transaction(async tx => {
-      // Soft-delete path (mark isDeleted=true)
-      if (softDelete) {
-        // team_solved_positions
-        const r1 = await tx.update(teamSolvedPositions).set({ isDeleted: true }).execute() as any;
-        deleted.team_solved_positions = typeof r1 === 'number' ? r1 : (r1?.rowCount ?? r1?.length ?? 0);
-
-        // team_solved_questions
-        const r2 = await tx.update(teamSolvedQuestions).set({ isDeleted: true }).execute() as any;
-        deleted.team_solved_questions = typeof r2 === 'number' ? r2 : (r2?.rowCount ?? r2?.length ?? 0);
-
-        // team_question_mapping
-        const r3 = await tx.update(teamQuestionMapping).set({ isDeleted: true }).execute() as any;
-        deleted.team_question_mapping = typeof r3 === 'number' ? r3 : (r3?.rowCount ?? r3?.length ?? 0);
-
-        // teams (optionally preserve rooms)
-        if (preserveRooms.length > 0) {
-          const teamsToMark = await tx.select().from(teams).execute();
-          const teamIdsToMark = teamsToMark.filter((t: any) => !preserveRooms.map((r: string) => r.toUpperCase()).includes(String(t.roomCode).toUpperCase())).map((t: any) => t.teamId);
-          if (teamIdsToMark.length > 0) {
-            const r4 = await tx.update(teams).set({ isDeleted: true }).where((teams.teamId as any).in(teamIdsToMark)).execute() as any;
-            deleted.teams = typeof r4 === 'number' ? r4 : (r4?.rowCount ?? r4?.length ?? 0);
-          } else {
-            deleted.teams = 0;
-          }
-        } else {
-          const r4 = await tx.update(teams).set({ isDeleted: true }).execute() as any;
-          deleted.teams = typeof r4 === 'number' ? r4 : (r4?.rowCount ?? r4?.length ?? 0);
-        }
-      } else {
-        // Hard-delete path.
-        if (!purgeQuestions) {
-          const r1 = await tx.delete(teamSolvedPositions).execute() as any;
-          deleted.team_solved_positions = typeof r1 === 'number' ? r1 : (r1?.rowCount ?? r1?.length ?? 0);
-
-          const r2 = await tx.delete(teamSolvedQuestions).execute() as any;
-          deleted.team_solved_questions = typeof r2 === 'number' ? r2 : (r2?.rowCount ?? r2?.length ?? 0);
-
-          const r3 = await tx.delete(teamQuestionMapping).execute() as any;
-          deleted.team_question_mapping = typeof r3 === 'number' ? r3 : (r3?.rowCount ?? r3?.length ?? 0);
-
-          // delete teams (possible preserveRooms)
-          if (preserveRooms.length > 0) {
-            const teamsAll = await tx.select().from(teams).execute();
-            const toDelete = teamsAll.filter((t: any) => !preserveRooms.map((r: string) => r.toUpperCase()).includes(String(t.roomCode).toUpperCase())).map((t: any) => t.teamId);
-            if (toDelete.length > 0) {
-              const r4 = await tx.delete(teams).where((teams.teamId as any).in(toDelete)).execute() as any;
-              deleted.teams = typeof r4 === 'number' ? r4 : (r4?.rowCount ?? r4?.length ?? 0);
-            } else {
-              deleted.teams = 0;
-            }
-          } else {
-            const r4 = await tx.delete(teams).execute() as any;
-            deleted.teams = typeof r4 === 'number' ? r4 : (r4?.rowCount ?? r4?.length ?? 0);
-          }
-        } else {
-          // purgeQuestions true: delete everything including questions and optionally rooms
-          const r1 = await tx.delete(teamSolvedPositions).execute() as any;
-          deleted.team_solved_positions = typeof r1 === 'number' ? r1 : (r1?.rowCount ?? r1?.length ?? 0);
-
-          const r2 = await tx.delete(teamSolvedQuestions).execute() as any;
-          deleted.team_solved_questions = typeof r2 === 'number' ? r2 : (r2?.rowCount ?? r2?.length ?? 0);
-
-          const r3 = await tx.delete(teamQuestionMapping).execute() as any;
-          deleted.team_question_mapping = typeof r3 === 'number' ? r3 : (r3?.rowCount ?? r3?.length ?? 0);
-
-          const r4 = await tx.delete(teams).execute() as any;
-          deleted.teams = typeof r4 === 'number' ? r4 : (r4?.rowCount ?? r4?.length ?? 0);
-
-          const r5 = await tx.delete(questionsTable).execute() as any;
-          deleted.questions = typeof r5 === 'number' ? r5 : (r5?.rowCount ?? r5?.length ?? 0);
-
-          if (purgeRooms) {
-            const r6 = await tx.delete(rooms).execute() as any;
-            deleted.rooms = typeof r6 === 'number' ? r6 : (r6?.rowCount ?? r6?.length ?? 0);
-          }
-        }
+      if (!room) {
+        console.log("No room code provided");
+        return res.status(400).json({ error: "Room code required" });
+      }
+      if (!file || !file.buffer) {
+        console.log("No file provided or file buffer missing");
+        return res.status(400).json({ error: "File is required" });
       }
 
-      // Insert audit record (best-effort)
-      try {
-        await tx.insert(wipeAudits).values({
-          initiatedBy,
-          initiatedAt: new Date(),
-          options: JSON.stringify(auditOptions),
-          deletedCounts: JSON.stringify(deleted),
-        }).execute();
-      } catch (err) {
-        console.error("Failed to insert wipe audit", err);
-      }
-    });
+      const code = room.toUpperCase();
+      console.log("Checking room:", code);
 
-    res.json({ success: true, deleted });
-  } catch (error) {
-    console.error("handleWipeUserData", error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-};
+      const roomResult = await db
+        .select()
+        .from(rooms)
+        .where(eq(rooms.code, code));
 
-export const handleUploadQuestions: RequestHandler = async (req, res) => {
-  try {
-    const room = req.body.room as string;
-    const file = req.file;
+      console.log("Room result:", roomResult.length > 0 ? "found" : "not found");
 
-    if (!room) {
-      return res.status(400).json({ error: "Room code required" });
-    }
+      if (roomResult.length === 0)
+        return res.status(404).json({ error: "Room not found" });
 
-    if (!file) {
-      return res.status(400).json({ error: "File is required" });
-    }
+      const csvData = file.buffer.toString("utf-8");
+      console.log("CSV data length:", csvData.length);
 
-    const code = room.toUpperCase();
+      // Parse CSV properly handling multiline fields
+      const lines = parseCSV(csvData);
+      console.log("Parsed CSV lines:", lines.length);
 
-    // Check if room exists
-    const roomResult = await db.select().from(rooms).where(eq(rooms.code, code));
-    if (roomResult.length === 0) {
-      return res.status(404).json({ error: "Room not found" });
-    }
+      if (lines.length < 2)
+        return res.status(400).json({
+          error: "CSV must have at least a header row and one data row",
+        });
 
-    // Parse CSV data from uploaded file
-    const csvData = file.buffer.toString('utf-8');
-    const lines = csvData.trim().split('\n');
-    if (lines.length < 2) {
-      return res.status(400).json({ error: "CSV must have at least a header row and one data row" });
-    }
+      const headers = lines[0].map((h) => h.toLowerCase().trim());
+      console.log("CSV headers:", headers);
 
-    // Parse CSV data with proper quote handling
-    const parseCSVLine = (line: string): string[] => {
-      const result: string[] = [];
-      let current = '';
-      let inQuotes = false;
-      let i = 0;
+      // Create a map for faster column lookup
+      const headerMap = new Map<string, number>();
+      headers.forEach((header, index) => headerMap.set(header, index));
 
-      while (i < line.length) {
-        const char = line[i];
-
-        if (char === '"') {
-          if (inQuotes && line[i + 1] === '"') {
-            // Escaped quote
-            current += '"';
-            i += 2;
-          } else {
-            // Toggle quote state
-            inQuotes = !inQuotes;
-            i++;
-          }
-        } else if (char === ',' && !inQuotes) {
-          // Field separator
-          result.push(current.trim());
-          current = '';
-          i++;
-        } else {
-          current += char;
-          i++;
+      // Optimized column detection using map lookup
+      const getColumnIndex = (possibleNames: string[]): number => {
+        for (const name of possibleNames) {
+          const index = headerMap.get(name.toLowerCase().trim());
+          if (index !== undefined) return index;
         }
-      }
+        return -1;
+      };
 
-      // Add the last field
-      result.push(current.trim());
-      return result;
-    };
+      const questionTextIndex = getColumnIndex(['question_text', 'code', 'question_code']);
+      const correctAnswerIndex = getColumnIndex(['correct_answer', 'answer', 'expected_output']);
+      const questionTitleIndex = headerMap.get('question_title') ?? -1;
 
-    const headers = parseCSVLine(lines[0]).map(h => h.toLowerCase());
-    const questionTextIndex = headers.indexOf('question_text') !== -1 ? headers.indexOf('question_text') :
-                             headers.indexOf('code') !== -1 ? headers.indexOf('code') : -1;
-    const correctAnswerIndex = headers.indexOf('correct_answer') !== -1 ? headers.indexOf('correct_answer') :
-                              headers.indexOf('answer') !== -1 ? headers.indexOf('answer') : -1;
-    const isRealIndex = headers.indexOf('is_real') !== -1 ? headers.indexOf('is_real') :
-                       headers.indexOf('difficulty') !== -1 ? headers.indexOf('difficulty') : -1;
+      console.log("Column indices:", { questionTextIndex, correctAnswerIndex });
 
-    if (questionTextIndex === -1 || correctAnswerIndex === -1) {
-      return res.status(400).json({ error: "CSV must contain 'question_text'/'Code' and 'correct_answer'/'Answer' columns" });
-    }
+      if (questionTextIndex === -1 || correctAnswerIndex === -1)
+        return res.status(400).json({ error: "CSV missing required columns. Expected 'question_text', 'code', or 'question_code' for questions and 'correct_answer', 'answer', or 'expected_output' for answers" });
 
-    const questionsToInsert = [];
-    let importedCount = 0;
+      const questionsToInsert: any[] = [];
+      for (let i = 1; i < lines.length; i++) {
+        const values = lines[i];
+        if (values.length <= Math.max(questionTextIndex, correctAnswerIndex))
+          continue;
 
-    for (let i = 1; i < lines.length; i++) {
-      const values = parseCSVLine(lines[i]);
-      if (values.length <= Math.max(questionTextIndex, correctAnswerIndex)) continue;
+        const rawQuestionText = values[questionTextIndex]?.trim();
+        const correctAnswer = values[correctAnswerIndex]?.trim();
 
-      const questionText = values[questionTextIndex].replace(/^"|"$/g, '');
-      const correctAnswer = values[correctAnswerIndex].replace(/^"|"$/g, '');
-      const isReal = isRealIndex !== -1 ? values[isRealIndex].toLowerCase() === 'true' ||
-                                          values[isRealIndex] === '1' ||
-                                          values[isRealIndex].toLowerCase() === 'easy' ||
-                                          values[isRealIndex].toLowerCase() === 'moderate' : true;
+        if (!rawQuestionText || !correctAnswer) continue;
 
-      if (questionText && correctAnswer) {
+        let questionText = rawQuestionText;
+
+        // Optimized code detection - check for common code patterns more efficiently
+        const looksLikeCode = (s: string) => {
+          if (!s || s.length < 10) return false;
+          return s.includes("#") || s.includes("int ") || s.includes("printf") ||
+                 s.includes(";") || s.includes("{") || s.includes("}\n") ||
+                 s.includes("\n") || /^\d+$/.test(s);
+        };
+
+        if (!looksLikeCode(questionText)) {
+          const title = questionTitleIndex !== -1 ? values[questionTitleIndex]?.trim() : undefined;
+          if (title && title.length > questionText.length) {
+            questionText = title;
+          }
+        }
+
         questionsToInsert.push({
           roomCode: code,
           questionText,
-          isReal,
+          isReal: true,
           correctAnswer,
         });
-        importedCount++;
       }
+
+      console.log("Questions to insert:", questionsToInsert.length);
+
+      if (questionsToInsert.length === 0)
+        return res
+          .status(400)
+          .json({ error: "No valid questions found in CSV. Check that columns contain data and are properly formatted." });
+
+      await db.insert(questionsTable).values(questionsToInsert);
+      res.json({ success: true, importedCount: questionsToInsert.length });
+    } catch (err) {
+      console.error("Upload error:", err);
+      res.status(500).json({ error: "Internal server error" });
     }
-
-    if (questionsToInsert.length === 0) {
-      return res.status(400).json({ error: "No valid questions found in CSV" });
-    }
-
-    // Insert questions in batch
-    await db.insert(questionsTable).values(questionsToInsert);
-
-    res.json({
-      success: true,
-      importedCount,
-      message: `Successfully uploaded ${importedCount} questions`
-    });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-};
-import { RequestHandler } from "express";
-import multer from "multer";
-import type {
-  AdminStateResponse,
-  AdminCreateRoomRequest,
-  AdminAddQuestionRequest,
-  AdminDeleteQuestionRequest,
-  Room,
-  Question,
-  Team,
-} from "@shared/api";
-import { db } from "../db.js";
-import { rooms, questions as questionsTable, teams, teamSolvedQuestions, teamSolvedPositions, teamQuestionMapping } from "../schema.js";
-import { eq } from "drizzle-orm";
-
-export const handleAdminState: RequestHandler = async (req, res) => {
-  const roomCode = req.query.room as string;
-  if (!roomCode) {
-    return res.status(400).json({ error: "Room code required" });
-  }
-
-  try {
-    const code = roomCode.toUpperCase();
-
-    // Get room
-    const roomResult = await db.select().from(rooms).where(eq(rooms.code, code));
-    const room = roomResult[0];
-
-    // Get questions
-    const questionsResult = await db.select().from(questionsTable).where(eq(questionsTable.roomCode, code));
-    const roomQuestions = questionsResult.map(q => ({
-      id: q.questionId.toString(),
-      text: q.questionText,
-      options: [], // TODO: add options if needed
-      correctAnswer: 0, // TODO: parse correct answer
-      points: 10, // default points
-      question_id: q.questionId,
-      question_text: q.questionText,
-      correct_answer: q.correctAnswer,
-      is_real: q.isReal,
-    }));
-
-    // Get teams
-    const teamsResult = await db.select().from(teams).where(eq(teams.roomCode, code));
-    const roomTeams = teamsResult.map(t => ({
-      id: t.teamId,
-      name: t.teamName,
-      score: t.linesCompleted * 10, // approximate score
-      completedAt: t.endTime?.toISOString() || null,
-      isWinner: false, // TODO: determine winner
-      team_id: t.teamId,
-      team_name: t.teamName,
-      lines_completed: t.linesCompleted,
-      start_time: t.startTime.toISOString(),
-      end_time: t.endTime?.toISOString() || null,
-    }));
-
-    const response: AdminStateResponse = {
-      room: room ? {
-        code: room.code,
-        title: room.title,
-        roundEndAt: room.roundEndAt?.toISOString() || null,
-      } : null,
-      questions: roomQuestions,
-      teams: roomTeams,
-      currentQuestionIndex: 0, // TODO: track current question
-      gameStarted: false, // TODO: track game state
-      gameEnded: false,
-      timeRemaining: 0,
-    };
-
-    res.json(response);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-};
-
-export const handleCreateRoom: RequestHandler = async (req, res) => {
-  const body: AdminCreateRoomRequest = req.body;
-  const code = body.code.toUpperCase();
-
-  try {
-    // Check if room exists
-    const existing = await db.select().from(rooms).where(eq(rooms.code, code));
-    if (existing.length > 0) {
-      return res.status(400).json({ error: "Room already exists" });
-    }
-
-    await db.insert(rooms).values({
-      code,
-      title: body.title,
-      roundEndAt: body.durationMinutes ? new Date(Date.now() + body.durationMinutes * 60 * 1000) : null,
-    });
-
-    res.json({ success: true });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-};
-
-export const handleStartGame: RequestHandler = async (req, res) => {
-  const { minutes, room } = req.body;
-  if (!minutes || typeof minutes !== 'number' || minutes <= 0) {
-    return res.status(400).json({ error: "Valid minutes required" });
-  }
-
-  const roomCode = room || req.query.room as string;
-  if (!roomCode) {
-    return res.status(400).json({ error: "Room code required" });
-  }
-
-  try {
-    const code = roomCode.toUpperCase();
-
-    // Check if room exists
-    const roomResult = await db.select().from(rooms).where(eq(rooms.code, code));
-    if (roomResult.length === 0) {
-      return res.status(404).json({ error: "Room not found" });
-    }
-
-    // Calculate end time
-    const endTime = new Date(Date.now() + minutes * 60 * 1000);
-
-    // Update room with timer
-    await db.update(rooms)
-      .set({ roundEndAt: endTime })
-      .where(eq(rooms.code, code));
-
-    res.json({ success: true, endTime: endTime.toISOString() });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-};
-
-export const handleExtendTimer: RequestHandler = async (req, res) => {
-  const { minutes, room } = req.body;
-  if (!minutes || typeof minutes !== 'number' || minutes <= 0) {
-    return res.status(400).json({ error: "Valid minutes required" });
-  }
-
-  const roomCode = room || req.query.room as string;
-  if (!roomCode) {
-    return res.status(400).json({ error: "Room code required" });
-  }
-
-  try {
-    const code = roomCode.toUpperCase();
-
-    // Check if room exists
-    const roomResult = await db.select().from(rooms).where(eq(rooms.code, code));
-    if (roomResult.length === 0) {
-      return res.status(404).json({ error: "Room not found" });
-    }
-
-    const currentRoom = roomResult[0];
-    let newEndTime: Date;
-
-    if (currentRoom.roundEndAt && currentRoom.roundEndAt > new Date()) {
-      // Extend existing timer
-      newEndTime = new Date(currentRoom.roundEndAt.getTime() + minutes * 60 * 1000);
-    } else {
-      // Start new timer
-      newEndTime = new Date(Date.now() + minutes * 60 * 1000);
-    }
-
-    // Update room with extended timer
-    await db.update(rooms)
-      .set({ roundEndAt: newEndTime })
-      .where(eq(rooms.code, code));
-
-    res.json({ success: true, endTime: newEndTime.toISOString() });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-};
-
-export const handleForceEnd: RequestHandler = async (req, res) => {
-  const { room } = req.body;
-  const roomCode = room || req.query.room as string;
-  if (!roomCode) {
-    return res.status(400).json({ error: "Room code required" });
-  }
-
-  try {
-    const code = roomCode.toUpperCase();
-
-    // Check if room exists
-    const roomResult = await db.select().from(rooms).where(eq(rooms.code, code));
-    if (roomResult.length === 0) {
-      return res.status(404).json({ error: "Room not found" });
-    }
-
-    // Set timer to end immediately (current time)
-    const endTime = new Date();
-
-    // Update room with immediate end time
-    await db.update(rooms)
-      .set({ roundEndAt: endTime })
-      .where(eq(rooms.code, code));
-
-    res.json({ success: true, endTime: endTime.toISOString() });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-};
-
-export const handleAddQuestion: RequestHandler = async (req, res) => {
-  const body: AdminAddQuestionRequest = req.body;
-  const code = body.room.toUpperCase();
-
-  try {
-    // Check if room exists
-    const roomResult = await db.select().from(rooms).where(eq(rooms.code, code));
-    if (roomResult.length === 0) {
-      return res.status(404).json({ error: "Room not found" });
-    }
-
-    const result = await db.insert(questionsTable).values({
-      roomCode: code,
-      questionText: body.question.text,
-      isReal: true, // assuming all questions are real
-      correctAnswer: body.question.correctAnswer.toString(),
-    }).returning();
-
-    const newQuestion: Question = {
-      id: result[0].questionId.toString(),
-      text: body.question.text,
-      options: body.question.options,
-      correctAnswer: body.question.correctAnswer,
-      points: body.question.points,
-    };
-
-    res.json({ success: true, question: newQuestion });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-};
-
-export const handleDeleteQuestion: RequestHandler = async (req, res) => {
-  const body: AdminDeleteQuestionRequest = req.body;
-  const code = body.room?.toUpperCase?.();
-
-  if (!body || !body.questionId) {
-    return res.status(400).json({ error: "questionId required" });
-  }
-
-  const questionIdInt = parseInt(String(body.questionId), 10);
-  if (Number.isNaN(questionIdInt)) {
-    return res.status(400).json({ error: "Invalid questionId" });
-  }
-
-  try {
-    await db.delete(questionsTable).where(eq(questionsTable.questionId, questionIdInt));
-    res.json({ success: true });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-};
+  },
+];
 
 export const handleWipeUserData: RequestHandler = async (req, res) => {
   try {
     const body = (req.body || {}) as any;
-
-    // Basic protection: require explicit confirmation string and admin secret
     const confirm = String(body.confirm || "").trim();
     const adminSecretHeader = String(req.header("x-admin-secret") || "");
-
     const envSecret = process.env.ADMIN_SECRET || "";
-
-    if (confirm !== "WIPE" || (!envSecret && process.env.NODE_ENV !== "development" && !adminSecretHeader)) {
-      return res.status(400).json({ error: "Confirmation 'WIPE' and admin secret required" });
+    if (
+      confirm !== "WIPE" ||
+      (!envSecret &&
+        process.env.NODE_ENV !== "development" &&
+        !adminSecretHeader)
+    ) {
+      return res
+        .status(400)
+        .json({ error: "Confirmation 'WIPE' and admin secret required" });
     }
-
-    if (envSecret && adminSecretHeader !== envSecret) {
+    if (envSecret && adminSecretHeader !== envSecret)
       return res.status(403).json({ error: "Invalid admin secret" });
-    }
 
-    // Parse options
-    const preserveRooms: string[] = Array.isArray(body.preserveRooms) ? body.preserveRooms.map(String) : [];
+    const preserveRooms: string[] = Array.isArray(body.preserveRooms)
+      ? body.preserveRooms.map(String)
+      : [];
     const purgeRooms = !!body.purgeRooms;
     const purgeQuestions = !!body.purgeQuestions;
     const softDelete = !!body.softDelete;
-    const initiatedBy = String(body.initiatedBy || req.header("x-initiated-by") || "admin");
+    const initiatedBy = String(
+      body.initiatedBy || req.header("x-initiated-by") || "admin",
+    );
 
     const deleted: Record<string, number> = {};
-    const auditOptions = { preserveRooms, purgeRooms, purgeQuestions, softDelete };
+    const auditOptions = {
+      preserveRooms,
+      purgeRooms,
+      purgeQuestions,
+      softDelete,
+    };
 
-    await db.transaction(async tx => {
-      // Soft-delete path (mark isDeleted=true)
+    // Use Drizzle ORM transaction
+    await db.transaction(async (tx) => {
       if (softDelete) {
-        // Only mark rows for tables we care about; respect preserveRooms if provided
-        const preserveSet = new Set(preserveRooms.map(r => r.toUpperCase()));
+        // Soft delete: mark as deleted instead of removing
+        const r1 = await tx.update(teamSolvedPositions).set({ isDeleted: true });
+        deleted.team_solved_positions = 1; // Drizzle doesn't return affected rows count
 
-        // team_solved_positions
-        const r1 = await tx.update(teamSolvedPositions).set({ isDeleted: true }).execute() as any;
-        deleted.team_solved_positions = typeof r1 === 'number' ? r1 : (r1?.rowCount ?? r1?.length ?? 0);
+        const r2 = await tx.update(teamSolvedQuestions).set({ isDeleted: true });
+        deleted.team_solved_questions = 1;
 
-        // team_solved_questions
-        const r2 = await tx.update(teamSolvedQuestions).set({ isDeleted: true }).execute() as any;
-        deleted.team_solved_questions = typeof r2 === 'number' ? r2 : (r2?.rowCount ?? r2?.length ?? 0);
+        const r3 = await tx.update(teamQuestionMapping).set({ isDeleted: true });
+        deleted.team_question_mapping = 1;
 
-        // team_question_mapping
-        const r3 = await tx.update(teamQuestionMapping).set({ isDeleted: true }).execute() as any;
-        deleted.team_question_mapping = typeof r3 === 'number' ? r3 : (r3?.rowCount ?? r3?.length ?? 0);
-
-        // teams (optionally preserve rooms)
         if (preserveRooms.length > 0) {
-          // mark teams not in preserveRooms
-          const teamsToMark = await tx.select().from(teams).execute();
-          const teamIdsToMark = teamsToMark.filter((t: any) => !preserveSet.has(String(t.roomCode).toUpperCase())).map((t: any) => t.teamId);
+          // Get teams not in preserved rooms
+          const teamsAll = await tx
+            .select({ teamId: teams.teamId, roomCode: teams.roomCode })
+            .from(teams);
+
+          const teamIdsToMark = teamsAll
+            .filter(
+              (t) =>
+                !preserveRooms
+                  .map((r: string) => r.toUpperCase())
+                  .includes(String(t.roomCode).toUpperCase()),
+            )
+            .map((t) => t.teamId);
+
           if (teamIdsToMark.length > 0) {
-            const r4 = await tx.update(teams).set({ isDeleted: true }).where((teams.teamId as any).in(teamIdsToMark)).execute() as any;
-            deleted.teams = typeof r4 === 'number' ? r4 : (r4?.rowCount ?? r4?.length ?? 0);
+            await tx
+              .update(teams)
+              .set({ isDeleted: true })
+              .where(inArray(teams.teamId, teamIdsToMark));
+            deleted.teams = teamIdsToMark.length;
           } else {
             deleted.teams = 0;
           }
         } else {
-          const r4 = await tx.update(teams).set({ isDeleted: true }).execute() as any;
-          deleted.teams = typeof r4 === 'number' ? r4 : (r4?.rowCount ?? r4?.length ?? 0);
+          await tx.update(teams).set({ isDeleted: true });
+          deleted.teams = 1; // Approximate count
         }
       } else {
-        // Hard-delete path. Respect preserveRooms, optional purgeRooms/purgeQuestions
         if (!purgeQuestions) {
-          // remove solved/positions/mapping, but leave questions
-          const r1 = await tx.delete(teamSolvedPositions).execute() as any;
-          deleted.team_solved_positions = typeof r1 === 'number' ? r1 : (r1?.rowCount ?? r1?.length ?? 0);
+          // Hard delete team data but keep questions
+          await tx.delete(teamSolvedPositions);
+          deleted.team_solved_positions = 1;
 
-          const r2 = await tx.delete(teamSolvedQuestions).execute() as any;
-          deleted.team_solved_questions = typeof r2 === 'number' ? r2 : (r2?.rowCount ?? r2?.length ?? 0);
+          await tx.delete(teamSolvedQuestions);
+          deleted.team_solved_questions = 1;
 
-          const r3 = await tx.delete(teamQuestionMapping).execute() as any;
-          deleted.team_question_mapping = typeof r3 === 'number' ? r3 : (r3?.rowCount ?? r3?.length ?? 0);
+          await tx.delete(teamQuestionMapping);
+          deleted.team_question_mapping = 1;
 
-          // delete teams (possible preserveRooms)
           if (preserveRooms.length > 0) {
-            // find teams in preserved rooms and exclude them
-            const teamsAll = await tx.select().from(teams).execute();
-            const toDelete = teamsAll.filter((t: any) => !preserveRooms.map((r: string) => r.toUpperCase()).includes(String(t.roomCode).toUpperCase())).map((t: any) => t.teamId);
-            if (toDelete.length > 0) {
-              const r4 = await tx.delete(teams).where((teams.teamId as any).in(toDelete)).execute() as any;
-              deleted.teams = typeof r4 === 'number' ? r4 : (r4?.rowCount ?? r4?.length ?? 0);
+            // Get teams not in preserved rooms
+            const teamsAll = await tx
+              .select({ teamId: teams.teamId, roomCode: teams.roomCode })
+              .from(teams);
+
+            const teamIdsToDelete = teamsAll
+              .filter(
+                (t) =>
+                  !preserveRooms
+                    .map((r: string) => r.toUpperCase())
+                    .includes(String(t.roomCode).toUpperCase()),
+              )
+              .map((t) => t.teamId);
+
+            if (teamIdsToDelete.length > 0) {
+              await tx.delete(teams).where(inArray(teams.teamId, teamIdsToDelete));
+              deleted.teams = teamIdsToDelete.length;
             } else {
               deleted.teams = 0;
             }
           } else {
-            const r4 = await tx.delete(teams).execute() as any;
-            deleted.teams = typeof r4 === 'number' ? r4 : (r4?.rowCount ?? r4?.length ?? 0);
+            await tx.delete(teams);
+            deleted.teams = 1; // Approximate count
           }
         } else {
-          // purgeQuestions true: delete everything including questions and optionally rooms
-          const r1 = await tx.delete(teamSolvedPositions).execute() as any;
-          deleted.team_solved_positions = typeof r1 === 'number' ? r1 : (r1?.rowCount ?? r1?.length ?? 0);
+          // Hard delete everything including questions
+          await tx.delete(teamSolvedPositions);
+          deleted.team_solved_positions = 1;
 
-          const r2 = await tx.delete(teamSolvedQuestions).execute() as any;
-          deleted.team_solved_questions = typeof r2 === 'number' ? r2 : (r2?.rowCount ?? r2?.length ?? 0);
+          await tx.delete(teamSolvedQuestions);
+          deleted.team_solved_questions = 1;
 
-          const r3 = await tx.delete(teamQuestionMapping).execute() as any;
-          deleted.team_question_mapping = typeof r3 === 'number' ? r3 : (r3?.rowCount ?? r3?.length ?? 0);
+          await tx.delete(teamQuestionMapping);
+          deleted.team_question_mapping = 1;
 
-          const r4 = await tx.delete(teams).execute() as any;
-          deleted.teams = typeof r4 === 'number' ? r4 : (r4?.rowCount ?? r4?.length ?? 0);
+          await tx.delete(teams);
+          deleted.teams = 1;
 
-          const r5 = await tx.delete(questionsTable).execute() as any;
-          deleted.questions = typeof r5 === 'number' ? r5 : (r5?.rowCount ?? r5?.length ?? 0);
+          await tx.delete(questionsTable);
+          deleted.questions = 1;
 
           if (purgeRooms) {
-            const r6 = await tx.delete(rooms).execute() as any;
-            deleted.rooms = typeof r6 === 'number' ? r6 : (r6?.rowCount ?? r6?.length ?? 0);
+            await tx.delete(rooms);
+            deleted.rooms = 1;
           }
         }
       }
@@ -1938,136 +577,15 @@ export const handleWipeUserData: RequestHandler = async (req, res) => {
           initiatedAt: new Date(),
           options: JSON.stringify(auditOptions),
           deletedCounts: JSON.stringify(deleted),
-        }).execute();
+        });
       } catch (err) {
-        // non-fatal - log and continue
         console.error("Failed to insert wipe audit", err);
       }
     });
 
     res.json({ success: true, deleted });
-  } catch (error) {
-    console.error("handleWipeUserData", error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-};
-            i += 2;
-          } else {
-            // Toggle quote state
-            inQuotes = !inQuotes;
-            i++;
-          }
-        } else if (char === ',' && !inQuotes) {
-          // Field separator
-          result.push(current.trim());
-          current = '';
-          i++;
-        } else {
-          current += char;
-          i++;
-        }
-      }
-
-      // Add the last field
-      result.push(current.trim());
-      return result;
-    };
-
-    const headers = parseCSVLine(lines[0]).map(h => h.toLowerCase());
-    const questionTextIndex = headers.indexOf('question_text') !== -1 ? headers.indexOf('question_text') :
-                             headers.indexOf('code') !== -1 ? headers.indexOf('code') : -1;
-    const correctAnswerIndex = headers.indexOf('correct_answer') !== -1 ? headers.indexOf('correct_answer') :
-                              headers.indexOf('answer') !== -1 ? headers.indexOf('answer') : -1;
-    const isRealIndex = headers.indexOf('is_real') !== -1 ? headers.indexOf('is_real') :
-                       headers.indexOf('difficulty') !== -1 ? headers.indexOf('difficulty') : -1;
-
-    if (questionTextIndex === -1 || correctAnswerIndex === -1) {
-      return res.status(400).json({ error: "CSV must contain 'question_text'/'Code' and 'correct_answer'/'Answer' columns" });
-    }
-
-    const questionsToInsert = [];
-    let importedCount = 0;
-
-    for (let i = 1; i < lines.length; i++) {
-      const values = parseCSVLine(lines[i]);
-      if (values.length <= Math.max(questionTextIndex, correctAnswerIndex)) continue;
-
-      const questionText = values[questionTextIndex].replace(/^"|"$/g, '');
-      const correctAnswer = values[correctAnswerIndex].replace(/^"|"$/g, '');
-      const isReal = isRealIndex !== -1 ? values[isRealIndex].toLowerCase() === 'true' ||
-                                          values[isRealIndex] === '1' ||
-                                          values[isRealIndex].toLowerCase() === 'easy' ||
-                                          values[isRealIndex].toLowerCase() === 'moderate' : true;
-
-      if (questionText && correctAnswer) {
-        questionsToInsert.push({
-          roomCode: code,
-          questionText,
-          isReal,
-          correctAnswer,
-        });
-        importedCount++;
-      }
-    }
-
-    if (questionsToInsert.length === 0) {
-      return res.status(400).json({ error: "No valid questions found in CSV" });
-    }
-
-    // Insert questions in batch
-    await db.insert(questionsTable).values(questionsToInsert);
-
-    res.json({
-      success: true,
-      importedCount,
-      message: `Successfully uploaded ${importedCount} questions`
-    });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-};
-
-// WARNING: destructive. Deletes user/team data. Requires explicit confirmation and admin secret.
-export const handleWipeUserData: RequestHandler = async (req, res) => {
-  try {
-    const body = req.body || {} as any;
-
-    // Basic protection: require explicit confirmation string and admin secret header
-    const confirm = String(body.confirm || "").trim();
-    const adminSecretHeader = String(req.header("x-admin-secret") || "");
-
-    const envSecret = process.env.ADMIN_SECRET || "";
-
-    if (confirm !== "WIPE" || (!envSecret && process.env.NODE_ENV !== "development" && !adminSecretHeader)) {
-      return res.status(400).json({ error: "Confirmation 'WIPE' and admin secret required" });
-    }
-
-    if (envSecret && adminSecretHeader !== envSecret) {
-      return res.status(403).json({ error: "Invalid admin secret" });
-    }
-
-    // Perform deletions in a transaction and return counts
-    const deleted: Record<string, number> = {};
-
-    await db.transaction(async tx => {
-      // Order matters due to foreign keys
-  const r1 = await tx.delete(teamSolvedPositions).execute() as any;
-  deleted.team_solved_positions = typeof r1 === 'number' ? r1 : (r1?.rowCount ?? r1?.length ?? 0);
-
-  const r2 = await tx.delete(teamSolvedQuestions).execute() as any;
-  deleted.team_solved_questions = typeof r2 === 'number' ? r2 : (r2?.rowCount ?? r2?.length ?? 0);
-
-  const r3 = await tx.delete(teamQuestionMapping).execute() as any;
-  deleted.team_question_mapping = typeof r3 === 'number' ? r3 : (r3?.rowCount ?? r3?.length ?? 0);
-
-  const r4 = await tx.delete(teams).execute() as any;
-  deleted.teams = typeof r4 === 'number' ? r4 : (r4?.rowCount ?? r4?.length ?? 0);
-    });
-
-    res.json({ success: true, deleted });
-  } catch (error) {
-    console.error("handleWipeUserData", error);
+  } catch (err) {
+    console.error(err);
     res.status(500).json({ error: "Internal server error" });
   }
 };

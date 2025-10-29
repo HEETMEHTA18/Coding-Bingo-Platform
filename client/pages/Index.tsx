@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { ErrorResponse, LoginRequest, LoginResponse } from "@shared/api";
+import { ThemeToggle } from "../components/ThemeProvider";
+import { apiFetch } from "../lib/api";
 
 export default function Index() {
   const navigate = useNavigate();
@@ -57,9 +59,8 @@ export default function Index() {
         team_name: teamName.trim(),
         room_code: roomCode.trim(),
       };
-      const res = await fetch("/api/login", {
+      const res = await apiFetch("/api/login", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
       const data = (await res.json()) as LoginResponse | ErrorResponse;
@@ -81,56 +82,62 @@ export default function Index() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-white to-blue-50 flex items-center justify-center px-4">
+    <div className="min-h-screen bg-gradient-to-b from-background to-muted flex items-center justify-center px-4 relative">
+      {/* Theme Toggle */}
+      <div className="absolute top-4 right-4">
+        <ThemeToggle />
+      </div>
+
       <div className="w-full max-w-md">
         <div className="text-center mb-6">
-          <h1 className="text-2xl font-bold text-slate-800">
-            Real-Time Coding Bingo
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
+            🏆 Bingo Mania 🏆
           </h1>
-          <p className="text-slate-500">Enter your team to join the room</p>
+          <p className="text-muted-foreground">
+            Enter your team name and join the coding challenge
+          </p>
         </div>
         <form
           onSubmit={submit}
-          className="bg-white shadow-xl rounded-xl border border-slate-100 p-6 space-y-4"
+          className="bg-card shadow-xl rounded-xl border border-border p-6 space-y-4"
         >
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
+            <label className="block text-sm font-medium text-card-foreground mb-1">
               Team Name
             </label>
             <input
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary"
+              className="w-full rounded-lg border border-input bg-background px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary transition-colors"
               placeholder="e.g. Code Ninjas"
               value={teamName}
               onChange={(e) => setTeamName(e.target.value)}
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
+            <label className="block text-sm font-medium text-card-foreground mb-1">
               Room Code
             </label>
             <input
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 uppercase tracking-wider focus:outline-none focus:ring-2 focus:ring-primary"
+              className="w-full rounded-lg border border-input bg-background px-3 py-2 uppercase tracking-wider focus:outline-none focus:ring-2 focus:ring-primary transition-colors"
               placeholder="e.g. ABC123"
               value={roomCode}
               onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
             />
           </div>
           {error && (
-            <div className="text-sm font-medium text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+            <div className="text-sm font-medium text-destructive bg-destructive/10 border border-destructive/20 rounded-lg px-3 py-2">
               {error}
             </div>
           )}
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-primary text-primary-foreground rounded-lg py-2.5 font-semibold hover:bg-primary/90 disabled:opacity-60 flex items-center justify-center gap-2"
+            className="w-full bg-primary text-primary-foreground rounded-lg py-2.5 font-semibold hover:bg-primary/90 disabled:opacity-60 flex items-center justify-center gap-2 transition-colors"
           >
             {loading && (
-              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+              <div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin"></div>
             )}
-            {loading ? "Joining..." : "Join Game"}
+            {loading ? "Joining..." : "🚀 Join Game"}
           </button>
-
         </form>
       </div>
     </div>

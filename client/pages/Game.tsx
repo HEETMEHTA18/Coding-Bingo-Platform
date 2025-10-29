@@ -80,7 +80,7 @@ export default function GamePage() {
     setLines(computeLines(data.solved_positions as string[]));
     // Dynamically enable/disable based on current timer status
     const currentRoom = data.room as GameStateResponse["room"];
-    const isExpired = currentRoom.roundEndAt && Date.now() > currentRoom.roundEndAt;
+    const isExpired = currentRoom.roundEndAt && Date.now() > new Date(currentRoom.roundEndAt).getTime();
     setDisabled(isExpired);
   };
 
@@ -182,7 +182,7 @@ export default function GamePage() {
 
   const timeLeft = useMemo(() => {
     if (!room?.roundEndAt) return null;
-    const ms = Math.max(0, room.roundEndAt - now);
+    const ms = Math.max(0, new Date(room.roundEndAt).getTime() - now);
     const m = Math.floor(ms / 60000);
     const s = Math.floor((ms % 60000) / 1000);
     return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;

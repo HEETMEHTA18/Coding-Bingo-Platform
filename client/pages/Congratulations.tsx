@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { GameStateResponse, LeaderboardResponse, Team } from "@shared/api";
+import { apiFetch } from "../lib/api";
 
 export default function CongratulationsPage() {
   const navigate = useNavigate();
@@ -31,7 +32,7 @@ export default function CongratulationsPage() {
     setTeam(t);
 
     const run = async () => {
-      const stateRes = await fetch(
+      const stateRes = await apiFetch(
         `/api/game-state?teamId=${encodeURIComponent(t.team_id)}`,
       );
       const state = (await stateRes.json()) as GameStateResponse;
@@ -41,11 +42,11 @@ export default function CongratulationsPage() {
         return;
       }
       setAllowed(true);
-      const lbRes = await fetch(
+      const lbRes = await apiFetch(
         `/api/leaderboard?room=${encodeURIComponent(room.code)}`,
       );
       const lb = (await lbRes.json()) as LeaderboardResponse;
-      const my = lb.rows.find((r) => r.team_name === t.team_name);
+      const my = lb.rows.find((r) => r.team.team_name === t.name);
       setRank(my?.rank ?? null);
       setLoading(false);
     };
@@ -99,7 +100,9 @@ export default function CongratulationsPage() {
         </div>
         <div className="mt-6 flex gap-3 justify-center">
           <button
-            onClick={() => navigate("/leaderboard", { state: { fromCongratulations: true } })}
+            onClick={() =>
+              navigate("/leaderboard", { state: { fromCongratulations: true } })
+            }
             className="px-4 py-2 rounded-lg bg-primary text-primary-foreground font-semibold hover:bg-primary/90"
           >
             View Leaderboard

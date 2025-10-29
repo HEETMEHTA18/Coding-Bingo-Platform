@@ -1,0 +1,306 @@
+question_number,question_title,question_code,expected_output,difficulty,points
+1,"Simple Multiplication","#include <stdio.h>
+int main() {
+    int a = 6, b = 3;
+    printf(""%d"", a * b);
+    return 0;
+}","18","Medium",5
+2,"Conditional Check","#include <stdio.h>
+int main() {
+    int x = 10;
+    if(x > 5)
+        printf(""Greater"");
+    else
+        printf(""Lesser"");
+    return 0;
+}","Greater","Medium",5
+3,"Array Element Access","#include <stdio.h>
+int main() {
+    int arr[] = {2, 4, 6};
+    printf(""%d"", arr[1]);
+    return 0;
+}","4","Medium",5
+4,"Character Output","#include <stdio.h>
+int main() {
+    char ch = 'Z';
+    printf(""%c"", ch);
+    return 0;
+}","Z","Medium",5
+5,"While Loop Count","#include <stdio.h>
+int main() {
+    int i = 0;
+    while(i < 4) {
+        printf(""%d "", i);
+        i++;
+    }
+    return 0;
+}","0 1 2 3","Medium",5
+6,"Function Addition","#include <stdio.h>
+int add(int x, int y) {
+    return x + y;
+}
+int main() {
+    printf(""%d"", add(8, 12));
+    return 0;
+}","20","Medium",5
+7,"Switch Case","#include <stdio.h>
+int main() {
+    int n = 9;
+    switch(n) {
+        case 9: printf(""Nine""); break;
+        default: printf(""Other"");
+    }
+    return 0;
+}","Nine","Medium",5
+8,"Modulo Operation","#include <stdio.h>
+int main() {
+    int num = 25;
+    printf(""%d"", num % 10);
+    return 0;
+}","5","Medium",5
+9,"String Output","#include <stdio.h>
+int main() {
+    char str[] = ""Hi"";
+    printf(""%s"", str);
+    return 0;
+}","Hi","Medium",5
+10,"Multiplication Assignment","#include <stdio.h>
+int main() {
+    int a = 7;
+    a *= 2;
+    printf(""%d"", a);
+    return 0;
+}","14","Medium",5
+11,"Subtraction Operation","#include <stdio.h>
+int main() {
+    int x = 5, y = 3;
+    int z = x - y;
+    printf(""%d"", z);
+    return 0;
+}","2","Medium",5
+12,"For Loop Multiplication","#include <stdio.h>
+int main() {
+    for(int i = 1; i <= 3; i++)
+        printf(""%d "", i * 2);
+    return 0;
+}","2 4 6","Medium",5
+13,"Array Last Element","#include <stdio.h>
+int main() {
+    int arr[4] = {10, 20, 30, 40};
+    printf(""%d"", arr[3]);
+    return 0;
+}","40","Medium",5
+14,"Division Assignment","#include <stdio.h>
+int main() {
+    int x = 100;
+    x /= 10;
+    printf(""%d"", x);
+    return 0;
+}","10","Medium",5
+15,"Array Condition Sum","#include <stdio.h>
+int main() {
+    int arr[] = {3, 6, 9, 12, 15};
+    int result = 0;
+    for(int i = 0; i < 5; i++) {
+        if(arr[i] % 3 == 0 && i % 2 != 0)
+            result += arr[i];
+    }
+    printf(""%d"", result);
+    return 0;
+}","18","Hard",10
+16,"String Copy","#include <stdio.h>
+int main() {
+    char str1[] = ""APPLE"";
+    char str2[10];
+    int i = 0;
+    while(str1[i] != '\0') {
+        str2[i] = str1[i];
+        i++;
+    }
+    str2[i] = '\0';
+    printf(""%s"", str2);
+    return 0;
+}","APPLE","Hard",10
+17,"Fibonacci Recursive","#include <stdio.h>
+int fib(int n) {
+    if(n <= 1) return n;
+    return fib(n-1) + fib(n-2);
+}
+int main() {
+    printf(""%d"", fib(6));
+    return 0;
+}","8","Hard",10
+18,"Ternary with Multiplication","#include <stdio.h>
+int main() {
+    int x = 20, y = 30;
+    int z = (x > y) ? (x - y) : (y - x);
+    printf(""%d"", z * 2);
+    return 0;
+}","20","Hard",10
+19,"2D Array Column Sum","#include <stdio.h>
+int main() {
+    int matrix[3][2] = {{1, 2}, {3, 4}, {5, 6}};
+    int sum = 0;
+    for(int i = 0; i < 3; i++)
+        sum += matrix[i][0];
+    printf(""%d"", sum);
+    return 0;
+}","9","Hard",10
+20,"Digit Sum","#include <stdio.h>
+int main() {
+    int n = 456, digit_sum = 0;
+    while(n > 0) {
+        digit_sum += n % 10;
+        n /= 10;
+    }
+    printf(""%d"", digit_sum);
+    return 0;
+}","15","Hard",10
+21,"Array Modification Function","#include <stdio.h>
+void change(int arr[], int size) {
+    for(int i = 0; i < size; i++)
+        arr[i] += 10;
+}
+int main() {
+    int data[] = {5, 10, 15};
+    change(data, 3);
+    printf(""%d"", data[1]);
+    return 0;
+}","20","Hard",10
+22,"Letter Counter","#include <stdio.h>
+int main() {
+    char competition[] = ""BATTLE OF BEGINNERS"";
+    int letters = 0;
+    for(int i = 0; competition[i] != '\0'; i++) {
+        if(competition[i] != ' ')
+            letters++;
+    }
+    printf(""%d"", letters);
+    return 0;
+}","17","Hard",10
+23,"Division Logic","#include <stdio.h>
+int main() {
+    int a = 7, b = 14, c = 21;
+    if(a < b && b < c)
+        if(c % a == 0)
+            printf(""%d"", c / a);
+        else
+            printf(""%d"", b / a);
+    else
+        printf(""%d"", 0);
+    return 0;
+}","3","Hard",10
+24,"Switch Fall Through Pattern","#include <stdio.h>
+int main() {
+    int x = 5;
+    switch(x) {
+        case 3: printf(""Three "");
+        case 5: printf(""Five "");
+        case 7: printf(""Seven "");
+        default: printf(""End"");
+    }
+    return 0;
+}","Five Seven End","Hard",10
+25,"String Reverse","#include <stdio.h>
+int main() {
+    char str[] = ""WORLD"";
+    for(int i = 4; i >= 0; i--)
+        printf(""%c"", str[i]);
+    return 0;
+}","DLROW","Hard",10
+26,"Global Counter","#include <stdio.h>
+int count = 0;
+void increment() {
+    count += 2;
+}
+int main() {
+    increment();
+    increment();
+    increment();
+    printf(""%d"", count);
+    return 0;
+}","6","Hard",10
+27,"2D Array Even Column Sum","#include <stdio.h>
+int main() {
+    int arr[2][3] = {{2, 4, 6}, {8, 10, 12}};
+    int total = 0;
+    for(int i = 0; i < 2; i++)
+        for(int j = 0; j < 3; j++)
+            if(j % 2 == 0)
+                total += arr[i][j];
+    printf(""%d"", total);
+    return 0;
+}","28","Hard",10
+28,"Do While Sum","#include <stdio.h>
+int main() {
+    int i = 5, sum = 0;
+    do {
+        sum += i;
+        i--;
+    } while(i > 2);
+    printf(""%d"", sum);
+    return 0;
+}","14","Hard",10
+29,"Sum of Squares","#include <stdio.h>
+int calculate(int x, int y) {
+    return (x * x) + (y * y);
+}
+int main() {
+    printf(""%d"", calculate(3, 4));
+    return 0;
+}","25","Hard",10
+30,"Array Maximum","#include <stdio.h>
+int main() {
+    int arr[] = {11, 22, 33, 44, 55};
+    int max = arr[0];
+    for(int i = 1; i < 5; i++)
+        if(arr[i] > max)
+            max = arr[i];
+    printf(""%d"", max);
+    return 0;
+}","55","Hard",10
+31,"String Length Without Function","#include <stdio.h>
+int main() {
+    char str[] = ""CODE"";
+    int len = 0;
+    while(str[len]) len++;
+    printf(""%d"", len);
+    return 0;
+}","4","Hard",10
+32,"Switch with Accumulation","#include <stdio.h>
+int main() {
+    int val = 50;
+    switch(val / 10) {
+        case 5: val += 10;
+        case 4: val += 20; break;
+        case 3: val += 30;
+        default: val += 40;
+    }
+    printf(""%d"", val);
+    return 0;
+}","80","Hard",10
+33,"Factorial Loop","#include <stdio.h>
+int main() {
+    int n = 4, term = 1;
+    for(int i = 1; i <= n; i++)
+        term *= i;
+    printf(""%d"", term);
+    return 0;
+}","24","Hard",10
+34,"Ternary with Modulo","#include <stdio.h>
+int main() {
+    int x = 12, y = 8;
+    int result = (x % 4 == 0 && y % 4 == 0) ? (x + y) : (x - y);
+    printf(""%d"", result);
+    return 0;
+}","20","Hard",10
+35,"Pointer Modification","#include <stdio.h>
+void modify(int *p) {
+    *p = *p + 20;
+}
+int main() {
+    int val = 30;
+    modify(&val);
+    printf(""%d"", val);
+    return 0;
+}","50","Hard",10

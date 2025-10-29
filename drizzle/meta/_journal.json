@@ -5,15 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1760531591881,
-      "tag": "0000_furry_the_call",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1760538687667,
-      "tag": "0001_soft_maelstrom",
+      "when": 1761744481250,
+      "tag": "0000_daily_goliath",
       "breakpoints": true
     }
   ]
