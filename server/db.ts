@@ -12,14 +12,29 @@ function getSqlConnection() {
   if (!sql) {
     const connectionString = process.env.DATABASE_URL || defaultLocal;
     try {
+      console.log('Attempting database connection...');
       sql = postgres(connectionString, {
         max: parseInt(process.env.PG_MAX_POOL || "10"),
         idle_timeout: parseInt(process.env.PG_IDLE_TIMEOUT || "60000"),
         connect_timeout: parseInt(process.env.PG_CONNECTION_TIMEOUT || "10000"),
         prepare: process.env.PG_PREPARE === "true",
+        // Add retry logic for connection issues
+        retry: {
+          max: 3,
+          timeout: 5000,
+        },
+        // Handle SSL issues
+        ssl: connectionString.includes('sslmode=require') ? 'require' : false,
       });
+      console.log('Database connection established successfully');
     } catch (error) {
       console.error('Database connection failed:', error);
+      // In development, provide a more helpful error message
+      if (process.env.NODE_ENV !== 'production') {
+        console.error('💡 Development tip: Check your DATABASE_URL in .env file');
+        console.error('💡 For local development, you can use: DATABASE_URL="postgresql://user:password@localhost:5432/bingo"');
+        console.error('💡 Make sure PostgreSQL is running locally or update the connection string');
+      }
       throw error;
     }
   }

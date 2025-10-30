@@ -216,48 +216,47 @@ export default function GamePage() {
         </div>
       </header>
 
-      <main className="container py-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <main className="container py-6 grid grid-cols-1 xl:grid-cols-2 gap-6">
         <section className="bg-white border rounded-xl p-4 shadow-sm">
-          <h2 className="font-semibold text-slate-800 mb-3">Questions (35)</h2>
-          <div className="hidden">
+          <h2 className="font-semibold text-slate-800 mb-3">Questions ({questions.length})</h2>
+          <div className="space-y-2 max-h-96 overflow-y-auto">
             {questions.map((q) => (
               <button
                 key={q.question_id}
                 onClick={() => onSelectQuestion(q.question_id)}
-                className={`text-left rounded-lg border px-3 py-2 hover:bg-blue-50 ${
-                  selectedQid === q.question_id ? "ring-2 ring-primary" : ""
+                className={`w-full text-left rounded-lg border px-3 py-2 hover:bg-blue-50 transition-colors ${
+                  selectedQid === q.question_id ? "ring-2 ring-primary bg-blue-50" : ""
                 }`}
               >
                 <div className="text-sm text-slate-800 line-clamp-2">
                   {q.question_text}
                 </div>
-                <div className="mt-1 text-xs">
-                  {q.is_real ? (
-                    <span className="text-green-700 bg-green-50 border border-green-200 px-2 py-0.5 rounded-md">
-                      Real
-                    </span>
-                  ) : (
-                    <span className="text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md">
-                      Fake
-                    </span>
+                <div className="mt-1 flex items-center justify-between">
+                  <span className="text-xs">
+                    {q.is_real ? (
+                      <span className="text-green-700 bg-green-50 border border-green-200 px-2 py-0.5 rounded-md">
+                        Real
+                      </span>
+                    ) : (
+                      <span className="text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md">
+                        Fake
+                      </span>
+                    )}
+                  </span>
+                  {solved.includes(q.grid_position || '') && (
+                    <span className="text-green-600 text-xs font-medium">✓ Solved</span>
                   )}
                 </div>
               </button>
             ))}
           </div>
           {selectedQuestion && (
-            <>
-              <div className="mt-4">
-                <div className="text-xs font-medium text-slate-500 mb-1">
-                  Question{" "}
-                  {Math.max(
-                    0,
-                    (questions ?? []).findIndex(
-                      (q) => q.question_id === selectedQid,
-                    ),
-                  ) + 1}
-                </div>
-                <pre className="whitespace-pre-wrap font-mono text-sm bg-slate-50 border border-slate-200 rounded-lg p-3 min-h-[60vh] max-h-[60vh] overflow-auto">
+            <div className="mt-4 border-t pt-4">
+              <div className="text-xs font-medium text-slate-500 mb-2">
+                Selected Question {Math.max(0, (questions ?? []).findIndex((q) => q.question_id === selectedQid)) + 1}
+              </div>
+              <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 min-h-32 max-h-48 overflow-auto">
+                <pre className="whitespace-pre-wrap font-mono text-sm text-slate-800">
                   {selectedQuestion.question_text}
                 </pre>
               </div>
@@ -302,7 +301,7 @@ export default function GamePage() {
                   Submit
                 </button>
               </form>
-            </>
+            </div>
           )}
           {status && (
             <div
