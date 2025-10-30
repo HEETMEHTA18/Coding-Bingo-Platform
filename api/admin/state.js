@@ -1,7 +1,21 @@
-import serverless from "serverless-http";
-import { createServer } from "../../server/index.js";
+import { handleAdminState } from "../../server/routes/admin.js";
 
-const app = createServer();
-const handler = serverless(app);
+export default async (req, res) => {
+  console.log('Admin state request:', req.method, req.query, req.body);
+  console.log('Environment check:', {
+    DATABASE_URL: process.env.DATABASE_URL ? 'SET' : 'NOT SET',
+    NODE_ENV: process.env.NODE_ENV
+  });
 
-export default handler;
+  try {
+    await handleAdminState(req, res);
+  } catch (error) {
+    console.error('Admin state error:', error);
+    if (!res.headersSent) {
+      res.status(500).json({
+        error: 'Internal server error',
+        message: error.message
+      });
+    }
+  }
+};
