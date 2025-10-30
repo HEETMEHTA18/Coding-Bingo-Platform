@@ -18,11 +18,6 @@ function getSqlConnection() {
         idle_timeout: parseInt(process.env.PG_IDLE_TIMEOUT || "60000"),
         connect_timeout: parseInt(process.env.PG_CONNECTION_TIMEOUT || "10000"),
         prepare: process.env.PG_PREPARE === "true",
-        // Add retry logic for connection issues
-        retry: {
-          max: 3,
-          timeout: 5000,
-        },
         // Handle SSL issues - Neon requires SSL
         ssl: connectionString.includes('neon.tech') ? { rejectUnauthorized: false } : false,
         // Additional Neon-specific options
