@@ -1,5 +1,5 @@
 import multer from "multer";
-import { handleUploadQuestions } from "../../server/routes/admin.js";
+import { handleUploadQuestions } from "../../server/routes/admin.ts";
 
 const upload = multer({ storage: multer.memoryStorage() });
 

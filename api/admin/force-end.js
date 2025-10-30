@@ -1,4 +1,4 @@
-import { handleForceEnd } from "../../server/routes/admin.js";
+import { handleForceEnd } from "../../server/routes/admin.ts";
 
 export default async (req, res) => {
   console.log('Force end request:', req.method, req.query, req.body);

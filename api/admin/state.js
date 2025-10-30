@@ -1,4 +1,4 @@
-import { handleAdminState } from "../../server/routes/admin.js";
+import { handleAdminState } from "../../server/routes/admin.ts";
 
 export default async (req, res) => {
   console.log('Admin state request:', req.method, req.query, req.body);

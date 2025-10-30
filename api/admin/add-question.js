@@ -1,4 +1,4 @@
-import { handleAddQuestion } from "../../server/routes/admin.js";
+import { handleAddQuestion } from "../../server/routes/admin.ts";
 
 export default async (req, res) => {
   console.log('Add question request:', req.method, req.query, req.body);

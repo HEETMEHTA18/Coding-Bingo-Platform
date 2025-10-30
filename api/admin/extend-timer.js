@@ -1,4 +1,4 @@
-import { handleExtendTimer } from "../../server/routes/admin.js";
+import { handleExtendTimer } from "../../server/routes/admin.ts";
 
 export default async (req, res) => {
   console.log('Extend timer request:', req.method, req.query, req.body);

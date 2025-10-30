@@ -1,4 +1,4 @@
-import { handleGameState } from "../../server/routes/game.js";
+import { handleGameState } from "../server/routes/game.ts";
 
 export default async (req, res) => {
   console.log('Game state request:', req.method, req.query, req.body);

@@ -1,4 +1,4 @@
-import { handleCreateRoom } from "../../server/routes/admin.js";
+import { handleCreateRoom } from "../../server/routes/admin.ts";
 
 export default async (req, res) => {
   console.log('Create room request:', req.method, req.query, req.body);

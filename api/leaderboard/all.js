@@ -1,4 +1,4 @@
-import { handleLeaderboardAll } from "../../server/routes/leaderboard.js";
+import { handleLeaderboardAll } from "../../server/routes/leaderboard.ts";
 
 export default async (req, res) => {
   console.log('Leaderboard all request:', req.method, req.query, req.body);

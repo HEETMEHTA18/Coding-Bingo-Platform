@@ -1,4 +1,4 @@
-import { handleSubmit } from "../../server/routes/game.js";
+import { handleSubmit } from "../server/routes/game.ts";
 
 export default async (req, res) => {
   console.log('Submit request:', req.method, req.query, req.body);

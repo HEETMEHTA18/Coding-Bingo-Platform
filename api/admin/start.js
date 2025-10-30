@@ -1,4 +1,4 @@
-import { handleStartGame } from "../../server/routes/admin.js";
+import { handleStartGame } from "../../server/routes/admin.ts";
 
 export default async (req, res) => {
   console.log('Start game request:', req.method, req.query, req.body);

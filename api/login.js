@@ -1,4 +1,4 @@
-import { handleLogin } from "../../server/routes/game.js";
+import { handleLogin } from "../server/routes/game.ts";
 
 export default async (req, res) => {
   console.log('Login request:', req.method, req.query, req.body);

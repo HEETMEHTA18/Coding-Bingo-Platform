@@ -1,4 +1,4 @@
-import { handleWipeUserData } from "../../server/routes/admin.js";
+import { handleWipeUserData } from "../../server/routes/admin.ts";
 
 export default async (req, res) => {
   console.log('Wipe user data request:', req.method, req.query, req.body);
