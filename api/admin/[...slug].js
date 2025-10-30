@@ -12,62 +12,62 @@ import {
 
 export default async (req, res) => {
   const { slug } = req.query;
-  const path = Array.isArray(slug) ? slug[0] : slug || '';
+  const path = Array.isArray(slug) ? slug[0] : slug || "";
 
-  console.log('Admin API request:', req.method, req.url, 'slug:', slug, 'path:', path);
-  console.log('Environment check:', {
-    DATABASE_URL: process.env.DATABASE_URL ? 'SET' : 'NOT SET',
+  console.log("Admin API request:", req.method, req.url, "slug:", slug, "path:", path);
+  console.log("Environment check:", {
+    DATABASE_URL: process.env.DATABASE_URL ? "SET" : "NOT SET",
     NODE_ENV: process.env.NODE_ENV
   });
 
   try {
     switch (path) {
-      case 'state':
+      case "state":
         await handleAdminState(req, res);
         break;
-      case 'create-room':
+      case "create-room":
         await handleCreateRoom(req, res);
         break;
-      case 'start':
+      case "start":
         await handleStartGame(req, res);
         break;
-      case 'extend-timer':
+      case "extend-timer":
         await handleExtendTimer(req, res);
         break;
-      case 'force-end':
+      case "force-end":
         await handleForceEnd(req, res);
         break;
-      case 'add-question':
+      case "add-question":
         await handleAddQuestion(req, res);
         break;
-      case 'delete-question':
+      case "delete-question":
         await handleDeleteQuestion(req, res);
         break;
-      case 'upload-questions':
+      case "upload-questions":
         // Handle file upload with multer
-        const multer = (await import('multer')).default;
+        const multer = (await import("multer")).default;
         const upload = multer({ storage: multer.memoryStorage() });
 
         upload.single("file")(req, res, async (err) => {
           if (err) {
-            console.error('Multer error:', err);
-            return res.status(400).json({ error: 'File upload error' });
+            console.error("Multer error:", err);
+            return res.status(400).json({ error: "File upload error" });
           }
           await handleUploadQuestions[1](req, res);
         });
         break;
-      case 'wipe':
+      case "wipe":
         await handleWipeUserData(req, res);
         break;
       default:
-        console.log('Unknown admin path:', path);
-        res.status(404).json({ error: 'Admin endpoint not found' });
+        console.log("Unknown admin path:", path);
+        res.status(404).json({ error: "Admin endpoint not found" });
     }
   } catch (error) {
-    console.error('Admin API error:', error);
+    console.error("Admin API error:", error);
     if (!res.headersSent) {
       res.status(500).json({
-        error: 'Internal server error',
+        error: "Internal server error",
         message: error.message
       });
     }

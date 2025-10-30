@@ -2,34 +2,34 @@ import { handleLogin, handleGameState, handleSubmit } from "../../server/routes/
 
 export default async (req, res) => {
   const { slug } = req.query;
-  const path = Array.isArray(slug) ? slug[0] : slug || '';
+  const path = Array.isArray(slug) ? slug[0] : slug || "";
 
-  console.log('Game API request:', req.method, req.url, 'slug:', slug, 'path:', path);
-  console.log('Environment check:', {
-    DATABASE_URL: process.env.DATABASE_URL ? 'SET' : 'NOT SET',
+  console.log("Game API request:", req.method, req.url, "slug:", slug, "path:", path);
+  console.log("Environment check:", {
+    DATABASE_URL: process.env.DATABASE_URL ? "SET" : "NOT SET",
     NODE_ENV: process.env.NODE_ENV
   });
 
   try {
     switch (path) {
-      case 'login':
+      case "login":
         await handleLogin(req, res);
         break;
-      case 'game-state':
+      case "game-state":
         await handleGameState(req, res);
         break;
-      case 'submit':
+      case "submit":
         await handleSubmit(req, res);
         break;
       default:
-        console.log('Unknown game path:', path);
-        res.status(404).json({ error: 'Game endpoint not found' });
+        console.log("Unknown game path:", path);
+        res.status(404).json({ error: "Game endpoint not found" });
     }
   } catch (error) {
-    console.error('Game API error:', error);
+    console.error("Game API error:", error);
     if (!res.headersSent) {
       res.status(500).json({
-        error: 'Internal server error',
+        error: "Internal server error",
         message: error.message
       });
     }

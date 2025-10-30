@@ -2,9 +2,9 @@ import { handleLeaderboard, handleLeaderboardAll } from "../../server/routes/lea
 
 export default async (req, res) => {
   const { slug } = req.query;
-  const path = Array.isArray(slug) ? slug.join('/') : slug || '';
+  const path = Array.isArray(slug) ? slug[0] : slug || '';
 
-  console.log('Leaderboard API request:', req.method, req.url, 'path:', path);
+  console.log('Leaderboard API request:', req.method, req.url, 'slug:', slug, 'path:', path);
   console.log('Environment check:', {
     DATABASE_URL: process.env.DATABASE_URL ? 'SET' : 'NOT SET',
     NODE_ENV: process.env.NODE_ENV
@@ -19,6 +19,7 @@ export default async (req, res) => {
         await handleLeaderboardAll(req, res);
         break;
       default:
+        console.log('Unknown leaderboard path:', path);
         res.status(404).json({ error: 'Leaderboard endpoint not found' });
     }
   } catch (error) {
