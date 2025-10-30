@@ -640,3 +640,5 @@ export default async (req, res) => {
     }
   }
 };
+
+export default handleAdminRequest;
