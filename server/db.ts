@@ -23,8 +23,13 @@ function getSqlConnection() {
           max: 3,
           timeout: 5000,
         },
-        // Handle SSL issues
-        ssl: connectionString.includes('sslmode=require') ? 'require' : false,
+        // Handle SSL issues - Neon requires SSL
+        ssl: connectionString.includes('neon.tech') ? { rejectUnauthorized: false } : false,
+        // Additional Neon-specific options
+        keep_alive: 30,
+        connection: {
+          application_name: 'bingo-platform',
+        },
       });
       console.log('Database connection established successfully');
     } catch (error) {
