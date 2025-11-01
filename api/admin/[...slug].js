@@ -1,4 +1,4 @@
-import { db } from "../../server/db.ts";
+import { db } from "../../server/db.js";
 import {
   rooms,
   questions as questionsTable,
@@ -7,7 +7,7 @@ import {
   teamSolvedPositions,
   teamQuestionMapping,
   wipeAudits,
-} from "../../server/schema.ts";
+} from "../../server/schema.js";
 import { eq, inArray, sql } from "drizzle-orm";
 import multer from "multer";
 
