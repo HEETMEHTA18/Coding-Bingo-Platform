@@ -167,7 +167,8 @@ const handleLeaderboardAll = async (req, res) => {
 };
 
 export default async (req, res) => {
-  const { slug } = req.query;
+  // Vercel passes catch-all routes with literal parameter name
+  const slug = req.query.slug || req.query['...slug'];
   const path = Array.isArray(slug) ? slug[0] : slug || "";
 
   console.log("Leaderboard API request:", req.method, req.url, "slug:", slug, "path:", path);
