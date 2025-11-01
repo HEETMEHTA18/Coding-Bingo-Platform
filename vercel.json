@@ -1,4 +1,9 @@
 {
   "buildCommand": "npm run vercel-build",
-  "outputDirectory": "dist/spa"
+  "outputDirectory": "dist/spa",
+  "functions": {
+    "api/**/*.js": {
+      "includeFiles": "server/**"
+    }
+  }
 }

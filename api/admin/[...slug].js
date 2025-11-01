@@ -146,8 +146,13 @@ const handleAdminState = async (req, res) => {
     };
     res.json(response);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Internal server error" });
+    console.error('handleAdminState error:', {
+      error: err,
+      message: err?.message,
+      code: err?.code,
+      roomCode
+    });
+    res.status(500).json({ error: "Internal server error", details: err?.message });
   }
 };
 
@@ -168,8 +173,13 @@ const handleCreateRoom = async (req, res) => {
     });
     res.json({ success: true });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Internal server error" });
+    console.error('handleCreateRoom error:', {
+      error: err,
+      message: err?.message,
+      code: err?.code,
+      body
+    });
+    res.status(500).json({ error: "Internal server error", details: err?.message });
   }
 };
 
