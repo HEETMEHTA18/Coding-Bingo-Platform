@@ -594,14 +594,37 @@ export default async (req, res) => {
   const { slug } = req.query;
   const path = Array.isArray(slug) ? slug[0] : slug || "";
 
-  console.log("Admin API request:", req.method, req.url, "slug:", slug, "path:", path);
+  console.log("=== Admin API Debug ===");
+  console.log("Method:", req.method);
+  console.log("URL:", req.url);
+  console.log("Query:", JSON.stringify(req.query));
+  console.log("Slug raw:", slug);
+  console.log("Path extracted:", path);
   console.log("Environment check:", {
     DATABASE_URL: process.env.DATABASE_URL ? "SET" : "NOT SET",
     NODE_ENV: process.env.NODE_ENV
   });
+  console.log("======================");
 
   try {
     switch (path) {
+      case "":
+        // Handle empty path - return available endpoints
+        res.json({ 
+          error: "No endpoint specified",
+          available_endpoints: [
+            "GET /api/admin/state?room=ROOMCODE",
+            "POST /api/admin/create-room",
+            "POST /api/admin/start",
+            "POST /api/admin/extend-timer",
+            "POST /api/admin/force-end",
+            "POST /api/admin/add-question",
+            "DELETE /api/admin/delete-question",
+            "POST /api/admin/upload-questions",
+            "POST /api/admin/wipe"
+          ]
+        });
+        break;
       case "state":
         await handleAdminState(req, res);
         break;
