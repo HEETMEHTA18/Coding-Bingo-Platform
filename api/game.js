@@ -105,7 +105,7 @@ export default async function handler(req, res) {
     const response = {
       team,
       questions: questionsToShow,
-      solvedPositions,
+      solved_positions: solvedPositions,
       room: {
         code: room.code,
         title: room.title,
