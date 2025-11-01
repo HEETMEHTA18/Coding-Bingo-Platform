@@ -1,4 +1,4 @@
-import { db } from "../../server/db.js";
+import { db } from "../../server/db.ts";
 import {
   rooms,
   questions as questionsTable,
@@ -7,7 +7,7 @@ import {
   teamSolvedPositions,
   teamQuestionMapping,
   wipeAudits,
-} from "../../server/schema.js";
+} from "../../server/schema.ts";
 import { eq, inArray, sql } from "drizzle-orm";
 import multer from "multer";
 
@@ -98,6 +98,7 @@ const handleAdminState = async (req, res) => {
   const roomCode = req.query.room || req.body?.room;
   if (!roomCode) return res.status(400).json({ error: "Room code required" });
   try {
+    console.log('handleAdminState - fetching room:', roomCode, 'DATABASE_URL:', process.env.DATABASE_URL ? 'SET' : 'NOT SET');
     const code = roomCode.toUpperCase();
     const [room] = await db.select().from(rooms).where(eq(rooms.code, code));
 
@@ -640,5 +641,3 @@ export default async (req, res) => {
     }
   }
 };
-
-export default handleAdminRequest;

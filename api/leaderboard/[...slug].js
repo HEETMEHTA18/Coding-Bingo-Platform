@@ -4,6 +4,7 @@ import { eq, sql } from "drizzle-orm";
 
 const handleLeaderboard = async (req, res) => {
   console.log('handleLeaderboard called with query:', req.query);
+  console.log('DATABASE_URL:', process.env.DATABASE_URL ? 'SET' : 'NOT SET');
   const roomCode = req.query.room;
   console.log(`Leaderboard request for room: ${roomCode}`);
   if (!roomCode) {

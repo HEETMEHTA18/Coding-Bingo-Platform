@@ -175,6 +175,9 @@ const handleLogin = async (req, res) => {
   }
 
   try {
+    console.log('handleLogin - DATABASE_URL:', process.env.DATABASE_URL ? 'SET' : 'NOT SET');
+    console.log('handleLogin - room_code:', body.room_code, 'team_name:', body.team_name);
+    
     // Enforce max length 10 for room code
     const code = body.room_code.toUpperCase().slice(0, 10);
 

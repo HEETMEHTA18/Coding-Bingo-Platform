@@ -13,19 +13,34 @@ function getSqlConnection() {
     const connectionString = process.env.DATABASE_URL || defaultLocal;
     try {
       console.log('Attempting database connection...');
-      sql = postgres(connectionString, {
-        max: parseInt(process.env.PG_MAX_POOL || "10"),
-        idle_timeout: parseInt(process.env.PG_IDLE_TIMEOUT || "60000"),
-        connect_timeout: parseInt(process.env.PG_CONNECTION_TIMEOUT || "10000"),
-        prepare: process.env.PG_PREPARE === "true",
-        // Handle SSL issues - Neon requires SSL
-        ssl: connectionString.includes('neon.tech') ? { rejectUnauthorized: false } : false,
-        // Additional Neon-specific options
-        keep_alive: 30,
+      console.log('Connection string hostname:', connectionString.split('@')[1]?.split('/')[0]);
+      
+      const isNeon = connectionString.includes('neon.tech');
+      const config: any = {
+        max: parseInt(process.env.PG_MAX_POOL || "20"),
+        idle_timeout: parseInt(process.env.PG_IDLE_TIMEOUT || "30000"),
+        connect_timeout: parseInt(process.env.PG_CONNECTION_TIMEOUT || "15000"),
+        prepare: false, // Disable prepared statements for better compatibility
+        // Neon-specific SSL configuration
+        ssl: isNeon ? "require" : false,
+        // Connection pooling and keep-alive
+        keep_alive: 60,
+        backoff: (attempt: number) => Math.min(Math.max(100, 40 * Math.pow(2, attempt)), 10000),
+        max_lifetime: 300,
         connection: {
           application_name: 'bingo-platform',
         },
+      };
+      
+      console.log('Database config:', {
+        isNeon,
+        maxPool: config.max,
+        connectTimeout: config.connect_timeout,
+        ssl: config.ssl,
+        prepare: config.prepare
       });
+      
+      sql = postgres(connectionString, config);
       console.log('Database connection established successfully');
     } catch (error) {
       console.error('Database connection failed:', error);
