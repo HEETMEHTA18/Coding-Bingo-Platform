@@ -65,9 +65,6 @@ export default function LeaderboardPage() {
     }
   };
 
-  useEffect(() => {
-    if (!room && !isAdmin) navigate("/");
-  }, [room, isAdmin, navigate]);
 
   useEffect(() => {
     load();

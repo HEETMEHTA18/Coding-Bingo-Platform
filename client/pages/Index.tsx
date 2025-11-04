@@ -12,6 +12,11 @@ export default function Index() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    const isAdmin = localStorage.getItem("bingo.admin") === "true";
+    if (isAdmin) {
+      navigate("/admin");
+      return;
+    }
     // If already logged in, go to game
     const saved = localStorage.getItem("bingo.team");
     try {
@@ -19,7 +24,7 @@ export default function Index() {
         saved && saved !== "undefined" && saved !== "null"
           ? JSON.parse(saved)
           : null;
-      if (parsed && parsed.team_id) {
+      if (parsed && parsed.id) {
         localStorage.removeItem("bingo.admin");
         navigate("/game");
       }

@@ -43,6 +43,11 @@ export default function GamePage() {
   const [now, setNow] = useState<number>(Date.now());
 
   useEffect(() => {
+    const isAdmin = localStorage.getItem("bingo.admin") === "true";
+    if (isAdmin) {
+      navigate("/admin");
+      return;
+    }
     if (!team) navigate("/");
   }, [team, navigate]);
 
@@ -188,168 +193,153 @@ export default function GamePage() {
     return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
   }, [room?.roundEndAt, now]);
 
-  const isSolvedPos = (pos: string) => solved.includes(pos);
-
   return (
-    <div className="min-h-screen bg-white">
-      <header className="sticky top-0 z-10 bg-white/80 backdrop-blur border-b">
-        <div className="container py-3 flex items-center justify-between">
-          <div>
-            <h1 className="font-bold text-slate-800">Game – Coding Bingo</h1>
-            <p className="text-sm text-slate-500">
-              Team: {team?.team_name} · Room: {room?.code}
-            </p>
-          </div>
-          <div className="flex items-center gap-3">
-            {timeLeft && (
-              <span className="px-3 py-1.5 rounded-full text-sm font-semibold bg-blue-50 text-blue-700 border border-blue-200">
-                ⏱ {timeLeft}
-              </span>
-            )}
-            <a
-              href="/leaderboard"
-              className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90"
-            >
-              Leaderboard
-            </a>
-          </div>
-        </div>
-      </header>
-
-      <main className="container py-6 grid grid-cols-1 xl:grid-cols-2 gap-6">
-        <section className="bg-white border rounded-xl p-4 shadow-sm">
-          <h2 className="font-semibold text-slate-800 mb-3">Questions ({questions.length})</h2>
-          <div className="space-y-2 max-h-96 overflow-y-auto">
-            {questions.map((q) => (
-              <button
-                key={q.question_id}
-                onClick={() => onSelectQuestion(q.question_id)}
-                className={`w-full text-left rounded-lg border px-3 py-2 hover:bg-blue-50 transition-colors ${
-                  selectedQid === q.question_id ? "ring-2 ring-primary bg-blue-50" : ""
-                }`}
-              >
-                <div className="text-sm text-slate-800 line-clamp-2">
-                  {q.question_text}
+    <div className="min-h-screen bg-gray-900 text-white flex justify-center items-center p-4 sm:p-6 lg:p-8">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 w-full max-w-7xl">
+        {/* Left Column */}
+        <div className="flex flex-col gap-6">
+          {/* Coding Challenge Section */}
+          <div className="bg-gray-800 rounded-2xl p-6 flex flex-col gap-6">
+            <div className="flex justify-between items-center">
+              <div className="flex items-center gap-4">
+                <div className="bg-purple-600 p-3 rounded-lg">
+                  {/* Placeholder for Laptop icon */}
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-laptop"><path d="M20 16V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9m16 0H4m16 0 1.28 2.55A1 1 0 0 1 20.7 20H3.3a1 1 0 0 1-.58-1.45L4 16"/></svg>
                 </div>
-                <div className="mt-1 flex items-center justify-between">
-                  <span className="text-xs">
-                    {q.is_real ? (
-                      <span className="text-green-700 bg-green-50 border border-green-200 px-2 py-0.5 rounded-md">
-                        Real
-                      </span>
-                    ) : (
-                      <span className="text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md">
-                        Fake
-                      </span>
-                    )}
-                  </span>
-                  {solved.includes(q.grid_position || '') && (
-                    <span className="text-green-600 text-xs font-medium">✓ Solved</span>
-                  )}
-                </div>
-              </button>
-            ))}
-          </div>
-          {selectedQuestion && (
-            <div className="mt-4 border-t pt-4">
-              <div className="text-xs font-medium text-slate-500 mb-2">
-                Selected Question {Math.max(0, (questions ?? []).findIndex((q) => q.question_id === selectedQid)) + 1}
+                <h2 className="font-bold text-2xl">Coding Challenge</h2>
               </div>
-              <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 min-h-32 max-h-48 overflow-auto">
-                <pre className="whitespace-pre-wrap font-mono text-sm text-slate-800">
-                  {selectedQuestion.question_text}
+              <div className="text-sm bg-gray-700 px-3 py-1.5 rounded-full">
+                {questions.length} questions available
+              </div>
+            </div>
+
+            {/* Question Display */}
+            <div className="bg-gray-900 rounded-lg p-4">
+              <div className="flex justify-between items-center mb-2">
+                <span className="font-semibold">Question {Math.max(0, (questions ?? []).findIndex((q) => q.question_id === selectedQid)) + 1}</span>
+                <span className="text-xs bg-gray-700 px-2 py-1 rounded">main.c</span>
+              </div>
+              <div className="bg-black text-left p-4 rounded-md overflow-x-auto">
+                <pre className="whitespace-pre-wrap font-mono text-sm">
+                  <code>{selectedQuestion?.question_text}</code>
                 </pre>
               </div>
-              <div className="mt-3 flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => selectByDelta(-1)}
-                  className="px-3 py-2 rounded-lg border font-semibold hover:bg-blue-50 mr-auto"
-                >
-                  Previous
-                </button>
-                <button
-                  type="button"
-                  onClick={() => selectByDelta(1)}
-                  className="px-3 py-2 rounded-lg border font-semibold hover:bg-blue-50"
-                >
-                  Skip
-                </button>
-                <button
-                  type="button"
-                  onClick={() => selectByDelta(1)}
-                  className="px-3 py-2 rounded-lg border font-semibold hover:bg-blue-50 ml-auto"
-                >
-                  Next
-                </button>
-              </div>
-              <form onSubmit={onSubmit} className="mt-3 flex gap-2">
-                <input
-                  disabled={disabled || submitting}
-                  value={answer}
-                  onChange={(e) => setAnswer(e.target.value)}
-                  placeholder="Enter output only"
-                  className="flex-1 rounded-lg border border-slate-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-60"
-                />
-                <button
-                  disabled={disabled || submitting}
-                  className="px-4 py-2 rounded-lg bg-primary text-primary-foreground font-semibold hover:bg-primary/90 disabled:opacity-60 flex items-center gap-2"
-                >
-                  {submitting && (
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  )}
-                  Submit
-                </button>
-              </form>
             </div>
-          )}
-          {status && (
-            <div
-              className={`mt-3 text-sm font-medium px-3 py-2 rounded-lg border ${
-                status.type === "success"
-                  ? "text-green-700 bg-green-50 border-green-200"
-                  : status.type === "error"
-                    ? "text-red-700 bg-red-50 border-red-200"
-                    : status.type === "warn"
-                      ? "text-amber-700 bg-amber-50 border-amber-200"
-                      : "text-slate-700 bg-slate-50 border-slate-200"
-              }`}
-            >
-              {status.text}
-            </div>
-          )}
-        </section>
 
-        <section className="bg-white border rounded-xl p-4 shadow-sm">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="font-semibold text-slate-800">Bingo Grid (5×5)</h2>
-            <span className="text-sm text-slate-600">Lines: {lines} / 5</span>
+            {/* Pagination Controls */}
+            <div className="flex justify-between items-center">
+               <button type="button" onClick={() => selectByDelta(-1)} className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>
+                Previous
+              </button>
+              <div className="flex items-center gap-2">
+                {/* Dots for pagination, simplified */}
+                <span className="w-2.5 h-2.5 bg-gray-600 rounded-full"></span>
+                <span className="w-2.5 h-2.5 bg-purple-500 rounded-full"></span>
+                <span className="w-2.5 h-2.5 bg-gray-600 rounded-full"></span>
+                <span className="w-2.5 h-2.5 bg-gray-600 rounded-full"></span>
+                <span className="w-2.5 h-2.5 bg-gray-600 rounded-full"></span>
+              </div>
+              <button type="button" onClick={() => selectByDelta(1)} className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg flex items-center gap-2">
+                Browse
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+              </button>
+            </div>
+          </div>
+          {/* Your Solution Section */}
+          <div className="bg-gray-800 rounded-2xl p-6 flex flex-col gap-4">
+            <div className="flex items-center gap-4">
+              <div className="bg-purple-600 p-3 rounded-lg">
+                {/* Placeholder for Lightbulb icon */}
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-lightbulb"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 9 5c0 1.3.5 2.6 1.5 3.5.7.8 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg>
+              </div>
+              <h2 className="font-bold text-2xl">Your Solution</h2>
+            </div>
+            <p className="text-sm text-gray-400">Enter your answer output</p>
+            <form onSubmit={onSubmit} className="flex flex-col gap-4">
+              <input
+                disabled={disabled || submitting}
+                value={answer}
+                onChange={(e) => setAnswer(e.target.value)}
+                placeholder="Type your solution here..."
+                className="bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
+              />
+              {status && (
+                <div
+                  className={`text-sm font-medium px-3 py-2 rounded-lg border ${
+                    status.type === "success"
+                      ? "text-green-400 bg-green-900/50 border-green-700"
+                      : status.type === "error"
+                        ? "text-red-400 bg-red-900/50 border-red-700"
+                        : status.type === "warn"
+                          ? "text-yellow-400 bg-yellow-900/50 border-yellow-700"
+                          : "text-gray-400 bg-gray-700/50 border-gray-600"
+                  }`}
+                >
+                  {status.text}
+                </div>
+              )}
+               <button
+                type="submit"
+                disabled={disabled || submitting}
+                className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center gap-2 transition-colors duration-300"
+              >
+                {submitting && (
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                )}
+                Submit Answer
+              </button>
+            </form>
+          </div>
+        </div>
+
+        {/* Right Column */}
+        <div className="bg-gray-800 rounded-2xl p-6 flex flex-col gap-6">
+          <div className="flex justify-between items-center">
+            <div className="flex items-center gap-4">
+              <div className="bg-green-500 p-3 rounded-lg">
+                {/* Placeholder for Dice icon */}
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-dice-5"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><path d="M16 8h.01"/><path d="M8 8h.01"/><path d="M12 12h.01"/><path d="M8 16h.01"/><path d="M16 16h.01"/></svg>
+              </div>
+              <h2 className="font-bold text-2xl">Bingo Grid</h2>
+            </div>
+            <div className="text-right">
+              <p className="text-sm font-semibold">Lines: {lines} / 5</p>
+              <p className="text-xs text-gray-400">{solved.length} / 25 cells filled</p>
+            </div>
           </div>
           <BingoGrid solved={solved} />
-          <p className="text-xs text-slate-500 mt-3">
-            Fill any 5 lines (row/column/diagonal) to win.
+           <p className="text-center text-sm text-gray-400">
+            Fill any 5 lines (row/column/diagonal) to win the game! 🚀
           </p>
-        </section>
-      </main>
+        </div>
+      </div>
     </div>
   );
 }
 
 function BingoGrid({ solved }: { solved: string[] }) {
-  const letters = ["A", "B", "C", "D", "E"];
+  const letters = ["B", "I", "N", "G", "O"];
+  const rows = ["A", "B", "C", "D", "E"];
   return (
     <div className="grid grid-cols-5 gap-2">
-      {letters.map((L, r) =>
-        Array.from({ length: 5 }).map((_, c) => {
-          const pos = `${letters[r]}${c + 1}`;
+      {/* BINGO headers */}
+      {letters.map((letter) => (
+        <div key={letter} className="text-center font-bold text-lg text-gray-400 pb-2">{letter}</div>
+      ))}
+
+      {/* Grid cells */}
+      {rows.map((rowLetter) =>
+        Array.from({ length: 5 }).map((_, colIndex) => {
+          const pos = `${rowLetter}${colIndex + 1}`;
           const isOn = solved.includes(pos);
           return (
             <div
               key={pos}
-              className={`aspect-square rounded-lg border flex items-center justify-center text-sm font-semibold ${
+              className={`aspect-square rounded-lg flex items-center justify-center text-sm font-semibold transition-all duration-300 ${
                 isOn
-                  ? "bg-green-50 border-green-300 text-green-800"
-                  : "bg-blue-50 border-blue-200 text-blue-800"
+                  ? "bg-green-500 text-white shadow-lg scale-105"
+                  : "bg-gray-700 text-gray-300"
               }`}
             >
               {pos}

@@ -132,7 +132,7 @@ export const createServer = () => {
   app.post("/api/admin/force-end", express.json({ limit: "10mb" }), handleForceEnd);
   app.post("/api/admin/add-question", express.json({ limit: "10mb" }), handleAddQuestion);
   app.post("/api/admin/delete-question", express.json({ limit: "10mb" }), handleDeleteQuestion);
-  app.post("/api/admin/upload-questions", handleUploadQuestions); // No JSON parsing for file uploads
+  app.post("/api/admin/upload-questions", upload.single('file'), handleUploadQuestions);
   app.post("/api/admin/wipe", express.json({ limit: "10mb" }), handleWipeUserData);
 
   // Leaderboard routes
