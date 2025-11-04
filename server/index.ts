@@ -125,7 +125,7 @@ export const createServer = () => {
   app.get("/api/demo", handleDemo);
 
   // Admin routes
-  app.get("/api/admin/state", express.json({ limit: "10mb" }), handleAdminState);
+  app.get("/api/admin/state", handleAdminState);
   app.post("/api/admin/create-room", express.json({ limit: "10mb" }), handleCreateRoom);
   app.post("/api/admin/start", express.json({ limit: "10mb" }), handleStartGame);
   app.post("/api/admin/extend-timer", express.json({ limit: "10mb" }), handleExtendTimer);
@@ -136,12 +136,12 @@ export const createServer = () => {
   app.post("/api/admin/wipe", express.json({ limit: "10mb" }), handleWipeUserData);
 
   // Leaderboard routes
-  app.get("/api/leaderboard", express.json({ limit: "10mb" }), handleLeaderboard);
-  app.get("/api/leaderboard/all", express.json({ limit: "10mb" }), handleLeaderboardAll);
+  app.get("/api/leaderboard", handleLeaderboard);
+  app.get("/api/leaderboard/all", handleLeaderboardAll);
 
   // Game routes
   app.post("/api/login", express.json({ limit: "10mb" }), handleLogin);
-  app.get("/api/game", express.json({ limit: "10mb" }), handleGameState);
+  app.get("/api/game", handleGameState);
   app.post("/api/submit", express.json({ limit: "10mb" }), handleSubmit);
 
   // Admin/debug: recent request timings
