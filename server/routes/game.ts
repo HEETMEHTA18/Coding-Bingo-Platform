@@ -61,14 +61,17 @@ async function generateQuestionMapping(
   const shuffledQuestions = seededShuffle(questionsToMap, teamId);
   const shuffledPositions = seededShuffle(gridPositions, teamId + "-grid");
 
-  // Map questions to positions
+  // Map questions to positions - only create mappings for questions that have positions
   const mappings = [];
-  for (let i = 0; i < Math.min(shuffledQuestions.length, shuffledPositions.length); i++) {
-    mappings.push({
-      teamId,
-      questionId: shuffledQuestions[i].questionId,
-      gridPosition: shuffledPositions[i],
-    });
+  const limit = Math.min(shuffledQuestions.length, shuffledPositions.length, 25);
+  for (let i = 0; i < limit; i++) {
+    if (shuffledQuestions[i] && shuffledPositions[i]) {
+      mappings.push({
+        teamId,
+        questionId: shuffledQuestions[i].questionId,
+        gridPosition: shuffledPositions[i],
+      });
+    }
   }
 
   if (mappings.length > 0) {

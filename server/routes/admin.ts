@@ -392,15 +392,27 @@ export const handleUploadQuestions = [
 
         let questionText = rawQuestionText;
 
-        // Optimized code detection - check for common code patterns more efficiently
+        // Preserve code formatting - detect if it's code and format it properly
         const looksLikeCode = (s: string) => {
           if (!s || s.length < 10) return false;
           return s.includes("#") || s.includes("int ") || s.includes("printf") ||
-                 s.includes(";") || s.includes("{") || s.includes("}\n") ||
+                 s.includes(";") || s.includes("{") || s.includes("}") ||
                  s.includes("\n") || /^\d+$/.test(s);
         };
 
-        if (!looksLikeCode(questionText)) {
+        // If it looks like code, preserve/restore formatting
+        if (looksLikeCode(questionText)) {
+          // Replace escaped newlines with actual newlines
+          questionText = questionText
+            .replace(/\\n/g, '\n')
+            .replace(/\\t/g, '  '); // Convert tabs to 2 spaces
+          
+          // If the code has line numbers at the start of lines, preserve them
+          // Otherwise, ensure proper indentation is maintained
+          const lines = questionText.split('\n');
+          questionText = lines.map(line => line.trimEnd()).join('\n').trim();
+        } else {
+          // For non-code, try to find better question text from title column
           const title = questionTitleIndex !== -1 ? values[questionTitleIndex]?.trim() : undefined;
           if (title && title.length > questionText.length) {
             questionText = title;

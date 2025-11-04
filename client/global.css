@@ -328,6 +328,7 @@
   @apply focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background;
 }
 
+
 /* Gradient backgrounds */
 .gradient-primary {
   background: linear-gradient(
@@ -347,4 +348,33 @@
 
 .gradient-error {
   background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+}
+
+/* Animation keyframes for Game page */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-10px); }
+  75% { transform: translateX(10px); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes scaleIn {
+  from { transform: scale(0.8); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+.animate-shake {
+  animation: shake 0.5s;
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.3s;
+}
+
+.animate-scaleIn {
+  animation: scaleIn 0.4s;
 }

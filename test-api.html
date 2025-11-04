@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>API Endpoint Tester</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    h1 {
+      color: #333;
+      border-bottom: 3px solid #4CAF50;
+      padding-bottom: 10px;
+    }
+    .test-section {
+      background: white;
+      padding: 20px;
+      margin: 20px 0;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    button {
+      background: #4CAF50;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      margin: 5px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    button:hover {
+      background: #45a049;
+    }
+    button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+    .result {
+      background: #f0f0f0;
+      padding: 15px;
+      margin: 10px 0;
+      border-radius: 4px;
+      font-family: monospace;
+      white-space: pre-wrap;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+    .success {
+      border-left: 4px solid #4CAF50;
+    }
+    .error {
+      border-left: 4px solid #f44336;
+    }
+    .status {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 3px;
+      font-size: 12px;
+      margin-left: 10px;
+    }
+    .status-200 {
+      background: #4CAF50;
+      color: white;
+    }
+    .status-error {
+      background: #f44336;
+      color: white;
+    }
+    #runAll {
+      background: #2196F3;
+      font-size: 16px;
+      padding: 12px 30px;
+    }
+    #runAll:hover {
+      background: #0b7dda;
+    }
+  </style>
+</head>
+<body>
+  <h1>🧪 Bingo Platform API Tester</h1>
+  <p>Test all API endpoints on: <strong>https://coding-bingo-platform.vercel.app</strong></p>
+  
+  <button id="runAll" onclick="runAllTests()">▶️ Run All Tests</button>
+  
+  <div id="results"></div>
+
+  <script>
+    const API_BASE = 'https://coding-bingo-platform.vercel.app';
+    let roomCode = 'DEMO';
+    let teamId = '';
+    let questionId = '';
+
+    function addResult(title, status, data, isError = false) {
+      const div = document.createElement('div');
+      div.className = 'test-section';
+      div.innerHTML = `
+        <h3>${title} <span class="status status-${isError ? 'error' : status}">${status}</span></h3>
+        <div class="result ${isError ? 'error' : 'success'}">${JSON.stringify(data, null, 2)}</div>
+      `;
+      document.getElementById('results').appendChild(div);
+    }
+
+    async function apiCall(endpoint, options = {}) {
+      try {
+        const response = await fetch(API_BASE + endpoint, {
+          ...options,
+          headers: {
+            'Content-Type': 'application/json',
+            ...options.headers,
+          },
+        });
+        const data = await response.json();
+        return { ok: response.ok, status: response.status, data };
+      } catch (error) {
+        return { ok: false, status: 'ERROR', data: { error: error.message } };
+      }
+    }
+
+    async function runAllTests() {
+      document.getElementById('results').innerHTML = '';
+      document.getElementById('runAll').disabled = true;
+
+      // Test 1: Admin State
+      addResult('1️⃣ GET /api/admin/state', 'Testing...', { message: 'Fetching admin state...' });
+      const state = await apiCall(`/api/admin/state?room=${roomCode}`);
+      addResult('1️⃣ GET /api/admin/state', state.status, state.data, !state.ok);
+      if (state.ok && state.data.questions?.length > 0) {
+        questionId = state.data.questions[0].id;
+      }
+
+      // Test 2: Create Room
+      const testRoom = 'TEST' + Date.now().toString().slice(-5);
+      const create = await apiCall('/api/admin/create-room', {
+        method: 'POST',
+        body: JSON.stringify({
+          code: testRoom,
+          title: 'Test Room',
+          durationMinutes: null,
+        }),
+      });
+      addResult(`2️⃣ POST /api/admin/create-room (${testRoom})`, create.status, create.data, !create.ok);
+      if (create.ok) roomCode = testRoom;
+
+      // Test 3: Add Question
+      const addQ = await apiCall('/api/admin/add-question', {
+        method: 'POST',
+        body: JSON.stringify({
+          room: roomCode,
+          text: 'What is 2+2?',
+          correctAnswer: '4',
+        }),
+      });
+      addResult('3️⃣ POST /api/admin/add-question', addQ.status, addQ.data, !addQ.ok);
+      
+      // Refresh state to get question ID
+      const state2 = await apiCall(`/api/admin/state?room=${roomCode}`);
+      if (state2.ok && state2.data.questions?.length > 0) {
+        questionId = state2.data.questions[state2.data.questions.length - 1].id;
+      }
+
+      // Test 4: Start Room
+      const start = await apiCall('/api/admin/start', {
+        method: 'POST',
+        body: JSON.stringify({
+          room: roomCode,
+          minutes: 60,
+        }),
+      });
+      addResult('4️⃣ POST /api/admin/start', start.status, start.data, !start.ok);
+
+      // Test 5: Login
+      const login = await apiCall('/api/login', {
+        method: 'POST',
+        body: JSON.stringify({
+          room_code: roomCode,
+          team_name: 'Test Team ' + Date.now(),
+        }),
+      });
+      addResult('5️⃣ POST /api/login', login.status, login.data, !login.ok);
+      if (login.ok) teamId = login.data.team_id;
+
+      // Test 6: Game State
+      if (teamId) {
+        const gameState = await apiCall(`/api/game-state?teamId=${encodeURIComponent(teamId)}`);
+        addResult('6️⃣ GET /api/game-state', gameState.status, gameState.data, !gameState.ok);
+      }
+
+      // Test 7: Game
+      if (roomCode && teamId) {
+        const game = await apiCall(`/api/game?room=${roomCode}&team=${encodeURIComponent(teamId)}`);
+        addResult('7️⃣ GET /api/game', game.status, game.data, !game.ok);
+      }
+
+      // Test 8: Submit Answer
+      if (roomCode && teamId && questionId) {
+        const submit = await apiCall('/api/submit', {
+          method: 'POST',
+          body: JSON.stringify({
+            room: roomCode,
+            teamId: teamId,
+            questionId: questionId,
+            answer: '4',
+          }),
+        });
+        addResult('8️⃣ POST /api/submit', submit.status, submit.data, !submit.ok);
+      }
+
+      // Test 9: Leaderboard
+      if (roomCode) {
+        const lb = await apiCall(`/api/leaderboard?room=${roomCode}`);
+        addResult('9️⃣ GET /api/leaderboard', lb.status, lb.data, !lb.ok);
+      }
+
+      // Test 10: Leaderboard All
+      const lbAll = await apiCall('/api/leaderboard/all');
+      addResult('🔟 GET /api/leaderboard/all', lbAll.status, lbAll.data, !lbAll.ok);
+
+      document.getElementById('runAll').disabled = false;
+      addResult('✅ TEST COMPLETE', 'DONE', {
+        message: 'All tests completed! Review results above.',
+        timestamp: new Date().toISOString(),
+      });
+    }
+  </script>
+</body>
+</html>
