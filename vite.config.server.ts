@@ -7,7 +7,7 @@ export default defineConfig({
     lib: {
       entry: path.resolve(__dirname, "server/index.ts"),
       name: "server",
-      fileName: "production",
+      fileName: "index",
       formats: ["es"],
     },
     outDir: "dist/server",

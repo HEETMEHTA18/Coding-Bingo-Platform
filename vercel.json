@@ -1,9 +1,19 @@
 {
-  "buildCommand": "npm run vercel-build",
+  "version": 2,
+  "buildCommand": "pnpm install && pnpm run build",
   "outputDirectory": "dist/spa",
+  "installCommand": "pnpm install --prod=false",
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "/api/server"
+    }
+  ],
   "functions": {
-    "api/**/*.js": {
-      "includeFiles": "server/**"
+    "api/server.js": {
+      "memory": 1024,
+      "maxDuration": 10,
+      "includeFiles": "dist/server/**"
     }
   }
 }

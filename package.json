@@ -16,7 +16,7 @@
     "build:client": "vite build",
     "build:server": "vite build --config vite.config.server.ts",
     "vercel-build": "npm run build:client && npm run build:server",
-    "start": "node dist/server/node-build.mjs",
+    "start": "node dist/server/index.mjs",
     "generate": "drizzle-kit generate",
     "migrate": "drizzle-kit migrate",
     "test": "vitest --run",
