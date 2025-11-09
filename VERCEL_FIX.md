@@ -1,6 +1,60 @@
 # Vercel Deployment Fix - Applied ✅
 
-## Problem
+## Latest Fix (Build Error)
+
+### Problem
+```
+vite.config.ts:4:29: ERROR: Could not resolve "./server"
+Build failed during Vercel deployment
+```
+
+### Root Cause
+The `vite.config.ts` was importing `createServer` from `'./server'` at the top level. During Vercel build, TypeScript source files aren't transpiled yet, so the import fails.
+
+### Solution
+Changed from static import to dynamic import inside the plugin:
+
+**Before:**
+```typescript
+import { createServer } from "./server";
+
+function expressPlugin(): Plugin {
+  return {
+    name: "express-plugin",
+    apply: "serve",
+    configureServer(server) {
+      const app = createServer();
+      server.middlewares.use(app);
+    },
+  };
+}
+```
+
+**After:**
+```typescript
+// No import at top level
+
+function expressPlugin(): Plugin {
+  return {
+    name: "express-plugin",
+    apply: "serve",
+    async configureServer(server) {
+      const { createServer } = await import("./server/index.js");
+      const app = createServer();
+      server.middlewares.use(app);
+    },
+  };
+}
+```
+
+**Why this works:**
+- Plugin has `apply: "serve"` so it only runs during development
+- Dynamic import is never executed during build process
+- Build completes without trying to resolve `./server`
+
+---
+
+## Original Problem (Function Limit)
 ```
 Error: No more than 12 Serverless Functions can be added to a Deployment on the Hobby plan.
 ```
