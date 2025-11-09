@@ -123,6 +123,7 @@ export default function AdminPage() {
           options: [], // TODO: Add options support
           correctAnswer: parseInt(correct_answer),
           points: 1, // TODO: Add points support
+          isReal: is_real,
         },
       };
       await apiFetch("/api/admin/add-question", {
@@ -324,12 +325,13 @@ export default function AdminPage() {
               <input
                 value={roomCode}
                 onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
+                required
                 className="w-full rounded-xl border border-slate-200 px-4 py-3 bg-white/70 backdrop-blur-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                 placeholder="ABC123"
               />
             </div>
             <button
-              disabled={loading.createRoom}
+              disabled={loading.createRoom || !roomCode.trim()}
               className="px-6 py-3 rounded-xl bg-gradient-to-r from-purple-500 to-pink-600 text-white font-semibold hover:from-purple-600 hover:to-pink-700 disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2 shadow-lg hover:shadow-xl transition-all transform hover:scale-105"
             >
               {loading.createRoom && (
@@ -596,9 +598,9 @@ export default function AdminPage() {
               File Format Requirements:
             </h3>
             <ul className="text-sm text-blue-700 dark:text-blue-300 space-y-1">
-              <li>• Upload a CSV file with questions data</li>
-              <li>• First row should be headers</li>
-              <li>
+              <li key="csv-upload">• Upload a CSV file with questions data</li>
+              <li key="headers">• First row should be headers</li>
+              <li key="required-cols">
                 • Required columns:{" "}
                 <code className="bg-blue-100 dark:bg-blue-900 px-1 rounded">
                   question_text
@@ -616,7 +618,7 @@ export default function AdminPage() {
                   Answer
                 </code>
               </li>
-              <li>
+              <li key="optional-cols">
                 • Optional column:{" "}
                 <code className="bg-blue-100 dark:bg-blue-900 px-1 rounded">
                   is_real
@@ -627,7 +629,7 @@ export default function AdminPage() {
                 </code>{" "}
                 (true/false or 1/0, defaults to true)
               </li>
-              <li>• Use quotes around text containing commas</li>
+              <li key="commas">• Use quotes around text containing commas</li>
             </ul>
             <div className="mt-3 p-3 bg-white dark:bg-slate-800 rounded-lg border text-xs font-mono text-gray-600 dark:text-gray-300">
               ID,Code,Answer,Difficulty,Topic

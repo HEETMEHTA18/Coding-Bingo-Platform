@@ -83,3 +83,24 @@ export const wipeAudits = pgTable("wipe_audits", {
   options: text("options"),
   deletedCounts: text("deleted_counts"),
 });
+
+// Store all submission attempts (correct and incorrect)
+export const submissionAttempts = pgTable("submission_attempts", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  teamId: text("team_id")
+    .notNull()
+    .references(() => teams.teamId),
+  questionId: integer("question_id")
+    .notNull()
+    .references(() => questions.questionId),
+  roomCode: text("room_code")
+    .notNull()
+    .references(() => rooms.code),
+  submittedAnswer: text("submitted_answer").notNull(),
+  isCorrect: boolean("is_correct").notNull(),
+  position: text("position"), // Grid position if correct
+  attemptedAt: timestamp("attempted_at").notNull().defaultNow(),
+  isDeleted: boolean("is_deleted")
+    .default(false)
+    .notNull(),
+});

@@ -14,6 +14,7 @@ import {
   teamSolvedQuestions,
   teamQuestionMapping,
   teamSolvedPositions,
+  submissionAttempts,
 } from "../schema.js";
 import { eq, and, sql } from "drizzle-orm";
 
@@ -50,6 +51,8 @@ async function generateQuestionMapping(
     return;
   }
 
+  console.log(`Found ${roomQuestions.length} total questions for room ${roomCode}`);
+
   // Build grid positions (25 positions: A1-E5)
   const letters = ["A", "B", "C", "D", "E"];
   const gridPositions: string[] = [];
@@ -57,26 +60,37 @@ async function generateQuestionMapping(
     for (let c = 1; c <= 5; c++) gridPositions.push(`${L}${c}`);
 
   // Take up to 25 questions, shuffle them randomly
-  const questionsToMap = roomQuestions.slice(0, 25);
+  const questionsToMap = roomQuestions.slice(0, Math.min(25, roomQuestions.length));
+  console.log(`Mapping ${questionsToMap.length} questions for team ${teamId}`);
+  
   const shuffledQuestions = seededShuffle(questionsToMap, teamId);
-  const shuffledPositions = seededShuffle(gridPositions, teamId + "-grid");
+  const shuffledPositions = seededShuffle(gridPositions.slice(0, questionsToMap.length), teamId + "-grid");
 
   // Map questions to positions - only create mappings for questions that have positions
   const mappings = [];
   const limit = Math.min(shuffledQuestions.length, shuffledPositions.length, 25);
+  
+  console.log(`Creating ${limit} mappings`);
+  
   for (let i = 0; i < limit; i++) {
     if (shuffledQuestions[i] && shuffledPositions[i]) {
       mappings.push({
         teamId,
         questionId: shuffledQuestions[i].questionId,
         gridPosition: shuffledPositions[i],
+        isDeleted: false,
       });
     }
   }
 
   if (mappings.length > 0) {
-    console.log(`Pre-mapping ${mappings.length} questions to grid positions for team ${teamId}`);
-    await db.insert(teamQuestionMapping).values(mappings);
+    console.log(`Inserting ${mappings.length} question mappings for team ${teamId}`);
+    try {
+      await db.insert(teamQuestionMapping).values(mappings).onConflictDoNothing();
+      console.log(`Successfully mapped ${mappings.length} questions`);
+    } catch (error) {
+      console.error(`Error inserting mappings:`, error);
+    }
   }
 }
 
@@ -386,10 +400,12 @@ export const handleGameState: RequestHandler = async (req, res) => {
       id: String(q.questionId),
       question_id: q.questionId,
       text: q.questionText,
+      question_text: q.questionText, // Add this for frontend compatibility
       options: [], // kept empty for now to minimize payload
       // omit correctAnswer from game-state response to reduce payload and avoid leaking answers
       points: 10,
-      grid_position: mappingByQid[q.questionId] || null,
+      is_real: q.isReal, // Include whether this is a real or fake question
+      grid_position: null, // Remove mapping - positions assigned randomly on solve
     }));
 
     // Get solved positions for this team
@@ -468,6 +484,21 @@ export const handleSubmit: RequestHandler = async (req, res) => {
       body.answer.trim().toLowerCase();
     const points = correct ? 10 : 0;
 
+    // Determine if this is a real question (gives bingo points)
+    const isRealQuestion = question.isReal;
+    let assignedPosition: string | null = null;
+
+    // Record submission attempt (both correct and incorrect)
+    await db.insert(submissionAttempts).values({
+      teamId: body.teamId,
+      questionId: questionIdNum,
+      roomCode: code,
+      submittedAnswer: body.answer.trim(),
+      isCorrect: correct,
+      position: null, // No pre-mapping
+      attemptedAt: new Date(),
+    });
+
     // Get current team data
     const currentTeamResult = await db
       .select()
@@ -475,23 +506,35 @@ export const handleSubmit: RequestHandler = async (req, res) => {
       .where(eq(teams.teamId, body.teamId));
     const currentTeamData = currentTeamResult[0];
 
-    // Allow submissions even after completing lines - no winner restriction
-
     // Update team score (lines completed)
     let updatedTeamRow: any = null;
-    if (correct) {
-      // Fetch existing mapping for this question (should already exist from pre-mapping)
-      const mappingResult = await db
+    if (correct && isRealQuestion) {
+      // Only real questions contribute to bingo
+      // Check if question was already solved by this team
+      const alreadySolved = await db
         .select()
-        .from(teamQuestionMapping)
+        .from(teamSolvedQuestions)
         .where(
           and(
-            eq(teamQuestionMapping.teamId, body.teamId),
-            eq(teamQuestionMapping.questionId, questionIdNum)
+            eq(teamSolvedQuestions.teamId, body.teamId),
+            eq(teamSolvedQuestions.questionId, questionIdNum)
           )
         );
 
-      // Now do the transaction using Drizzle ORM
+      if (alreadySolved.length > 0) {
+        // Question already solved - don't assign new grid position
+        // Just return success without modifying grid
+        return res.json({
+          correct: true,
+          points: 0, // No additional points for re-solving
+          newScore: currentTeamData.linesCompleted * 10, // Keep existing score
+          isFake: false,
+          assignedPosition: null,
+          message: "You already solved this question!",
+        } as SubmissionResult & { isFake?: boolean; assignedPosition?: string | null; message?: string });
+      }
+
+      // Assign a random unfilled grid position
       updatedTeamRow = await db.transaction(async (tx) => {
         const t0 = Date.now();
 
@@ -502,39 +545,42 @@ export const handleSubmit: RequestHandler = async (req, res) => {
           solvedAt: new Date(),
         });
 
-        // If question is mapped to a grid position, mark it as solved
-        if (mappingResult.length > 0) {
-          const position = mappingResult[0].gridPosition;
-
-          // Check if already solved (prevent duplicates)
-          const existingSolved = await tx
-            .select()
-            .from(teamSolvedPositions)
-            .where(
-              and(
-                eq(teamSolvedPositions.teamId, body.teamId),
-                eq(teamSolvedPositions.position, position)
-              )
-            )
-            .limit(1);
-
-          if (existingSolved.length === 0) {
-            await tx.insert(teamSolvedPositions).values({
-              teamId: body.teamId,
-              position: position,
-            });
-          }
-        }
-
-        // Recompute linesCompleted from solved positions
+        // Get all currently solved positions for this team
         const solvedPositionsResult = await tx
           .select({ position: teamSolvedPositions.position })
           .from(teamSolvedPositions)
           .where(eq(teamSolvedPositions.teamId, body.teamId));
 
-        const solvedPositions = solvedPositionsResult.map(
-          (row) => row.position,
-        );
+        const solvedPositions = solvedPositionsResult.map(row => row.position);
+
+        // Generate all possible grid positions (A1-E5)
+        const allPositions: string[] = [];
+        const rows = ['A', 'B', 'C', 'D', 'E'];
+        for (const row of rows) {
+          for (let col = 1; col <= 5; col++) {
+            allPositions.push(`${row}${col}`);
+          }
+        }
+
+        // Find unfilled positions
+        const unfilledPositions = allPositions.filter(pos => !solvedPositions.includes(pos));
+
+        // If there are unfilled positions, randomly select one
+        if (unfilledPositions.length > 0) {
+          const randomIndex = Math.floor(Math.random() * unfilledPositions.length);
+          assignedPosition = unfilledPositions[randomIndex];
+
+          // Mark this position as solved
+          await tx.insert(teamSolvedPositions).values({
+            teamId: body.teamId,
+            position: assignedPosition,
+          });
+
+          // Add to solved positions for line calculation
+          solvedPositions.push(assignedPosition);
+        }
+
+        // Recompute linesCompleted from solved positions
         const linesNow = computeLinesFromPositions(solvedPositions);
 
         // Update team
@@ -561,10 +607,15 @@ export const handleSubmit: RequestHandler = async (req, res) => {
         );
         return updatedTeams[0];
       });
-    }
-
-    // If not correct, fetch current team once (cheap single select)
-    if (!correct) {
+    } else if (correct && !isRealQuestion) {
+      // Fake question - correct but no bingo point
+      const teamRes = await db
+        .select()
+        .from(teams)
+        .where(eq(teams.teamId, body.teamId));
+      updatedTeamRow = teamRes[0] || null;
+    } else if (!correct) {
+      // Incorrect answer
       const teamRes = await db
         .select()
         .from(teams)
@@ -590,10 +641,12 @@ export const handleSubmit: RequestHandler = async (req, res) => {
 
     const result: SubmissionResult = {
       correct,
-      points: correct ? 10 : 0, // Points for correct answer
+      points: correct && isRealQuestion ? 10 : 0, // Only real questions give points
       newScore: (updatedTeamRow?.linesCompleted || 0) * 10, // Score based on lines completed
+      isFake: !isRealQuestion, // Indicate if this is a fake question
+      assignedPosition: assignedPosition, // The randomly assigned grid position
       achievement:
-        correct && (updatedTeamRow?.linesCompleted || 0) >= 5
+        correct && isRealQuestion && (updatedTeamRow?.linesCompleted || 0) >= 5
           ? {
               id: "bingo-master",
               title: "Bingo Master",
@@ -601,11 +654,63 @@ export const handleSubmit: RequestHandler = async (req, res) => {
               icon: "🏆",
             }
           : undefined,
-    };
+    } as any;
 
     res.json(result);
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+// Handler for recent submissions
+export const handleRecentSubmissions: RequestHandler = async (req, res) => {
+  const roomCode = (req.query.room as string)?.toUpperCase().slice(0, 10);
+  
+  if (!roomCode) {
+    return res.status(400).json({ error: "Room code required" });
+  }
+
+  try {
+    // Add timeout wrapper for database query
+    const queryPromise = db
+      .select({
+        id: submissionAttempts.id,
+        teamId: submissionAttempts.teamId,
+        questionId: submissionAttempts.questionId,
+        submittedAnswer: submissionAttempts.submittedAnswer,
+        isCorrect: submissionAttempts.isCorrect,
+        position: submissionAttempts.position,
+        attemptedAt: submissionAttempts.attemptedAt,
+      })
+      .from(submissionAttempts)
+      .where(eq(submissionAttempts.roomCode, roomCode))
+      .orderBy(sql`${submissionAttempts.attemptedAt} DESC`)
+      .limit(20);
+
+    // Set a 10 second timeout for the query
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error('Query timeout')), 10000);
+    });
+
+    const recentSubmissions = await Promise.race([queryPromise, timeoutPromise]);
+
+    // Format the response
+    const rows = recentSubmissions.map(sub => ({
+      teamId: sub.teamId,
+      questionId: sub.questionId,
+      submittedAnswer: sub.submittedAnswer,
+      isCorrect: sub.isCorrect,
+      position: sub.position || null,
+      solvedAt: sub.attemptedAt,
+    }));
+
+    res.json({ rows });
+  } catch (error) {
+    console.error("Error fetching recent submissions:", error);
+    
+    // Return empty array instead of error to prevent UI from breaking
+    // This is a non-critical feature (recent activity display)
+    res.json({ rows: [] });
   }
 };

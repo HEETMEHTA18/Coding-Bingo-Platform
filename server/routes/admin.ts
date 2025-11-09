@@ -276,7 +276,7 @@ export const handleAddQuestion: RequestHandler = async (req, res) => {
       .values({
         roomCode: code,
         questionText: body.question.text,
-        isReal: true,
+        isReal: body.question.isReal ?? true,
         correctAnswer: String(body.question.correctAnswer),
       })
       .returning();
@@ -373,8 +373,9 @@ export const handleUploadQuestions = [
       const questionTextIndex = getColumnIndex(['question_text', 'code', 'question_code']);
       const correctAnswerIndex = getColumnIndex(['correct_answer', 'answer', 'expected_output']);
       const questionTitleIndex = headerMap.get('question_title') ?? -1;
+      const isRealIndex = getColumnIndex(['is_real', 'isreal', 'real', 'is_fake', 'fake']);
 
-      console.log("Column indices:", { questionTextIndex, correctAnswerIndex });
+      console.log("Column indices:", { questionTextIndex, correctAnswerIndex, isRealIndex });
 
       if (questionTextIndex === -1 || correctAnswerIndex === -1)
         return res.status(400).json({ error: "CSV missing required columns. Expected 'question_text', 'code', or 'question_code' for questions and 'correct_answer', 'answer', or 'expected_output' for answers" });
@@ -389,6 +390,20 @@ export const handleUploadQuestions = [
         const correctAnswer = values[correctAnswerIndex]?.trim();
 
         if (!rawQuestionText || !correctAnswer) continue;
+
+        // Determine if question is real or fake
+        let isReal = true;
+        if (isRealIndex !== -1) {
+          const isRealValue = values[isRealIndex]?.toLowerCase().trim();
+          // Check for fake/false values
+          if (isRealValue === 'false' || isRealValue === '0' || isRealValue === 'fake' || isRealValue === 'no') {
+            isReal = false;
+          }
+          // Check for real/true values (explicit)
+          else if (isRealValue === 'true' || isRealValue === '1' || isRealValue === 'real' || isRealValue === 'yes') {
+            isReal = true;
+          }
+        }
 
         let questionText = rawQuestionText;
 
@@ -422,7 +437,7 @@ export const handleUploadQuestions = [
         questionsToInsert.push({
           roomCode: code,
           questionText,
-          isReal: true,
+          isReal: isReal,
           correctAnswer,
         });
       }

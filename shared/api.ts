@@ -89,6 +89,7 @@ export interface AdminAddQuestionRequest {
     options: string[];
     correctAnswer: number;
     points: number;
+    isReal?: boolean;
   };
 }
 

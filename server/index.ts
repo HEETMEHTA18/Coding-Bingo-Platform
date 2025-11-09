@@ -5,6 +5,7 @@ import multer from "multer";
 import compression from "compression";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
+import { checkDbHealth } from "./db.js";
 import { handlePing, handleDemo } from "./routes/demo";
 import {
   handleAdminState,
@@ -18,7 +19,7 @@ import {
   handleWipeUserData,
 } from "./routes/admin";
 import { handleLeaderboard, handleLeaderboardAll } from "./routes/leaderboard";
-import { handleLogin, handleGameState, handleSubmit } from "./routes/game";
+import { handleLogin, handleGameState, handleSubmit, handleRecentSubmissions } from "./routes/game";
 import {
   requestTimingMiddleware,
   getRequestTimings,
@@ -143,10 +144,34 @@ export const createServer = () => {
   app.post("/api/login", express.json({ limit: "10mb" }), handleLogin);
   app.get("/api/game", express.json({ limit: "10mb" }), handleGameState);
   app.post("/api/submit", express.json({ limit: "10mb" }), handleSubmit);
+  app.get("/api/recent-submissions", express.json({ limit: "10mb" }), handleRecentSubmissions);
 
   // Admin/debug: recent request timings
   app.get("/api/admin/request-timings", (req, res) => {
     res.json({ timings: getRequestTimings() });
+  });
+
+  // Health check endpoint
+  app.get("/api/health", async (req, res) => {
+    try {
+      const dbHealthy = await Promise.race([
+        checkDbHealth(),
+        new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 5000))
+      ]);
+      
+      res.json({
+        status: dbHealthy ? "healthy" : "degraded",
+        database: dbHealthy ? "connected" : "timeout",
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      res.status(503).json({
+        status: "unhealthy",
+        database: "error",
+        timestamp: new Date().toISOString(),
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
   });
 
   // Add more routes here...

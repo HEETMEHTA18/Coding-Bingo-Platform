@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useToast } from "@/hooks/use-toast";
 import type {
   GameStateResponse,
   SubmissionResult,
@@ -25,6 +26,7 @@ function useRoom(): Room | null {
 
 export default function GamePage() {
   const navigate = useNavigate();
+  const { toast } = useToast();
   const team = useTeam();
   const [room, setRoom] = useState<Room | null>(useRoom());
   const [questions, setQuestions] = useState<GameStateResponse["questions"]>(
@@ -42,7 +44,14 @@ export default function GamePage() {
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [now, setNow] = useState<number>(Date.now());
   const [recentSubs, setRecentSubs] = useState<
-    { teamId: string; questionId: number; solvedAt: string | Date; position: string | null }[]
+    { 
+      teamId: string; 
+      questionId: number; 
+      submittedAnswer?: string;
+      isCorrect?: boolean;
+      solvedAt: string | Date; 
+      position: string | null;
+    }[]
   >([]);
 
   useEffect(() => {
@@ -81,11 +90,16 @@ export default function GamePage() {
     setRoom(data.room as GameStateResponse["room"]);
     localStorage.setItem("bingo.room", JSON.stringify(data.room));
     
-    // FILTER: Only show questions that have a grid_position (mapped questions)
-    const mappedQuestions = (data.questions as GameStateResponse["questions"]).filter(
-      q => q.grid_position !== null && q.grid_position !== undefined
-    );
-    setQuestions(mappedQuestions);
+    // // Debug logging
+    // console.log("📊 Total questions received:", data.questions?.length);
+    // console.log("📊 Questions with grid_position:", (data.questions as GameStateResponse["questions"]).filter(q => q.grid_position).length);
+    
+    // Show ALL questions, not just mapped ones
+    // Users can browse all questions, but only mapped ones contribute to bingo
+    const allQuestions = data.questions as GameStateResponse["questions"];
+    
+    // console.log("📊 All questions to display:", allQuestions.length);
+    setQuestions(allQuestions);
     
     setSolved(data.solved_positions as string[]);
     // derive lines
@@ -101,9 +115,11 @@ export default function GamePage() {
         if (rs.ok) {
           const j = await rs.json();
           if (Array.isArray(j.rows)) {
-            setRecentSubs(j.rows.map((r) => ({
+            setRecentSubs(j.rows.map((r: any) => ({
               teamId: r.teamId,
               questionId: r.questionId,
+              submittedAnswer: r.submittedAnswer,
+              isCorrect: r.isCorrect,
               solvedAt: r.solvedAt,
               position: r.position || null,
             })));
@@ -126,9 +142,11 @@ export default function GamePage() {
           .then((r) => r.ok ? r.json() : null)
           .then((j) => {
             if (j && Array.isArray(j.rows)) {
-              setRecentSubs(j.rows.map((r) => ({
+              setRecentSubs(j.rows.map((r: any) => ({
                 teamId: r.teamId,
                 questionId: r.questionId,
+                submittedAnswer: r.submittedAnswer,
+                isCorrect: r.isCorrect,
                 solvedAt: r.solvedAt,
                 position: r.position || null,
               })));
@@ -156,6 +174,147 @@ export default function GamePage() {
     () => (questions ?? []).find((q) => q.question_id === selectedQid) || null,
     [questions, selectedQid],
   );
+  
+  // Format code with proper indentation for C programs
+  const formatCode = (code: string): string => {
+    if (!code) return '';
+    
+    let formatted = code;
+    
+    // Step 1: Aggressively break everything onto separate lines
+    formatted = formatted
+      // Newline after preprocessor directives
+      .replace(/(#include\s*<[^>]+>)/g, '$1\n')
+      .replace(/(#include\s*"[^"]+")/g, '$1\n')
+      .replace(/(#define\s+\w+[^\n]*)/g, '$1\n')
+      
+      // Break function declaration
+      .replace(/\b(int|void|float|double|char|long|short|unsigned)\s+(main|[a-zA-Z_]\w*)\s*\(/g, '\n$1 $2(')
+      
+      // Newline after function opening brace
+      .replace(/\)\s*\{/g, ') {\n')
+      
+      // Break variable declarations - newline after each semicolon
+      .replace(/;\s*(?![\n})\s])/g, ';\n')
+      
+      // Break if statements - ensure condition and body on separate logical lines
+      .replace(/\bif\s*\(/g, 'if (')
+      .replace(/\)\s*(?=\w)/g, ')\n')
+      
+      // Break else if chains - CRITICAL for your case
+      .replace(/;\s*}\s*else\s+if\s*\(/g, ';\n}\nelse if (')
+      .replace(/\}\s*else\s+if\s*\(/g, '}\nelse if (')
+      .replace(/;\s*else\s+if\s*\(/g, ';\n}\nelse if (')
+      
+      // Break else statements
+      .replace(/;\s*}\s*else\s+(?!if)/g, ';\n}\nelse ')
+      .replace(/\}\s*else\s+(?!if)/g, '}\nelse ')
+      .replace(/;\s*else\s+(?!if)/g, ';\n}\nelse ')
+      
+      // Ensure opening braces start blocks properly
+      .replace(/\{(?!\n)/g, '{\n')
+      
+      // Break switch/case statements
+      .replace(/\bswitch\s*\(/g, 'switch (')
+      .replace(/\bcase\s+/g, '\ncase ')
+      .replace(/\bdefault\s*:/g, '\ndefault:')
+      .replace(/break\s*;/g, 'break;\n')
+      
+      // Break while/for loops
+      .replace(/\bwhile\s*\(/g, 'while (')
+      .replace(/\bfor\s*\(/g, 'for (')
+      
+      // Keep for loop parts together but add spaces
+      .replace(/;\s*(?=[^)]*\))/g, '; ')
+      
+      // Break do-while
+      .replace(/\bdo\s*\{/g, 'do {\n')
+      .replace(/\}\s*while/g, '}\nwhile')
+      
+      // Function calls - keep on one line but ensure newline after
+      .replace(/(printf|scanf|fprintf|fscanf|sprintf|sscanf|puts|gets|getchar|putchar)\s*\([^)]*\)\s*;/g, '$&\n')
+      
+      // Return statements
+      .replace(/\breturn\s+/g, 'return ')
+      .replace(/return\s+([^;]+);/g, 'return $1;\n')
+      
+      // Closing braces
+      .replace(/([^{\s])\s*\}/g, '$1\n}')
+      .replace(/\}\s*(?!\n)/g, '}\n')
+      
+      // Clean up operators with proper spacing
+      .replace(/\s*(==|!=|<=|>=|&&|\|\||>>|<<)\s*/g, ' $1 ')
+      .replace(/\s*([+\-*/%])\s*/g, ' $1 ')
+      .replace(/([^=!<>])\s*=\s*(?!=)/g, '$1 = ')
+      
+      // Space after commas
+      .replace(/,(?!\s)/g, ', ')
+      
+      // Clean up multiple spaces
+      .replace(/  +/g, ' ');
+    
+    // Step 2: Clean up excessive newlines
+    formatted = formatted
+      .replace(/\n\s*\n\s*\n+/g, '\n\n')
+      .replace(/\{\s*\n\s*\n/g, '{\n')
+      .replace(/\n\s*\n\s*\}/g, '\n}')
+      .replace(/^\s*\n/g, '');
+    
+    // Step 3: Apply consistent indentation
+    const lines = formatted.split('\n');
+    let indentLevel = 0;
+    const indentedLines: string[] = [];
+    
+    for (let i = 0; i < lines.length; i++) {
+      let line = lines[i].trim();
+      
+      // Skip empty lines but preserve structure
+      if (!line) {
+        if (indentedLines.length > 0 && indentedLines[indentedLines.length - 1] !== '') {
+          indentedLines.push('');
+        }
+        continue;
+      }
+      
+      // Decrease indent before closing braces, case/default labels, and else
+      if (line.startsWith('}')) {
+        indentLevel = Math.max(0, indentLevel - 1);
+      } else if (line.startsWith('case ') || line.startsWith('default:')) {
+        indentLevel = Math.max(0, indentLevel - 1);
+      } else if (line.startsWith('else')) {
+        indentLevel = Math.max(0, indentLevel - 1);
+      }
+      
+      // Apply indentation
+      const indent = '  '.repeat(indentLevel);
+      indentedLines.push(indent + line);
+      
+      // Increase indent after opening braces
+      if (line.endsWith('{')) {
+        indentLevel++;
+      } else if (line.startsWith('case ') || line.startsWith('default:')) {
+        indentLevel++;
+      }
+      
+      // Special handling: if else is followed by opening brace
+      if (line.startsWith('else') && line.endsWith('{')) {
+        // Indent already increased above
+      }
+      
+      // Handle lines with both open and close braces
+      const openBraces = (line.match(/\{/g) || []).length;
+      const closeBraces = (line.match(/\}/g) || []).length;
+      if (openBraces > 0 && closeBraces > 0) {
+        indentLevel = Math.max(0, indentLevel + openBraces - closeBraces);
+      }
+    }
+    
+    return indentedLines.join('\n');
+  };
+  
+  const formattedQuestionText = useMemo(() => {
+    return selectedQuestion?.question_text ? formatCode(selectedQuestion.question_text) : '';
+  }, [selectedQuestion]);
 
   const onSelectQuestion = (qid: number) => {
     setSelectedQid(qid);
@@ -178,7 +337,7 @@ export default function GamePage() {
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!team || !selectedQid || submitting) return;
+    if (!team || !selectedQid || submitting || !room) return;
     setStatus(null);
     setSubmitting(true);
 
@@ -187,44 +346,81 @@ export default function GamePage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          room: room.code,
           teamId: team.team_id,
           questionId: selectedQid,
           answer,
         }),
       });
-      const data = (await res.json()) as SubmissionResult;
+      const data = (await res.json()) as SubmissionResult & { isFake?: boolean; assignedPosition?: string | null; message?: string };
 
-      if (data.status === "disabled") {
-        setDisabled(true);
-        setStatus({ type: "error", text: "Time over – submissions disabled" });
-        return;
-      }
-      if (data.status === "empty") {
-        setStatus({ type: "error", text: "Answer cannot be empty" });
-        return;
-      }
-      if (data.status === "already_solved") {
-        setSolved(data.solved_positions);
-        setLines(data.lines_completed);
-        setStatus({ type: "info", text: "Already Completed" });
-        return;
-      }
-      if (data.status === "fake") {
-        setStatus({ type: "warn", text: "Fake Question – No Bingo Point" });
-        return;
-      }
-      if (data.status === "incorrect") {
+      // Handle API response with correct boolean field
+      if (!data.correct) {
         setStatus({ type: "error", text: "Incorrect! Try again" });
-        return;
-      }
-      if (data.status === "correct") {
-        setSolved(data.solved_positions);
-        setLines(data.lines_completed);
+        toast({
+          title: "❌ Incorrect Answer",
+          description: `Your answer "${answer}" is wrong. Please try again!`,
+          variant: "destructive",
+        });
+      } else if (data.assignedPosition === null && data.message === "You already solved this question!") {
+        // Question already solved - don't assign new grid position
+        setStatus({ type: "info", text: "Already solved this one!" });
+        toast({
+          title: "ℹ️ Already Solved",
+          description: "You've already solved this question correctly!",
+        });
+        
+        // Auto-advance to next question after 1 second
+        setTimeout(() => {
+          setAnswer("");
+          selectByDelta(1);
+        }, 1000);
+      } else if (data.isFake) {
+        // Fake question - correct but no bingo point
+        setStatus({ type: "warn", text: "Correct! But this is a bonus question (no bingo point)" });
+        toast({
+          title: "✅ Correct!",
+          description: "This was a bonus question - no grid position earned.",
+        });
+        await loadState();
+        
+        // Auto-advance to next question after 1.5 seconds
+        setTimeout(() => {
+          setAnswer("");
+          selectByDelta(1);
+        }, 1500);
+      } else {
+        // Correct answer on real question - reload game state to get updated positions
+        await loadState();
         setStatus({ type: "success", text: "Correct Answer!" });
-        if (data.win) {
-          navigate("/congratulations");
+        toast({
+          title: "✅ Correct!",
+          description: data.assignedPosition 
+            ? `Great job! Grid position ${data.assignedPosition} filled!` 
+            : "Great job! Keep going!",
+        });
+        // Check for achievement
+        if (data.achievement) {
+          toast({
+            title: `🏆 ${data.achievement.title}`,
+            description: data.achievement.description,
+          });
         }
+        
+        // Auto-advance to next question after 1.5 seconds
+        setTimeout(() => {
+          setAnswer("");
+          selectByDelta(1);
+        }, 1500);
       }
+    } catch (error) {
+      console.error("Submission error:", error);
+      setStatus({ type: "error", text: "Failed to submit answer" });
+      toast({
+        title: "❌ Error",
+        description: "Failed to submit your answer. Please try again.",
+        variant: "destructive",
+      });
     } finally {
       setSubmitting(false);
     }
@@ -322,141 +518,200 @@ export default function GamePage() {
 
               {selectedQuestion ? (
                 <div className="space-y-6">
-                  {/* Question Card */}
-                  <div className="bg-slate-900/50 border border-slate-700 rounded-xl overflow-hidden">
-                    <div className="px-4 py-3 bg-slate-800/50 border-b border-slate-700 flex items-center justify-between">
-                      <h3 className="text-lg font-bold text-white">
-                        Question {currentQuestionIndex + 1}
-                      </h3>
-                      <div className="flex items-center gap-2">
-                        <span className="w-3 h-3 rounded-full bg-red-500"></span>
-                        <span className="w-3 h-3 rounded-full bg-amber-500"></span>
-                        <span className="w-3 h-3 rounded-full bg-green-500"></span>
+                  {/* Unified Question & Solution Card */}
+                  <div className="bg-slate-900/50 border border-slate-700 rounded-xl overflow-hidden shadow-xl">
+                    {/* Question Header */}
+                    <div className="px-5 py-3 bg-slate-800/80 border-b border-slate-700 flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <span className="text-lg">💻</span>
+                        <h3 className="text-lg font-bold text-white">
+                          Question {currentQuestionIndex + 1}
+                        </h3>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="px-2.5 py-1 rounded-md bg-slate-700 text-xs font-mono font-semibold text-slate-300 border border-slate-600">
+                          C
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="w-3 h-3 rounded-full bg-red-500"></span>
+                          <span className="w-3 h-3 rounded-full bg-amber-500"></span>
+                          <span className="w-3 h-3 rounded-full bg-green-500"></span>
+                        </div>
                       </div>
                     </div>
-                    <div className="relative">
-                      <div className="absolute top-3 right-3 px-2 py-1 rounded bg-slate-700 text-xs font-mono text-slate-400 border border-slate-600">
-                        C
-                      </div>
-                      <pre className="p-6 text-sm font-mono text-slate-100 leading-relaxed overflow-x-auto bg-slate-900/80 whitespace-pre">
-                        <code>{selectedQuestion.question_text}</code>
+                    
+                    {/* Code Display */}
+                    <div className="relative bg-[#0f1419]">
+                      <pre className="p-6 text-sm leading-relaxed overflow-x-auto">
+                        <code className="font-mono text-slate-100">{formattedQuestionText}</code>
                       </pre>
+                    </div>
+
+                    {/* Solution Input Section */}
+                    <div className="bg-gradient-to-br from-slate-900/70 to-slate-800/50 border-t border-slate-700 p-6">
+                      <div className="flex items-center gap-3 mb-4">
+                        <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-yellow-500 to-orange-500 flex items-center justify-center shadow-lg">
+                          <span className="text-xl">💡</span>
+                        </div>
+                        <div>
+                          <h3 className="text-lg font-bold text-white">Your Solution</h3>
+                          <p className="text-sm text-slate-400">Enter the output of the C program</p>
+                        </div>
+                      </div>
+                      
+                      <form onSubmit={onSubmit} className="space-y-4">
+                        <div className="relative">
+                          <input
+                            type="text"
+                            disabled={disabled || submitting}
+                            value={answer}
+                            onChange={(e) => setAnswer(e.target.value)}
+                            placeholder="Type your answer here..."
+                            className="w-full px-4 py-3.5 rounded-lg bg-slate-900 border-2 border-slate-700 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-mono"
+                            autoFocus
+                          />
+                          {answer && (
+                            <button
+                              type="button"
+                              onClick={() => setAnswer("")}
+                              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors"
+                            >
+                              ✕
+                            </button>
+                          )}
+                        </div>
+                        
+                        <div className="flex gap-3">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAnswer("");
+                              selectByDelta(1);
+                            }}
+                            className="flex-1 px-4 py-3 rounded-lg bg-slate-800 border-2 border-slate-700 text-white hover:bg-slate-700 hover:border-slate-600 transition-all font-semibold"
+                          >
+                            Skip Question
+                          </button>
+                          <button
+                            type="submit"
+                            disabled={disabled || submitting || !answer.trim()}
+                            className="flex-1 px-4 py-3 rounded-lg bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white transition-all font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg shadow-blue-500/20"
+                          >
+                            {submitting && (
+                              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                            )}
+                            <span>Submit Answer</span>
+                          </button>
+                        </div>
+                      </form>
                     </div>
                   </div>
 
                   {/* Navigation */}
-                  <div className="flex items-center justify-between bg-slate-900/30 border border-slate-800 rounded-xl p-4">
+                  <div className="flex items-center justify-between bg-slate-900/40 border border-slate-800 rounded-xl p-4">
                     <button
                       onClick={() => selectByDelta(-1)}
-                      className="px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white hover:bg-slate-700 transition-colors font-medium"
+                      className="px-5 py-2.5 rounded-lg bg-slate-800 border border-slate-700 text-white hover:bg-slate-700 hover:border-slate-600 transition-all font-medium flex items-center gap-2"
                     >
-                      ← Previous
+                      <span>←</span>
+                      <span>Previous</span>
                     </button>
-                    <div className="flex items-center gap-3">
-                      <span className="text-sm font-medium text-slate-400">
-                        {currentQuestionIndex + 1} of {questions.length}
+                    <div className="flex items-center gap-4">
+                      <span className="text-sm font-semibold text-slate-300">
+                        Question {currentQuestionIndex + 1} of {questions.length}
                       </span>
                       <div className="flex gap-1.5">
-                        {[...Array(Math.min(5, questions.length))].map((_, i) => (
-                          <span
-                            key={i}
-                            className={`w-2 h-2 rounded-full ${
-                              i === Math.min(currentQuestionIndex, 4)
-                                ? "bg-blue-500"
-                                : "bg-slate-700"
-                            }`}
-                          />
-                        ))}
+                        {[...Array(Math.min(7, questions.length))].map((_, i) => {
+                          const isActive = i === Math.min(currentQuestionIndex, 6);
+                          return (
+                            <span
+                              key={i}
+                              className={`w-2 h-2 rounded-full transition-all ${
+                                isActive
+                                  ? "bg-blue-500 w-6"
+                                  : "bg-slate-700"
+                              }`}
+                            />
+                          );
+                        })}
                       </div>
                     </div>
                     <button
                       onClick={() => selectByDelta(1)}
-                      className="px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white hover:bg-slate-700 transition-colors font-medium"
+                      className="px-5 py-2.5 rounded-lg bg-slate-800 border border-slate-700 text-white hover:bg-slate-700 hover:border-slate-600 transition-all font-medium flex items-center gap-2"
                     >
-                      Next →
+                      <span>Next</span>
+                      <span>→</span>
                     </button>
-                  </div>
-
-                  {/* Your Solution */}
-                  <div className="bg-slate-900/30 border border-slate-800 rounded-xl p-6">
-                    <div className="flex items-center gap-2 mb-4">
-                      <span className="text-2xl">💡</span>
-                      <h3 className="text-lg font-bold text-white">Your Solution</h3>
-                    </div>
-                    <p className="text-sm text-slate-400 mb-4">Enter your answer output</p>
-                    <form onSubmit={onSubmit} className="space-y-4">
-                      <input
-                        type="text"
-                        disabled={disabled || submitting}
-                        value={answer}
-                        onChange={(e) => setAnswer(e.target.value)}
-                        placeholder="Type your solution here..."
-                        className="w-full px-4 py-3 rounded-lg bg-slate-900 border border-slate-700 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
-                      />
-                      <div className="flex gap-3">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setAnswer("");
-                            selectByDelta(1);
-                          }}
-                          className="flex-1 px-4 py-3 rounded-lg bg-slate-800 border border-slate-700 text-white hover:bg-slate-700 transition-colors font-medium"
-                        >
-                          Skip Question
-                        </button>
-                        <button
-                          type="submit"
-                          disabled={disabled || submitting || !answer.trim()}
-                          className="flex-1 px-4 py-3 rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                        >
-                          {submitting && (
-                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                          )}
-                          Submit Answer
-                        </button>
-                      </div>
-                    </form>
                   </div>
 
                   {status && (
                     <div
-                      className={`px-4 py-3 rounded-lg border ${
+                      className={`px-5 py-4 rounded-xl border-2 font-semibold flex items-center gap-3 shadow-lg animate-in ${
                         status.type === "success"
-                          ? "bg-green-900/30 border-green-500 text-green-300"
+                          ? "bg-green-900/40 border-green-500 text-green-200"
                           : status.type === "error"
-                            ? "bg-red-900/30 border-red-500 text-red-300"
-                            : "bg-slate-800/50 border-slate-600 text-slate-300"
+                            ? "bg-red-900/40 border-red-500 text-red-200"
+                            : status.type === "warn"
+                              ? "bg-amber-900/40 border-amber-500 text-amber-200"
+                              : "bg-blue-900/40 border-blue-500 text-blue-200"
                       }`}
                     >
-                      {status.text}
+                      <span className="text-xl">
+                        {status.type === "success" ? "✓" : status.type === "error" ? "✗" : status.type === "warn" ? "⚠️" : "ℹ️"}
+                      </span>
+                      <span>{status.text}</span>
                     </div>
                   )}
                 </div>
               ) : (
-                <div className="flex flex-col items-center justify-center py-16 text-center">
-                  <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center mb-6">
-                    <span className="text-5xl">🎯</span>
+                <div className="flex flex-col items-center justify-center py-20 text-center">
+                  <div className="w-28 h-28 rounded-2xl bg-gradient-to-br from-purple-500 via-blue-500 to-cyan-500 flex items-center justify-center mb-6 shadow-2xl">
+                    <span className="text-6xl">🎯</span>
                   </div>
-                  <h3 className="text-2xl font-bold text-white mb-3">Ready to Code?</h3>
-                  <p className="text-slate-400 mb-4 max-w-md">
-                    Click on a cell in the bingo grid to start solving challenges!
+                  <h3 className="text-3xl font-bold text-white mb-3">Ready to Code?</h3>
+                  <p className="text-slate-400 mb-6 max-w-md text-lg">
+                    Select a question from the bingo grid or use navigation to start solving challenges!
                   </p>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => {
+                        if (questions.length > 0) onSelectQuestion(questions[0].question_id);
+                      }}
+                      className="px-6 py-3 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold transition-all shadow-lg"
+                    >
+                      Start First Question
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
 
             {/* Recent Activity */}
             <div className="bg-[#1e293b] rounded-2xl border border-slate-800 p-6">
-              <div className="flex items-center gap-2 mb-4">
-                <span className="text-xl">⚡</span>
-                <h3 className="text-lg font-bold text-white">Recent Activity</h3>
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center">
+                  <span className="text-xl">⚡</span>
+                </div>
+                <h3 className="text-xl font-bold text-white">Recent Activity</h3>
+                {recentSubs.length > 0 && (
+                  <span className="ml-auto px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 text-xs font-semibold border border-amber-500/30">
+                    {recentSubs.length} submissions
+                  </span>
+                )}
               </div>
-              <div className="bg-slate-900/30 border border-slate-800 rounded-xl p-4 max-h-[200px] overflow-y-auto">
+              <div className="bg-slate-900/50 border border-slate-700 rounded-xl overflow-hidden">
                 {recentSubs.length === 0 ? (
-                  <p className="text-center text-sm text-slate-500 py-4">No recent submissions yet</p>
+                  <div className="p-8 text-center">
+                    <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-slate-800/50 flex items-center justify-center">
+                      <span className="text-3xl opacity-50">⚡</span>
+                    </div>
+                    <p className="text-sm text-slate-400">No recent submissions yet</p>
+                    <p className="text-xs text-slate-500 mt-1">Activity will appear here as teams solve questions</p>
+                  </div>
                 ) : (
-                  <div className="space-y-2">
-                    {recentSubs.map((sub, idx) => {
+                  <div className="max-h-[280px] overflow-y-auto p-4 space-y-2">
+                    {recentSubs.slice(0, 10).map((sub, idx) => {
                       const timeAgo = sub.solvedAt 
                         ? Math.floor((Date.now() - new Date(sub.solvedAt).getTime()) / 1000)
                         : 0;
@@ -466,23 +721,51 @@ export default function GamePage() {
                           ? `${Math.floor(timeAgo / 60)}m ago`
                           : `${Math.floor(timeAgo / 3600)}h ago`;
                       
+                      const isCorrect = sub.isCorrect !== false; // Default to true for backward compatibility
+                      
                       return (
                         <div 
                           key={`${sub.teamId}-${sub.questionId}-${idx}`}
-                          className="px-3 py-2 rounded-lg bg-slate-800/50 border border-slate-700/50 flex items-center justify-between"
+                          className={`px-4 py-3 rounded-lg border transition-colors ${
+                            isCorrect 
+                              ? 'bg-slate-800/70 border-slate-700 hover:bg-slate-800'
+                              : 'bg-red-900/20 border-red-800/50 hover:bg-red-900/30'
+                          }`}
                         >
-                          <div className="flex items-center gap-2">
-                            <span className="text-green-400">✓</span>
-                            <span className="text-sm text-slate-300 font-medium">
-                              {sub.teamId}
-                            </span>
-                            {sub.position && (
-                              <span className="px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 text-xs font-mono border border-blue-500/30">
-                                {sub.position}
-                              </span>
-                            )}
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-3 min-w-0 flex-1">
+                              <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                                isCorrect
+                                  ? 'bg-green-500/20 border border-green-500/30'
+                                  : 'bg-red-500/20 border border-red-500/30'
+                              }`}>
+                                <span className={`text-sm ${isCorrect ? 'text-green-400' : 'text-red-400'}`}>
+                                  {isCorrect ? '✓' : '✗'}
+                                </span>
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm font-semibold text-white truncate">
+                                  {sub.teamId}
+                                </p>
+                                <p className="text-xs text-slate-400">
+                                  {isCorrect ? 'Solved' : 'Attempted'} Q#{sub.questionId}
+                                  {!isCorrect && sub.submittedAnswer && (
+                                    <span className="text-red-400 ml-1">
+                                      (answered: {sub.submittedAnswer})
+                                    </span>
+                                  )}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                              {sub.position && (
+                                <span className="px-2.5 py-1 rounded-md bg-blue-500/20 text-blue-300 text-xs font-mono font-bold border border-blue-500/30">
+                                  {sub.position}
+                                </span>
+                              )}
+                              <span className="text-xs text-slate-500 whitespace-nowrap">{timeStr}</span>
+                            </div>
                           </div>
-                          <span className="text-xs text-slate-500">{timeStr}</span>
                         </div>
                       );
                     })}
@@ -493,27 +776,40 @@ export default function GamePage() {
           </div>
 
           {/* Right Column - Bingo Grid */}
-          <div className="bg-[#1e293b] rounded-2xl border border-slate-800 p-6 xl:w-[500px]">
+          <div className="bg-[#1e293b] rounded-2xl border border-slate-800 p-6 xl:w-[520px] shadow-xl">
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-3">
-                <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center">
+                <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center shadow-lg">
                   <span className="text-2xl">🎲</span>
                 </div>
-                <h2 className="font-bold text-2xl text-white">Bingo Grid</h2>
+                <div>
+                  <h2 className="font-bold text-2xl text-white">Bingo Grid</h2>
+                  <p className="text-sm text-slate-400">Complete lines to win!</p>
+                </div>
               </div>
-              <span className="px-4 py-2 rounded-full text-sm font-medium bg-slate-800 text-slate-300 border border-slate-700">
-                Lines: {lines} / 5
-              </span>
+              <div className="text-right">
+                <div className="px-4 py-2 rounded-lg bg-gradient-to-br from-emerald-500/20 to-teal-500/20 border border-emerald-500/30">
+                  <p className="text-xs text-emerald-300 font-semibold">Lines</p>
+                  <p className="text-2xl font-bold text-white">{lines} / 5</p>
+                </div>
+              </div>
             </div>
-            <div className="mb-4">
-              <span className="text-sm text-slate-400">
-                {solvedCount} / 25 cells filled
-              </span>
+            <div className="mb-5 flex items-center justify-between px-2">
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded bg-emerald-500"></div>
+                <span className="text-xs text-slate-400">Solved: {solvedCount}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded bg-slate-700"></div>
+                <span className="text-xs text-slate-400">Remaining: {25 - solvedCount}</span>
+              </div>
             </div>
             <BingoGrid solved={solved} onSelectQuestion={onSelectQuestion} questions={questions} />
-            <p className="text-center text-sm text-slate-400 mt-6">
-              Fill any 5 lines (row/column/diagonal) to win the game! 🔥
-            </p>
+            <div className="mt-6 p-4 bg-gradient-to-r from-blue-900/30 to-purple-900/30 border border-blue-500/30 rounded-xl">
+              <p className="text-center text-sm text-blue-200 font-medium">
+                🎯 Complete any 5 lines (rows, columns, or diagonals) to win!
+              </p>
+            </div>
           </div>
         </div>
       </main>
@@ -530,13 +826,13 @@ function BingoGrid({ solved, onSelectQuestion, questions }: {
   const gridRows = ["A", "B", "C", "D", "E"];
   
   return (
-    <div>
+    <div className="space-y-3">
       {/* B-I-N-G-O Letters */}
-      <div className="grid grid-cols-5 gap-2 mb-3">
+      <div className="grid grid-cols-5 gap-2.5">
         {bingoLetters.map((letter) => (
           <div
             key={letter}
-            className="aspect-square flex items-center justify-center text-2xl font-bold text-slate-500"
+            className="aspect-square flex items-center justify-center text-3xl font-extrabold bg-gradient-to-br from-slate-700 to-slate-800 text-slate-300 rounded-lg border border-slate-700"
           >
             {letter}
           </div>
@@ -544,27 +840,26 @@ function BingoGrid({ solved, onSelectQuestion, questions }: {
       </div>
       
       {/* Grid Cells */}
-      <div className="grid grid-cols-5 gap-2">
+      <div className="grid grid-cols-5 gap-2.5">
         {gridRows.map((row) =>
           Array.from({ length: 5 }).map((_, colIndex) => {
             const position = `${row}${colIndex + 1}`;
             const isSolved = solved.includes(position);
-            const question = questions.find(q => q.grid_position === position);
             
             return (
               <button
                 key={position}
-                onClick={() => question && onSelectQuestion(question.question_id)}
-                disabled={!question}
-                className={`aspect-square rounded-xl flex items-center justify-center text-base font-bold border-2 transition-all ${
+                className={`aspect-square rounded-xl flex items-center justify-center text-lg font-bold border-2 transition-all duration-200 ${
                   isSolved
-                    ? "bg-emerald-500/20 border-emerald-400 text-emerald-300"
-                    : question
-                      ? "bg-slate-800/50 border-blue-500 text-blue-300 hover:bg-slate-700/50 cursor-pointer hover:scale-105"
-                      : "bg-slate-900/30 border-slate-800 text-slate-700 cursor-not-allowed opacity-50"
+                    ? "bg-gradient-to-br from-emerald-500 to-green-600 border-emerald-400 text-white shadow-lg shadow-emerald-500/30"
+                    : "bg-slate-800/70 border-slate-600 text-slate-300 cursor-default"
                 }`}
               >
-                {position}
+                {isSolved ? (
+                  <span className="text-2xl">✓</span>
+                ) : (
+                  <span className="font-mono">{position}</span>
+                )}
               </button>
             );
           }),
