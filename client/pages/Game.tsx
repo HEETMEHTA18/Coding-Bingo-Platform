@@ -1,6 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
+import { AchievementManager } from "../achievements";
+import { WinCelebration } from "../components/WinCelebration";
+import { BingoWinnerModal } from "../components/BingoWinnerModal";
 import type {
   GameStateResponse,
   SubmissionResult,
@@ -40,6 +43,7 @@ export default function GamePage() {
     text: string;
   } | null>(null);
   const [lines, setLines] = useState<number>(0);
+  const [prevLines, setPrevLines] = useState<number>(0);
   const [disabled, setDisabled] = useState<boolean>(false);
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [now, setNow] = useState<number>(Date.now());
@@ -53,6 +57,15 @@ export default function GamePage() {
       position: string | null;
     }[]
   >([]);
+  const achievementManager = useMemo(() => AchievementManager.getInstance(), []);
+
+  // For UI highlights when a new line is completed
+  const [highlightedPositions, setHighlightedPositions] = useState<string[]>([]);
+  const highlightedTimerRef = useRef<number | null>(null);
+
+  // Celebration and winner modal
+  const [showCelebration, setShowCelebration] = useState(false);
+  const [showWinnerModal, setShowWinnerModal] = useState(false);
 
   useEffect(() => {
     if (!team) navigate("/");
@@ -132,6 +145,9 @@ export default function GamePage() {
   };
 
   useEffect(() => {
+    // Notify achievement manager that a new game started
+    achievementManager.onGameStart();
+
     loadState();
     const id = setInterval(loadState, 5000); // Check for timer updates every 5 seconds
     const tick = setInterval(() => setNow(Date.now()), 1000);
@@ -162,6 +178,55 @@ export default function GamePage() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // When lines change, detect newly completed lines and trigger achievements/celebration
+  useEffect(() => {
+    // call achievement manager on game win changes
+    try {
+      const newAchievements = achievementManager.onGameWin(lines);
+      newAchievements.forEach((ach) => {
+        toast({ title: `🏆 ${ach.title}`, description: ach.description });
+      });
+
+      // If we reached full bingo, also check flawless win
+      if (lines >= 5) {
+        const flawless = achievementManager.onFlawlessWin();
+        flawless.forEach((ach) => toast({ title: `🏆 ${ach.title}`, description: ach.description }));
+      }
+    } catch (e) {
+      // ignore
+    }
+
+    // If lines increased, highlight the newly completed lines briefly and show celebration
+    if (lines > prevLines) {
+      setShowCelebration(true);
+      setTimeout(() => setShowCelebration(false), 4500);
+
+      // compute newly completed lines positions
+      const prevCompleted = computeCompletedLinesPositionsFromSolved(prevSolvedRef.current);
+      const newCompleted = computeCompletedLinesPositionsFromSolved(solved);
+      const prevIds = new Set(prevCompleted.map((l) => l.id));
+      const newly = newCompleted.filter((l) => !prevIds.has(l.id));
+      const positionsToHighlight = newly.flatMap((l) => l.positions);
+      if (positionsToHighlight.length > 0) {
+        setHighlightedPositions(positionsToHighlight);
+        if (highlightedTimerRef.current) window.clearTimeout(highlightedTimerRef.current as any);
+        highlightedTimerRef.current = window.setTimeout(() => setHighlightedPositions([]), 1800);
+      }
+
+      // Show winner modal when full bingo
+      if (lines >= 5) setShowWinnerModal(true);
+    }
+
+    setPrevLines(lines);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lines]);
+
+  // keep ref of previous solved for diffing
+  const prevSolvedRef = useRef<string[]>([]);
+  useEffect(() => {
+    prevSolvedRef.current = solved;
+  }, [solved]);
 
   useEffect(() => {
     if (!selectedQid && questions && questions.length > 0) {
@@ -804,7 +869,14 @@ export default function GamePage() {
                 <span className="text-xs text-slate-400">Remaining: {25 - solvedCount}</span>
               </div>
             </div>
-            <BingoGrid solved={solved} onSelectQuestion={onSelectQuestion} questions={questions} />
+            <BingoGrid
+              solved={solved}
+              onSelectQuestion={onSelectQuestion}
+              questions={questions}
+              highlightedPositions={highlightedPositions}
+            />
+            <WinCelebration show={showCelebration} linesCompleted={lines} onComplete={() => setShowCelebration(false)} />
+            <BingoWinnerModal show={showWinnerModal} onContinue={() => { setShowWinnerModal(false); }} />
             <div className="mt-6 p-4 bg-gradient-to-r from-blue-900/30 to-purple-900/30 border border-blue-500/30 rounded-xl">
               <p className="text-center text-sm text-blue-200 font-medium">
                 🎯 Complete any 5 lines (rows, columns, or diagonals) to win!
@@ -817,10 +889,11 @@ export default function GamePage() {
   );
 }
 
-function BingoGrid({ solved, onSelectQuestion, questions }: { 
+function BingoGrid({ solved, onSelectQuestion, questions, highlightedPositions }: { 
   solved: string[]; 
   onSelectQuestion: (qid: number) => void;
   questions: GameStateResponse["questions"];
+  highlightedPositions?: string[];
 }) {
   const bingoLetters = ["B", "I", "N", "G", "O"];
   const gridRows = ["A", "B", "C", "D", "E"];
@@ -829,14 +902,20 @@ function BingoGrid({ solved, onSelectQuestion, questions }: {
     <div className="space-y-3">
       {/* B-I-N-G-O Letters */}
       <div className="grid grid-cols-5 gap-2.5">
-        {bingoLetters.map((letter) => (
-          <div
-            key={letter}
-            className="aspect-square flex items-center justify-center text-3xl font-extrabold bg-gradient-to-br from-slate-700 to-slate-800 text-slate-300 rounded-lg border border-slate-700"
-          >
-            {letter}
-          </div>
-        ))}
+        {bingoLetters.map((letter, idx) => {
+          const colCompleted = isColumnCompleted(solved, idx + 1);
+          return (
+            <div
+              key={letter}
+              className={`aspect-square flex items-center justify-center text-3xl font-extrabold bg-gradient-to-br from-slate-700 to-slate-800 text-slate-300 rounded-lg border border-slate-700 relative overflow-hidden ${colCompleted ? 'ring-4 ring-emerald-400/40 scale-105' : ''}`}
+            >
+              <div className={`transition-opacity duration-300 ${colCompleted ? 'opacity-50 line-through text-emerald-200' : ''}`}>{letter}</div>
+              {colCompleted && (
+                <div className="absolute inset-0 flex items-center justify-center text-3xl text-white animate-bounce pointer-events-none">✓</div>
+              )}
+            </div>
+          );
+        })}
       </div>
       
       {/* Grid Cells */}
@@ -845,13 +924,15 @@ function BingoGrid({ solved, onSelectQuestion, questions }: {
           Array.from({ length: 5 }).map((_, colIndex) => {
             const position = `${row}${colIndex + 1}`;
             const isSolved = solved.includes(position);
+            const isHighlighted = highlightedPositions?.includes(position) ?? false;
             
             return (
               <button
                 key={position}
+                onClick={() => onSelectQuestion(getQuestionIdForPosition(questions, position))}
                 className={`aspect-square rounded-xl flex items-center justify-center text-lg font-bold border-2 transition-all duration-200 ${
                   isSolved
-                    ? "bg-gradient-to-br from-emerald-500 to-green-600 border-emerald-400 text-white shadow-lg shadow-emerald-500/30"
+                    ? `bg-gradient-to-br from-emerald-500 to-green-600 border-emerald-400 text-white shadow-lg shadow-emerald-500/30 ${isHighlighted ? 'animate-pulse scale-105' : ''}`
                     : "bg-slate-800/70 border-slate-600 text-slate-300 cursor-default"
                 }`}
               >
@@ -888,4 +969,41 @@ function computeLines(posList: string[]): number {
   if (diag1.every((p) => set.has(p))) lines++;
   if (diag2.every((p) => set.has(p))) lines++;
   return lines;
+}
+
+// Helpers to determine completed lines and positions
+function computeCompletedLinesPositionsFromSolved(posList: string[]) {
+  const set = new Set(posList);
+  const letters = ["A", "B", "C", "D", "E"];
+  const results: { id: string; type: string; positions: string[] }[] = [];
+
+  // rows
+  letters.forEach((r) => {
+    const positions = Array.from({ length: 5 }).map((_, i) => `${r}${i + 1}`);
+    if (positions.every((p) => set.has(p))) results.push({ id: `row_${r}`, type: 'row', positions });
+  });
+
+  // cols
+  for (let c = 1; c <= 5; c++) {
+    const positions = letters.map((r) => `${r}${c}`);
+    if (positions.every((p) => set.has(p))) results.push({ id: `col_${c}`, type: 'col', positions });
+  }
+
+  // diags
+  const diag1 = ["A1","B2","C3","D4","E5"];
+  const diag2 = ["A5","B4","C3","D2","E1"];
+  if (diag1.every((p) => set.has(p))) results.push({ id: 'diag_1', type: 'diag', positions: diag1 });
+  if (diag2.every((p) => set.has(p))) results.push({ id: 'diag_2', type: 'diag', positions: diag2 });
+
+  return results;
+}
+
+function isColumnCompleted(solved: string[], colIndex: number) {
+  const rows = ["A","B","C","D","E"];
+  return rows.every((r) => solved.includes(`${r}${colIndex}`));
+}
+
+function getQuestionIdForPosition(questions: any[], position: string) {
+  const q = questions.find((q) => q.grid_position === position);
+  return q ? q.question_id : questions[0]?.question_id ?? 0;
 }

@@ -30,6 +30,10 @@ export default function AchievementsPage() {
 
   useEffect(() => {
     setAchievements(achievementManager.getAchievements());
+
+    const onUpdated = () => setAchievements(achievementManager.getAchievements());
+    window.addEventListener("bingo.achievements.updated", onUpdated as EventListener);
+    return () => window.removeEventListener("bingo.achievements.updated", onUpdated as EventListener);
   }, [achievementManager]);
 
   const unlockedCount = achievements.filter((a) => a.unlocked).length;

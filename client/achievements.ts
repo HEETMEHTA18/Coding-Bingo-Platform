@@ -147,6 +147,12 @@ export class AchievementManager {
 
   private saveProgress(): void {
     localStorage.setItem("bingo.achievements", JSON.stringify(this.progress));
+    // emit a global event so UI pages can update reactively
+    try {
+      window.dispatchEvent(new CustomEvent("bingo.achievements.updated"));
+    } catch {
+      // ignore if environment doesn't support window
+    }
   }
 
   getAchievements(): Achievement[] {
