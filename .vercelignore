@@ -2,18 +2,10 @@
 node_modules
 .pnpm-store
 
-# Source files (we only need built files)
-client/
-server/
-shared/
-scripts/
-
 # Build cache
 .vite
-.config
 
 # Development files
-.env
 .env.local
 .env.development
 
@@ -30,23 +22,8 @@ pids
 # Coverage directory
 coverage
 
-# Dependency directories
-jspm_packages/
-
-# Optional npm cache directory
-.npm
-
-# Git
-.git
-.gitignore
-
-# IDE
-.vscode
-.idea
-
 # Test files
 test-api.html
-redeploy.txt
 
 # Optional REPL history
 .node_repl_history
@@ -56,8 +33,6 @@ redeploy.txt
 
 # Yarn Integrity file
 .yarn-integrity
-
-# dotenv environment variables file
 .env
 
 # IDE files
