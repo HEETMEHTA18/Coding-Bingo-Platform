@@ -3,6 +3,7 @@ import { pgTable, text, integer, boolean, timestamp } from "drizzle-orm/pg-core"
 export const rooms = pgTable("rooms", {
   code: text("code").primaryKey(),
   title: text("title").notNull(),
+  gameType: text("game_type").notNull().default("bingo"), // 'bingo', 'sudoku', 'connect4', 'memory', 'race', 'crossword'
   roundEndAt: timestamp("round_end_at"),
   isDeleted: boolean("is_deleted")
     .default(false)
@@ -100,6 +101,43 @@ export const submissionAttempts = pgTable("submission_attempts", {
   isCorrect: boolean("is_correct").notNull(),
   position: text("position"), // Grid position if correct
   attemptedAt: timestamp("attempted_at").notNull().defaultNow(),
+  isDeleted: boolean("is_deleted")
+    .default(false)
+    .notNull(),
+});
+
+// Store game board states for all game types
+export const gameBoards = pgTable("game_boards", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  roomCode: text("room_code")
+    .notNull()
+    .references(() => rooms.code),
+  teamId: text("team_id")
+    .notNull()
+    .references(() => teams.teamId),
+  gameType: text("game_type").notNull(), // 'sudoku', 'connect4', 'memory', etc.
+  boardState: text("board_state").notNull(), // JSON encoded game state
+  progress: integer("progress").default(0).notNull(), // % completion or score
+  isCompleted: boolean("is_completed").default(false).notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  isDeleted: boolean("is_deleted")
+    .default(false)
+    .notNull(),
+});
+
+// Store turn-based game moves (for Connect4, etc.)
+export const gameMoves = pgTable("game_moves", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  gameBoardId: integer("game_board_id")
+    .notNull()
+    .references(() => gameBoards.id),
+  teamId: text("team_id")
+    .notNull()
+    .references(() => teams.teamId),
+  moveData: text("move_data").notNull(), // JSON: position, action, etc.
+  moveNumber: integer("move_number").notNull(),
+  timestamp: timestamp("timestamp").notNull().defaultNow(),
   isDeleted: boolean("is_deleted")
     .default(false)
     .notNull(),

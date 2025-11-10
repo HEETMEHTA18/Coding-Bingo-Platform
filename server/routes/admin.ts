@@ -169,6 +169,7 @@ export const handleCreateRoom: RequestHandler = async (req, res) => {
     await db.insert(rooms).values({
       code,
       title: body.title ?? null,
+      gameType: body.gameType || 'bingo',
       roundEndAt: body.durationMinutes
         ? new Date(Date.now() + body.durationMinutes * 60 * 1000)
         : null,

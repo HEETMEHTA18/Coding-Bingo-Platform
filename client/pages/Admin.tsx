@@ -11,6 +11,7 @@ import { apiFetch } from "../lib/api";
 export default function AdminPage() {
   const navigate = useNavigate();
   const [roomCode, setRoomCode] = useState("");
+  const [selectedGameType, setSelectedGameType] = useState<string>("bingo");
   const [state, setState] = useState<AdminStateResponse | null>(null);
   const [loading, setLoading] = useState<{ [key: string]: boolean }>({});
 
@@ -45,6 +46,7 @@ export default function AdminPage() {
       const body: AdminCreateRoomRequest = {
         code: roomCode.trim().toUpperCase(),
         title: `${roomCode.trim().toUpperCase()} Room`,
+        gameType: selectedGameType as any,
         durationMinutes: null,
       };
       await apiFetch("/api/admin/create-room", {
@@ -329,6 +331,23 @@ export default function AdminPage() {
                 className="w-full rounded-xl border border-slate-200 px-4 py-3 bg-white/70 backdrop-blur-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                 placeholder="ABC123"
               />
+            </div>
+            <div className="flex-1 min-w-[200px]">
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                Game Type
+              </label>
+              <select
+                value={selectedGameType}
+                onChange={(e) => setSelectedGameType(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 px-4 py-3 bg-white/70 backdrop-blur-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+              >
+                <option value="bingo">🎯 Code Bingo</option>
+                <option value="sudoku">📊 Code Sudoku</option>
+                <option value="connect4">🔴 Code Connect-4</option>
+                <option value="memory">🧠 Code Memory Match</option>
+                <option value="race">🏁 Code Race (Debug)</option>
+                <option value="crossword">📝 Code Crossword</option>
+              </select>
             </div>
             <button
               disabled={loading.createRoom || !roomCode.trim()}

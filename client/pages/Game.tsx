@@ -4,6 +4,7 @@ import { useToast } from "@/hooks/use-toast";
 import { AchievementManager } from "../achievements";
 import { WinCelebration } from "../components/WinCelebration";
 import { BingoWinnerModal } from "../components/BingoWinnerModal";
+import GameHeader from "../components/GameHeader";
 import type {
   GameStateResponse,
   SubmissionResult,
@@ -68,22 +69,57 @@ export default function GamePage() {
   const [showWinnerModal, setShowWinnerModal] = useState(false);
 
   useEffect(() => {
-    if (!team) navigate("/");
+    if (!team) {
+      navigate("/");
+      return;
+    }
+    
+    // Validate team and room consistency
+    const storedRoom = useRoom();
+    if (!storedRoom) {
+      console.warn("⚠️ No room data found, redirecting to login");
+      localStorage.clear();
+      navigate("/");
+      return;
+    }
+    
+    // Ensure team ID exists and is valid
+    if (!team.team_id && !team.id) {
+      console.warn("⚠️ Invalid team data, clearing and redirecting");
+      localStorage.clear();
+      navigate("/");
+      return;
+    }
   }, [team, navigate]);
 
   const loadState = async () => {
     if (!team) return;
     const roomToUse = room || useRoom();
-    if (!roomToUse) return;
+    if (!roomToUse) {
+      console.warn("⚠️ No room found in loadState, clearing data");
+      localStorage.removeItem("bingo.team");
+      localStorage.removeItem("bingo.room");
+      navigate("/");
+      return;
+    }
+    
+    const teamId = team.team_id || team.id;
+    if (!teamId) {
+      console.warn("⚠️ Invalid team ID in loadState");
+      localStorage.clear();
+      navigate("/");
+      return;
+    }
     
     const res = await fetch(
-      `/api/game?room=${encodeURIComponent(roomToUse.code)}&team=${encodeURIComponent(team.team_id)}`,
+      `/api/game?room=${encodeURIComponent(roomToUse.code)}&team=${encodeURIComponent(teamId)}`,
     );
     if (!res.ok) {
       // If team not found, clear stale localStorage and send back to login
       try {
         const err = (await res.json()) as { error?: string };
         if (res.status === 404 || err?.error === "Team not found") {
+          console.warn("⚠️ Team not found in database, clearing localStorage");
           localStorage.removeItem("bingo.team");
           localStorage.removeItem("bingo.room");
           navigate("/");
@@ -510,57 +546,20 @@ export default function GamePage() {
   return (
     <div className="min-h-screen bg-[#0f172a]">
       {/* Header */}
-      <header className="border-b border-slate-800 bg-[#1e293b]">
-        <div className="container mx-auto px-6 py-4 flex items-center justify-between">
-          {/* Left: Logo and Info */}
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center">
-              <span className="text-2xl">🎯</span>
+      <GameHeader
+        gameTitle="Coding Bingo"
+        gameIcon="🎯"
+        team={team}
+        room={room}
+        extraInfo={
+          timeLeft ? (
+            <div className="px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white flex items-center gap-2">
+              <span>⏱️</span>
+              <span className="font-mono font-semibold">{timeLeft}</span>
             </div>
-            <div>
-              <h1 className="font-bold text-xl text-white">Coding Bingo</h1>
-              <p className="text-sm text-slate-400">
-                <span className="text-green-400">●</span> Team: {team?.team_name} · Room: {room?.code}
-              </p>
-            </div>
-          </div>
-
-          {/* Right: Timer and Action Buttons */}
-          <div className="flex items-center gap-3">
-            {timeLeft && (
-              <div className="px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white flex items-center gap-2">
-                <span>⏱️</span>
-                <span className="font-mono font-semibold">{timeLeft}</span>
-              </div>
-            )}
-            <button
-              onClick={() => navigate("/achievements")}
-              className="px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-medium transition-colors flex items-center gap-2"
-            >
-              <span>🏆</span>
-              <span>Achievements</span>
-            </button>
-            <button
-              onClick={() => navigate("/leaderboard")}
-              className="px-4 py-2 rounded-lg bg-green-500 hover:bg-green-600 text-white font-medium transition-colors flex items-center gap-2"
-            >
-              <span>�</span>
-              <span>Leaderboard</span>
-            </button>
-            <button
-              onClick={() => {
-                localStorage.removeItem("bingo.team");
-                localStorage.removeItem("bingo.room");
-                navigate("/");
-              }}
-              className="px-4 py-2 rounded-lg bg-red-500 hover:bg-red-600 text-white font-medium transition-colors flex items-center gap-2"
-            >
-              <span>🚪</span>
-              <span>Logout</span>
-            </button>
-          </div>
-        </div>
-      </header>
+          ) : null
+        }
+      />
 
       {/* Main Content */}
       <main className="container mx-auto px-6 py-8">

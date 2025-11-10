@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import type { ErrorResponse, LoginRequest, LoginResponse } from "@shared/api";
 import { ThemeToggle } from "../components/ThemeProvider";
 import { apiFetch } from "../lib/api";
+import { clearGameData, saveGameData, setAdmin } from "../lib/localStorage";
 
 export default function Index() {
   const navigate = useNavigate();
@@ -43,18 +44,21 @@ export default function Index() {
 
     // Admin quick login
     if (
-      teamName.trim().toLowerCase() === "admin" &&
-      roomCode.trim().toUpperCase() === "ADMIN2907"
+      teamName.trim().toUpperCase() === "ADMINLOGIN" &&
+      roomCode.trim() === "HELLOWORLD@123"
     ) {
-      localStorage.setItem("bingo.admin", "true");
-      localStorage.removeItem("bingo.team");
-      localStorage.removeItem("bingo.room");
+      // Clear all game data before admin login
+      clearGameData();
+      setAdmin(true);
       navigate("/admin");
       return;
     }
 
     setLoading(true);
     try {
+      // Clear all previous game data before new login to prevent data mixing
+      clearGameData();
+      
       const body: LoginRequest = {
         team_name: teamName.trim(),
         room_code: roomCode.trim(),
@@ -70,9 +74,10 @@ export default function Index() {
         return;
       }
       const success = data as LoginResponse;
-      localStorage.setItem("bingo.team", JSON.stringify(success.team));
-      localStorage.setItem("bingo.room", JSON.stringify(success.room));
-      localStorage.removeItem("bingo.admin");
+      
+      // Store new team and room data using utility function
+      saveGameData(success.team, success.room);
+      
       navigate("/game");
     } catch (err) {
       setError("Network error");

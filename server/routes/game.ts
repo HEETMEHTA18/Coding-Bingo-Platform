@@ -5,6 +5,7 @@ import type {
   LoginResponse,
   SubmitRequest,
   SubmissionResult,
+  GameType,
 } from "../../shared/api";
 import { db } from "../db.js";
 import {
@@ -252,6 +253,7 @@ export const handleLogin: RequestHandler = async (req, res) => {
           room: {
             code: room.code,
             title: room.title,
+            gameType: (room.gameType || 'bingo') as GameType,
             roundEndAt: room.roundEndAt?.toISOString() || null,
           },
         };
@@ -274,6 +276,7 @@ export const handleLogin: RequestHandler = async (req, res) => {
           room: {
             code: room.code,
             title: room.title,
+            gameType: (room.gameType || 'bingo') as GameType,
             roundEndAt: room.roundEndAt?.toISOString() || null,
           },
         };
@@ -311,6 +314,7 @@ export const handleLogin: RequestHandler = async (req, res) => {
       room: {
         code: room.code,
         title: room.title,
+        gameType: (room.gameType || 'bingo') as GameType,
         roundEndAt: room.roundEndAt?.toISOString() || null,
       },
     };
@@ -426,6 +430,7 @@ export const handleGameState: RequestHandler = async (req, res) => {
       room: {
         code: room.code,
         title: room.title,
+        gameType: (room.gameType || 'bingo') as GameType,
         roundEndAt:
           room.roundEndAt && room.roundEndAt.getTime() > 0
             ? room.roundEndAt.toISOString()

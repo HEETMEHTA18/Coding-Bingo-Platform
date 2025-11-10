@@ -1,5 +1,7 @@
 // Shared types used by both client & server
 
+export type GameType = 'bingo' | 'sudoku' | 'connect4' | 'memory' | 'race' | 'crossword';
+
 export interface DemoResponse {
   message: string;
 }
@@ -8,6 +10,7 @@ export interface DemoResponse {
 export interface Room {
   code: string;
   title: string;
+  gameType?: GameType;
   roundEndAt: string | null;
 }
 
@@ -79,6 +82,7 @@ export interface AdminStateResponse {
 export interface AdminCreateRoomRequest {
   code: string;
   title: string;
+  gameType?: GameType;
   durationMinutes: number | null;
 }
 

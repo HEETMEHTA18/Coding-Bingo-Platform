@@ -8,7 +8,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ThemeProvider } from "./components/ThemeProvider";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
-import Game from "./pages/Game";
+import GameRouter from "./pages/GameRouter";
 import Leaderboard from "./pages/Leaderboard";
 import LeaderboardAll from "./pages/LeaderboardAll";
 import Congratulations from "./pages/Congratulations";
@@ -28,7 +28,7 @@ const App = () => (
         >
           <Routes>
             <Route path="/" element={<Index />} />
-            <Route path="/game" element={<Game />} />
+            <Route path="/game" element={<GameRouter />} />
             <Route path="/achievements" element={<Achievements />} />
             <Route path="/leaderboard" element={<Leaderboard />} />
             <Route path="/leaderboard-all" element={<LeaderboardAll />} />
