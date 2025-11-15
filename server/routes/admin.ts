@@ -16,6 +16,7 @@ import {
   teamSolvedPositions,
   teamQuestionMapping,
   wipeAudits,
+  submissionAttempts,
 } from "../schema.js";
 import { eq, inArray, sql } from "drizzle-orm";
 
@@ -114,6 +115,7 @@ export const handleAdminState: RequestHandler = async (req, res) => {
       .select({
         questionId: questionsTable.questionId,
         questionText: questionsTable.questionText,
+        correctAnswer: questionsTable.correctAnswer,
         isReal: questionsTable.isReal,
       })
       .from(questionsTable)
@@ -138,7 +140,10 @@ export const handleAdminState: RequestHandler = async (req, res) => {
         : null,
       questions: questionsResult.map((q: any) => ({
         id: String(q.questionId),
+        question_id: q.questionId,
         text: q.questionText,
+        question_text: q.questionText,
+        correct_answer: q.correctAnswer,
         is_real: q.isReal,
       })) as any,
       teams: teamsResult.map((t: any) => ({
@@ -297,12 +302,39 @@ export const handleAddQuestion: RequestHandler = async (req, res) => {
 
 export const handleDeleteQuestion: RequestHandler = async (req, res) => {
   const body: AdminDeleteQuestionRequest = req.body;
-  if (!body || !body.questionId || !body.room)
+  console.log('Delete question request:', body);
+  
+  if (!body || !body.questionId || !body.room) {
+    console.log('Missing required fields:', { hasBody: !!body, hasQuestionId: !!body?.questionId, hasRoom: !!body?.room });
     return res.status(400).json({ error: "room and questionId required" });
+  }
+  
   const questionIdInt = parseInt(String(body.questionId), 10);
-  if (Number.isNaN(questionIdInt))
+  console.log('Parsed question ID:', questionIdInt);
+  
+  if (Number.isNaN(questionIdInt)) {
+    console.log('Invalid question ID format');
     return res.status(400).json({ error: "Invalid questionId" });
+  }
+  
   try {
+    // Delete dependent records first to avoid foreign key constraint violations
+    // 1. Delete from teamQuestionMapping
+    await db
+      .delete(teamQuestionMapping)
+      .where(eq(teamQuestionMapping.questionId, questionIdInt));
+    
+    // 2. Delete from teamSolvedQuestions
+    await db
+      .delete(teamSolvedQuestions)
+      .where(eq(teamSolvedQuestions.questionId, questionIdInt));
+    
+    // 3. Delete from submissionAttempts
+    await db
+      .delete(submissionAttempts)
+      .where(eq(submissionAttempts.questionId, questionIdInt));
+    
+    // 4. Finally delete the question
     await db
       .delete(questionsTable)
       .where(eq(questionsTable.questionId, questionIdInt));
@@ -449,6 +481,30 @@ export const handleUploadQuestions = [
         return res
           .status(400)
           .json({ error: "No valid questions found in CSV. Check that columns contain data and are properly formatted." });
+
+      // Handle random fake question selection if numRandomFake is specified
+      const numRandomFake = parseInt(req.body.numRandomFake || '0', 10);
+      if (numRandomFake > 0 && numRandomFake <= questionsToInsert.length) {
+        // Randomly select indices to mark as fake
+        const totalQuestions = questionsToInsert.length;
+        const indices = Array.from({ length: totalQuestions }, (_, i) => i);
+        
+        // Shuffle indices using Fisher-Yates algorithm
+        for (let i = indices.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [indices[i], indices[j]] = [indices[j], indices[i]];
+        }
+        
+        // Mark first numRandomFake questions as fake
+        const fakeIndices = new Set(indices.slice(0, numRandomFake));
+        questionsToInsert.forEach((q, idx) => {
+          if (fakeIndices.has(idx)) {
+            q.isReal = false;
+          }
+        });
+        
+        console.log(`Marked ${numRandomFake} random questions as fake out of ${totalQuestions} total`);
+      }
 
       await db.insert(questionsTable).values(questionsToInsert);
       res.json({ success: true, importedCount: questionsToInsert.length });
@@ -615,5 +671,190 @@ export const handleWipeUserData: RequestHandler = async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+// Generate random fake questions
+export const handleGenerateFakeQuestions: RequestHandler = async (req, res) => {
+  try {
+    const { room, count } = req.body;
+
+    if (!room || typeof room !== "string" || count <= 0) {
+      res.status(400).json({ error: "Invalid room or count" });
+      return;
+    }
+
+    const roomCode = room.toUpperCase();
+    const fakeCount = Math.min(count, 100); // Limit to 100 max
+
+    // Array of coding concepts for fake questions
+    const concepts = [
+      "What does DRY stand for?",
+      "Explain the Single Responsibility Principle",
+      "What is polymorphism?",
+      "Define encapsulation",
+      "What is a pure function?",
+      "Explain middleware in Express",
+      "What is async/await?",
+      "Define dependency injection",
+      "What is SOLID?",
+      "Explain REST API",
+      "What is GraphQL?",
+      "Define closure in JavaScript",
+      "What is hoisting?",
+      "Explain prototype chain",
+      "What is memoization?",
+      "Define currying",
+      "What is composition?",
+      "Explain destructuring",
+      "What are generators?",
+      "Define promises",
+      "What is event delegation?",
+      "Explain debouncing",
+      "What is throttling?",
+      "Define scoping",
+      "What is higher-order function?",
+      "Explain tree shaking",
+      "What is lazy loading?",
+      "Define caching strategy",
+      "What is tokenization?",
+      "Explain JWT",
+    ];
+
+    let generatedCount = 0;
+    for (let i = 0; i < fakeCount; i++) {
+      const concept = concepts[i % concepts.length];
+      const randomSuffix = Math.random().toString(36).substring(7);
+      try {
+        await db.insert(questionsTable).values({
+          roomCode,
+          questionText: `${concept} (Variant ${randomSuffix})`,
+          correctAnswer: "0",
+          isReal: false,
+        });
+        generatedCount++;
+      } catch (err) {
+        console.error("Error inserting fake question:", err);
+      }
+    }
+
+    res.json({ success: true, generatedCount });
+  } catch (err) {
+    console.error("Error generating fake questions:", err);
+    res.status(500).json({ error: "Failed to generate fake questions" });
+  }
+};
+
+// Delete questions by type (real or fake)
+export const handleDeleteQuestionsByType: RequestHandler = async (req, res) => {
+  try {
+    const { room, type } = req.body;
+
+    if (!room || !type || !["real", "fake"].includes(type)) {
+      res.status(400).json({ error: "Invalid room or type" });
+      return;
+    }
+
+    const roomCode = room.toUpperCase();
+    const isReal = type === "real";
+
+    // Delete questions of specified type
+    const questionsToDelete = await db
+      .select({ id: questionsTable.questionId })
+      .from(questionsTable)
+      .where(
+        sql`${questionsTable.roomCode} = ${roomCode} AND ${questionsTable.isReal} = ${isReal}`,
+      );
+
+    let deletedCount = 0;
+    if (questionsToDelete.length > 0) {
+      const ids = questionsToDelete.map((q) => q.id);
+      
+      // Delete dependent records first to avoid foreign key constraint violations
+      // 1. Delete from teamQuestionMapping
+      await db
+        .delete(teamQuestionMapping)
+        .where(inArray(teamQuestionMapping.questionId, ids));
+      
+      // 2. Delete from teamSolvedQuestions
+      await db
+        .delete(teamSolvedQuestions)
+        .where(inArray(teamSolvedQuestions.questionId, ids));
+      
+      // 3. Delete from submissionAttempts
+      await db
+        .delete(submissionAttempts)
+        .where(inArray(submissionAttempts.questionId, ids));
+      
+      // 4. Finally delete the questions
+      await db
+        .delete(questionsTable)
+        .where(inArray(questionsTable.questionId, ids));
+      deletedCount = ids.length;
+    }
+
+    res.json({
+      success: true,
+      deletedCount,
+      type,
+    });
+  } catch (err) {
+    console.error("Error deleting questions by type:", err);
+    res.status(500).json({ error: "Failed to delete questions" });
+  }
+};
+
+// Delete all questions in a room
+export const handleDeleteAllQuestions: RequestHandler = async (req, res) => {
+  try {
+    const { room } = req.body;
+
+    if (!room || typeof room !== "string") {
+      res.status(400).json({ error: "Invalid room" });
+      return;
+    }
+
+    const roomCode = room.toUpperCase();
+
+    // Get count before delete
+    const questionsToDelete = await db
+      .select({ id: questionsTable.questionId })
+      .from(questionsTable)
+      .where(eq(questionsTable.roomCode, roomCode));
+
+    let deletedCount = 0;
+    if (questionsToDelete.length > 0) {
+      const ids = questionsToDelete.map((q) => q.id);
+      
+      // Delete dependent records first to avoid foreign key constraint violations
+      // 1. Delete from teamQuestionMapping
+      await db
+        .delete(teamQuestionMapping)
+        .where(inArray(teamQuestionMapping.questionId, ids));
+      
+      // 2. Delete from teamSolvedQuestions
+      await db
+        .delete(teamSolvedQuestions)
+        .where(inArray(teamSolvedQuestions.questionId, ids));
+      
+      // 3. Delete from submissionAttempts
+      await db
+        .delete(submissionAttempts)
+        .where(inArray(submissionAttempts.questionId, ids));
+      
+      // 4. Finally delete the questions
+      await db
+        .delete(questionsTable)
+        .where(inArray(questionsTable.questionId, ids));
+      deletedCount = ids.length;
+    }
+
+    res.json({
+      success: true,
+      deletedCount,
+    });
+  } catch (err) {
+    console.error("Error deleting all questions:", err);
+    res.status(500).json({ error: "Failed to delete all questions" });
   }
 };

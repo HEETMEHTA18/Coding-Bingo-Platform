@@ -7,6 +7,13 @@ import type {
   Room,
 } from "@shared/api";
 import { apiFetch } from "../lib/api";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "../components/ui/dialog";
 
 export default function AdminPage() {
   const navigate = useNavigate();
@@ -14,6 +21,7 @@ export default function AdminPage() {
   const [selectedGameType, setSelectedGameType] = useState<string>("bingo");
   const [state, setState] = useState<AdminStateResponse | null>(null);
   const [loading, setLoading] = useState<{ [key: string]: boolean }>({});
+  const [selectedQuestion, setSelectedQuestion] = useState<any>(null);
 
   useEffect(() => {
     const isAdmin = localStorage.getItem("bingo.admin") === "true";
@@ -26,6 +34,8 @@ export default function AdminPage() {
     );
     if (res.ok) {
       const data = (await res.json()) as AdminStateResponse;
+      console.log('Admin state loaded:', data);
+      console.log('Sample question:', data.questions[0]);
       setState(data);
     } else {
       setState(null);
@@ -140,18 +150,33 @@ export default function AdminPage() {
   };
 
   const deleteQuestion = async (id: number) => {
+    console.log('Deleting question:', { id, room: roomCode });
     setLoading((prev) => ({ ...prev, [`deleteQuestion_${id}`]: true }));
     try {
-      await apiFetch("/api/admin/delete-question", {
+      const res = await apiFetch("/api/admin/delete-question", {
         method: "POST",
         // server accepts questionId (camelCase); send that to avoid 400s
         body: JSON.stringify({ room: roomCode.toUpperCase(), questionId: id }),
       });
+      if (!res.ok) {
+        const error = await res.json();
+        console.error('Delete failed:', error);
+        alert(`Failed to delete: ${error.error || 'Unknown error'}`);
+        return;
+      }
       await load(roomCode);
+    } catch (err) {
+      console.error('Delete error:', err);
+      alert('Failed to delete question');
     } finally {
       setLoading((prev) => ({ ...prev, [`deleteQuestion_${id}`]: false }));
     }
   };
+
+  const [showFakeQuestionDialog, setShowFakeQuestionDialog] = useState(false);
+  const [fakeQuestionCount, setFakeQuestionCount] = useState(0);
+  const [uploadedRealCount, setUploadedRealCount] = useState(0);
+  const [numRandomFakeQuestions, setNumRandomFakeQuestions] = useState("");
 
   const uploadQuestions = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -167,6 +192,12 @@ export default function AdminPage() {
       const fileData = new FormData();
       fileData.append("file", file);
       fileData.append("room", roomCode.toUpperCase());
+      
+      // Add numRandomFake parameter if specified
+      const numRandomFake = parseInt(numRandomFakeQuestions);
+      if (!isNaN(numRandomFake) && numRandomFake > 0) {
+        fileData.append("numRandomFake", numRandomFake.toString());
+      }
 
       const response = await apiFetch("/api/admin/upload-questions", {
         method: "POST",
@@ -174,14 +205,45 @@ export default function AdminPage() {
       });
       const result = await response.json();
       if (result.success) {
-        alert(`Successfully uploaded ${result.importedCount} questions!`);
+        setUploadedRealCount(result.importedCount);
+        setFakeQuestionCount(0);
+        setShowFakeQuestionDialog(true);
         (e.target as HTMLFormElement).reset();
-        await load(roomCode);
+        setNumRandomFakeQuestions("");
       } else {
         alert(`Error: ${result.error}`);
       }
     } finally {
       setLoading((prev) => ({ ...prev, uploadQuestions: false }));
+    }
+  };
+
+  const generateFakeQuestions = async () => {
+    if (fakeQuestionCount <= 0) {
+      alert("Please enter a valid number of fake questions");
+      return;
+    }
+    setLoading((prev) => ({ ...prev, generateFake: true }));
+    try {
+      const body = {
+        room: roomCode.toUpperCase(),
+        count: fakeQuestionCount,
+      };
+      const response = await apiFetch("/api/admin/generate-fake-questions", {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+      const result = await response.json();
+      if (result.success) {
+        alert(`Successfully generated ${fakeQuestionCount} fake questions!`);
+        setShowFakeQuestionDialog(false);
+        setFakeQuestionCount(0);
+        await load(roomCode);
+      } else {
+        alert(`Error: ${result.error}`);
+      }
+    } finally {
+      setLoading((prev) => ({ ...prev, generateFake: false }));
     }
   };
 
@@ -239,28 +301,28 @@ export default function AdminPage() {
   const fakeCount = state ? state.questions.length - realCount : 0;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
-      <header className="sticky top-0 z-10 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border-b border-white/30 dark:border-slate-700/50 shadow-xl">
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-black dark:from-slate-950 dark:via-slate-900 dark:to-black">
+      <header className="sticky top-0 z-10 bg-slate-900/80 dark:bg-slate-950/80 backdrop-blur-xl border-b border-slate-700/50 dark:border-slate-800/50 shadow-2xl">
         <div className="container py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-purple-600 via-blue-600 to-indigo-600 flex items-center justify-center shadow-2xl">
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-purple-600 via-blue-600 to-indigo-600 flex items-center justify-center shadow-2xl ring-2 ring-purple-400/20">
               <span className="text-white font-bold text-xl">⚙️</span>
             </div>
             <div>
-              <h1 className="font-bold text-2xl text-slate-800 dark:text-slate-200 bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">
+              <h1 className="font-bold text-2xl text-white bg-gradient-to-r from-purple-400 to-blue-400 bg-clip-text text-transparent">
                 Admin Dashboard
               </h1>
-              <p className="text-sm text-slate-600 dark:text-slate-200 flex items-center gap-2">
+              <p className="text-sm text-slate-400 flex items-center gap-2">
                 <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
                 Manage rooms, questions, and game settings
               </p>
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm rounded-2xl p-2 border border-white/30 dark:border-slate-600/50 shadow-lg">
+            <div className="flex items-center gap-2 bg-slate-800/50 dark:bg-slate-900/50 backdrop-blur-sm rounded-2xl p-2 border border-slate-700/50 dark:border-slate-800/50 shadow-xl">
               <a
                 href={`/leaderboard?room=${encodeURIComponent(roomCode.toUpperCase())}`}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-500 text-white font-semibold hover:from-blue-600 hover:to-indigo-600 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 border-2 border-blue-300/50"
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold hover:from-blue-500 hover:to-indigo-500 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 border border-blue-400/30 hover:border-blue-400/60"
                 title="View Room Leaderboard"
               >
                 <span className="text-lg">🏅</span>
@@ -269,21 +331,21 @@ export default function AdminPage() {
 
               <a
                 href="/leaderboard-all"
-                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-semibold hover:from-emerald-600 hover:to-teal-600 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 border-2 border-emerald-300/50"
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-semibold hover:from-emerald-500 hover:to-teal-500 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 border border-emerald-400/30 hover:border-emerald-400/60"
                 title="View All Rooms"
               >
                 <span className="text-lg">🌍</span>
                 <span className="hidden sm:inline">All Rooms</span>
               </a>
 
-              <div className="w-px h-6 bg-slate-300 dark:bg-slate-600 mx-1"></div>
+              <div className="w-px h-6 bg-slate-600 dark:bg-slate-700 mx-1"></div>
 
               <button
                 onClick={() => {
                   localStorage.removeItem("bingo.admin");
                   navigate("/");
                 }}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-red-500 via-rose-500 to-pink-500 text-white font-semibold hover:from-red-600 hover:via-rose-600 hover:to-pink-600 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 border-2 border-red-300/50"
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-red-600 via-rose-600 to-pink-600 text-white font-semibold hover:from-red-500 hover:via-rose-500 hover:to-pink-500 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 border border-red-400/30 hover:border-red-400/60"
                 title="Logout"
               >
                 <span className="text-lg">🚪</span>
@@ -295,9 +357,9 @@ export default function AdminPage() {
       </header>
 
       <main className="container py-6 space-y-6">
-        <section className="bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 dark:from-slate-800 dark:via-slate-700 dark:to-slate-800 border border-white/20 dark:border-slate-600/50 rounded-2xl p-6 shadow-xl backdrop-blur-sm">
+        <section className="bg-gradient-to-br from-slate-800/40 via-slate-800/20 to-slate-900/40 dark:from-slate-800/40 dark:via-slate-800/20 dark:to-slate-900/40 border border-slate-700/30 dark:border-slate-700/30 rounded-2xl p-6 shadow-2xl backdrop-blur-xl">
           <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center">
+            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg ring-2 ring-blue-400/20">
               <svg
                 className="w-5 h-5 text-white"
                 fill="none"
@@ -312,7 +374,7 @@ export default function AdminPage() {
                 />
               </svg>
             </div>
-            <h2 className="text-xl font-bold text-slate-800 dark:text-slate-200">
+            <h2 className="text-xl font-bold text-white">
               Room Management
             </h2>
           </div>
@@ -321,25 +383,25 @@ export default function AdminPage() {
             className="flex flex-col sm:flex-row gap-4 items-start sm:items-end mb-4"
           >
             <div className="flex-1 min-w-[200px]">
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+              <label className="block text-sm font-medium text-slate-300 mb-2">
                 Room Code
               </label>
               <input
                 value={roomCode}
                 onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
                 required
-                className="w-full rounded-xl border border-slate-200 px-4 py-3 bg-white/70 backdrop-blur-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                className="w-full rounded-xl border border-slate-600/50 px-4 py-3 bg-slate-700/40 backdrop-blur-sm text-white placeholder-slate-500 focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 focus:bg-slate-700/60 transition-all shadow-lg"
                 placeholder="ABC123"
               />
             </div>
             <div className="flex-1 min-w-[200px]">
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+              <label className="block text-sm font-medium text-slate-300 mb-2">
                 Game Type
               </label>
               <select
                 value={selectedGameType}
                 onChange={(e) => setSelectedGameType(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 px-4 py-3 bg-white/70 backdrop-blur-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                className="w-full rounded-xl border border-slate-600/50 px-4 py-3 bg-slate-700/40 backdrop-blur-sm text-white focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 focus:bg-slate-700/60 transition-all shadow-lg"
               >
                 <option value="bingo">🎯 Code Bingo</option>
                 <option value="sudoku">📊 Code Sudoku</option>
@@ -438,96 +500,98 @@ export default function AdminPage() {
               Force End
             </button>
           </form>
-          <div className="mt-6 p-4 bg-red-50 dark:bg-red-900/50 border border-red-200 dark:border-red-700 rounded-xl">
-            <h3 className="font-semibold text-red-800 dark:text-red-200 mb-2">
-              Wipe / Purge User Data
+          <div className="mt-6 p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl backdrop-blur-sm">
+            <h3 className="font-semibold text-amber-900 dark:text-amber-200 mb-2 flex items-center gap-2">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4v.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              Question Management & Cleanup
             </h3>
-            <p className="text-sm text-red-700 dark:text-red-300 mb-3">
-              Use carefully. You must provide the admin secret for production.
+            <p className="text-sm text-amber-800 dark:text-amber-300 mb-4">
+              Manage questions for this room. Delete individual questions or clear all questions to start fresh.
             </p>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
-              <label className="text-sm">
-                <input
-                  type="checkbox"
-                  checked={wipeOptions.softDelete}
-                  onChange={(e) =>
-                    setWipeOptions((prev) => ({
-                      ...prev,
-                      softDelete: e.target.checked,
-                    }))
-                  }
-                />{" "}
-                Soft-delete (mark rows as deleted)
-              </label>
-              <label className="text-sm">
-                <input
-                  type="checkbox"
-                  checked={wipeOptions.purgeQuestions}
-                  onChange={(e) =>
-                    setWipeOptions((prev) => ({
-                      ...prev,
-                      purgeQuestions: e.target.checked,
-                    }))
-                  }
-                />{" "}
-                Purge questions (delete question rows)
-              </label>
-              <label className="text-sm">
-                <input
-                  type="checkbox"
-                  checked={wipeOptions.purgeRooms}
-                  onChange={(e) =>
-                    setWipeOptions((prev) => ({
-                      ...prev,
-                      purgeRooms: e.target.checked,
-                    }))
-                  }
-                />{" "}
-                Purge rooms (delete room rows)
-              </label>
-              <label className="text-sm">
-                <input
-                  type="text"
-                  placeholder="initiated by"
-                  value={initiatedBy}
-                  onChange={(e) => setInitiatedBy(e.target.value)}
-                  className="ml-2 border rounded px-2 py-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 border-slate-300 dark:border-slate-600"
-                />{" "}
-                Initiated by
-              </label>
-            </div>
-
-            <div className="mb-3">
-              <label className="block text-sm">
-                Preserve Rooms (comma-separated)
-              </label>
-              <input
-                value={preserveRoomsText}
-                onChange={(e) => setPreserveRoomsText(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 dark:border-slate-600 px-4 py-2 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100"
-                placeholder="ROOM1,ROOM2"
-              />
-            </div>
-
-            <div className="mb-3">
-              <label className="block text-sm">Admin Secret (production)</label>
-              <input
-                value={adminSecret}
-                onChange={(e) => setAdminSecret(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 dark:border-slate-600 px-4 py-2 mt-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100"
-                placeholder="secret"
-              />
-            </div>
-
-            <div className="flex gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
               <button
-                onClick={doWipe}
-                disabled={loading.wipe}
-                className="px-4 py-2 rounded bg-red-600 text-white font-semibold hover:bg-red-700 disabled:opacity-60"
+                onClick={async () => {
+                  if (confirm("Delete ALL questions in this room? This cannot be undone.")) {
+                    setLoading((prev) => ({ ...prev, deleteAllQuestions: true }));
+                    try {
+                      await apiFetch("/api/admin/delete-all-questions", {
+                        method: "POST",
+                        body: JSON.stringify({ room: roomCode.toUpperCase() }),
+                      });
+                      alert("All questions deleted successfully!");
+                      await load(roomCode);
+                    } finally {
+                      setLoading((prev) => ({ ...prev, deleteAllQuestions: false }));
+                    }
+                  }
+                }}
+                disabled={loading.deleteAllQuestions || !state?.questions.length}
+                className="px-4 py-3 rounded-lg bg-gradient-to-r from-red-600 to-rose-600 text-white font-semibold hover:from-red-700 hover:to-rose-700 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg hover:shadow-xl transition-all transform hover:scale-105"
               >
-                {loading.wipe ? "Wiping..." : "Wipe "}
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+                Delete All
               </button>
+
+              <button
+                onClick={async () => {
+                  if (confirm("Delete all REAL questions? Fake questions will remain.")) {
+                    setLoading((prev) => ({ ...prev, deleteRealQuestions: true }));
+                    try {
+                      await apiFetch("/api/admin/delete-questions-by-type", {
+                        method: "POST",
+                        body: JSON.stringify({ room: roomCode.toUpperCase(), type: "real" }),
+                      });
+                      alert("All real questions deleted successfully!");
+                      await load(roomCode);
+                    } finally {
+                      setLoading((prev) => ({ ...prev, deleteRealQuestions: false }));
+                    }
+                  }
+                }}
+                disabled={loading.deleteRealQuestions || !realCount}
+                className="px-4 py-3 rounded-lg bg-gradient-to-r from-orange-600 to-amber-600 text-white font-semibold hover:from-orange-700 hover:to-amber-700 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg hover:shadow-xl transition-all transform hover:scale-105"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+                Delete Real ({realCount})
+              </button>
+
+              <button
+                onClick={async () => {
+                  if (confirm("Delete all FAKE questions? Real questions will remain.")) {
+                    setLoading((prev) => ({ ...prev, deleteFakeQuestions: true }));
+                    try {
+                      await apiFetch("/api/admin/delete-questions-by-type", {
+                        method: "POST",
+                        body: JSON.stringify({ room: roomCode.toUpperCase(), type: "fake" }),
+                      });
+                      alert("All fake questions deleted successfully!");
+                      await load(roomCode);
+                    } finally {
+                      setLoading((prev) => ({ ...prev, deleteFakeQuestions: false }));
+                    }
+                  }
+                }}
+                disabled={loading.deleteFakeQuestions || !fakeCount}
+                className="px-4 py-3 rounded-lg bg-gradient-to-r from-violet-600 to-purple-600 text-white font-semibold hover:from-violet-700 hover:to-purple-700 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg hover:shadow-xl transition-all transform hover:scale-105"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+                Delete Fake ({fakeCount})
+              </button>
+            </div>
+
+            <div className="p-3 bg-white/30 dark:bg-slate-900/30 rounded-lg border border-amber-200/50 dark:border-amber-800/50">
+              <p className="text-xs text-amber-900 dark:text-amber-200 font-medium">
+                💡 Tip: Upload a CSV with real questions, then generate random fake questions to mix in. This keeps players on their toes!
+              </p>
             </div>
           </div>
           {room && (
@@ -670,6 +734,22 @@ export default function AdminPage() {
                 required
                 className="w-full rounded-xl border border-slate-200 px-4 py-3 bg-white/70 backdrop-blur-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-amber-50 file:text-amber-700 hover:file:bg-amber-100"
               />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                Random Fake Questions (Optional)
+              </label>
+              <input
+                type="number"
+                min="0"
+                placeholder="Number of questions to randomly mark as fake"
+                value={numRandomFakeQuestions}
+                onChange={(e) => setNumRandomFakeQuestions(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 px-4 py-3 bg-white/70 backdrop-blur-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all"
+              />
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                📌 Randomly mark this many uploaded questions as fake instead of all real
+              </p>
             </div>
             <button
               disabled={loading.uploadQuestions || !room}
@@ -828,7 +908,8 @@ export default function AdminPage() {
             {state?.questions.map((q) => (
               <div
                 key={q.question_id}
-                className="bg-white/70 dark:bg-slate-700/70 backdrop-blur-sm border border-white/30 dark:border-slate-600/50 rounded-xl p-4 shadow-lg hover:shadow-xl transition-all transform hover:scale-105"
+                onClick={() => setSelectedQuestion(q)}
+                className="bg-white/70 dark:bg-slate-700/70 backdrop-blur-sm border border-white/30 dark:border-slate-600/50 rounded-xl p-4 shadow-lg hover:shadow-xl transition-all transform hover:scale-105 cursor-pointer"
               >
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex items-center gap-2">
@@ -849,7 +930,10 @@ export default function AdminPage() {
                     )}
                   </div>
                   <button
-                    onClick={() => deleteQuestion(q.question_id)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      deleteQuestion(q.question_id);
+                    }}
                     disabled={loading[`deleteQuestion_${q.question_id}`]}
                     className="px-3 py-1.5 rounded-lg bg-gradient-to-r from-red-500 to-rose-600 text-white text-sm hover:from-red-600 hover:to-rose-700 disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2 shadow-md hover:shadow-lg transition-all transform hover:scale-105"
                   >
@@ -872,9 +956,11 @@ export default function AdminPage() {
                     Delete
                   </button>
                 </div>
-                <pre className="text-sm text-slate-800 dark:text-slate-200 font-mono whitespace-pre-wrap bg-slate-50/50 rounded-lg p-3 border border-slate-200/50 mb-3">
-                  {q.question_text}
-                </pre>
+                <div className="bg-slate-50/50 dark:bg-slate-800/50 rounded-lg p-3 border border-slate-200/50 dark:border-slate-600/50 mb-3 overflow-hidden">
+                  <code className="text-xs text-slate-800 dark:text-slate-200 font-mono whitespace-pre block overflow-x-auto">
+{q.question_text}
+                  </code>
+                </div>
                 <div className="flex items-center gap-2 text-xs">
                   <svg
                     className="w-4 h-4 text-slate-500"
@@ -892,9 +978,9 @@ export default function AdminPage() {
                   <span className="font-medium text-slate-700 dark:text-slate-300">
                     Answer:
                   </span>
-                  <span className="font-mono bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded text-slate-800 dark:text-slate-200">
+                  <code className="font-mono bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded text-slate-800 dark:text-slate-200 text-xs">
                     {q.correct_answer}
-                  </span>
+                  </code>
                 </div>
               </div>
             ))}
@@ -1112,6 +1198,156 @@ export default function AdminPage() {
           </div>
         </div>
       )}
+
+      {showFakeQuestionDialog && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-slate-800/80 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-8 w-96 shadow-2xl ring-1 ring-slate-600/20">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-10 h-10 bg-gradient-to-br from-violet-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
+                <svg
+                  className="w-5 h-5 text-white"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M13 10V3L4 14h7v7l9-11h-7z"
+                  />
+                </svg>
+              </div>
+              <h3 className="text-xl font-bold text-white">
+                Generate Fake Questions
+              </h3>
+            </div>
+
+            <p className="text-sm text-slate-300 mb-4">
+              Successfully uploaded <span className="font-semibold text-green-400">{uploadedRealCount} real questions</span>. How many fake questions would you like to generate to mix things up?
+            </p>
+
+            <div className="mb-6">
+              <label className="block text-sm font-semibold text-slate-300 mb-2">
+                Number of Fake Questions
+              </label>
+              <input
+                type="number"
+                min="1"
+                max="100"
+                value={fakeQuestionCount}
+                onChange={(e) => setFakeQuestionCount(Math.max(0, parseInt(e.target.value) || 0))}
+                className="w-full rounded-xl border border-slate-600/50 px-4 py-3 bg-slate-700/40 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500/50 focus:bg-slate-700/60 transition-all shadow-lg"
+                placeholder="e.g. 20"
+              />
+              <p className="text-xs text-slate-400 mt-2">
+                Recommended: Generate 1-2x the number of real questions (e.g., if you have 35 real, generate 35-70 fake)
+              </p>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={generateFakeQuestions}
+                disabled={loading.generateFake || fakeQuestionCount <= 0}
+                className="flex-1 bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-white font-semibold py-3 rounded-xl shadow-lg hover:shadow-xl disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-all transform hover:scale-105 border border-violet-400/30 hover:border-violet-400/60"
+              >
+                {loading.generateFake && (
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                )}
+                {loading.generateFake ? "Generating..." : "✨ Generate"}
+              </button>
+              <button
+                onClick={() => {
+                  setShowFakeQuestionDialog(false);
+                  setFakeQuestionCount(0);
+                  setUploadedRealCount(0);
+                }}
+                disabled={loading.generateFake}
+                className="flex-1 border border-slate-600/50 text-slate-300 hover:text-white hover:border-slate-500 py-3 rounded-xl transition-all font-semibold disabled:opacity-60"
+              >
+                Skip
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Question Details Modal */}
+      <Dialog open={!!selectedQuestion} onOpenChange={(open) => !open && setSelectedQuestion(null)}>
+        <DialogContent className="max-w-2xl bg-gradient-to-br from-slate-800 via-slate-700 to-slate-800 border border-slate-600/50 text-white">
+          <DialogHeader>
+            <DialogTitle className="text-2xl">Question Details</DialogTitle>
+            <DialogDescription className="text-slate-300">
+              View the full question and answer
+            </DialogDescription>
+          </DialogHeader>
+          {selectedQuestion && (
+            <div className="space-y-6">
+              {/* Question Type Badge */}
+              <div className="flex items-center gap-2">
+                {selectedQuestion.is_real ? (
+                  <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-500/20 border border-emerald-500/50 rounded-full">
+                    <div className="w-2 h-2 bg-emerald-400 rounded-full"></div>
+                    <span className="text-sm font-semibold text-emerald-300">Real Question</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-500/20 border border-amber-500/50 rounded-full">
+                    <div className="w-2 h-2 bg-amber-400 rounded-full"></div>
+                    <span className="text-sm font-semibold text-amber-300">Fake Question</span>
+                  </div>
+                )}
+                <span className="text-xs text-slate-400 ml-auto">ID: {selectedQuestion.question_id}</span>
+              </div>
+
+              {/* Question Text */}
+              <div>
+                <h3 className="text-sm font-semibold text-slate-300 mb-2 uppercase tracking-wide">Question</h3>
+                <div className="bg-slate-900/70 border border-slate-500 rounded-lg p-5 overflow-auto max-h-96">
+                  <code className="text-sm text-white font-mono whitespace-pre block">
+{selectedQuestion.question_text || selectedQuestion.text || 'No question text available'}
+                  </code>
+                </div>
+              </div>
+
+              {/* Answer */}
+              <div>
+                <h3 className="text-sm font-semibold text-slate-300 mb-2 uppercase tracking-wide">Correct Answer</h3>
+                <div className="bg-gradient-to-r from-emerald-500/20 to-green-500/20 border-2 border-emerald-400 rounded-lg p-5">
+                  <code className="text-lg font-mono font-bold text-emerald-200 whitespace-pre block">
+{selectedQuestion.correct_answer || selectedQuestion.correctAnswer || 'No answer available'}
+                  </code>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-3 pt-4 border-t border-slate-600/50">
+                <button
+                  onClick={() => {
+                    deleteQuestion(selectedQuestion.question_id);
+                    setSelectedQuestion(null);
+                  }}
+                  disabled={loading[`deleteQuestion_${selectedQuestion.question_id}`]}
+                  className="flex-1 px-4 py-2.5 rounded-lg bg-gradient-to-r from-red-500 to-rose-600 text-white font-semibold hover:from-red-600 hover:to-rose-700 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-all"
+                >
+                  {loading[`deleteQuestion_${selectedQuestion.question_id}`] && (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  )}
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                  Delete Question
+                </button>
+                <button
+                  onClick={() => setSelectedQuestion(null)}
+                  className="flex-1 px-4 py-2.5 rounded-lg border border-slate-500 text-slate-200 font-semibold hover:border-slate-400 hover:text-white transition-all"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

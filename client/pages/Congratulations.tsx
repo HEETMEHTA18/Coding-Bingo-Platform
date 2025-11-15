@@ -56,20 +56,20 @@ export default function CongratulationsPage() {
 
   if (loading)
     return (
-      <div className="min-h-screen flex items-center justify-center bg-white">
+      <div className="min-h-screen flex items-center justify-center bg-white dark:bg-slate-900">
         <div className="text-center">
           <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto"></div>
-          <p className="text-slate-600 mt-4">Loading...</p>
+          <p className="text-slate-600 dark:text-slate-400 mt-4">Loading...</p>
         </div>
       </div>
     );
 
   if (!allowed)
     return (
-      <div className="min-h-screen flex items-center justify-center bg-white">
+      <div className="min-h-screen flex items-center justify-center bg-white dark:bg-slate-900">
         <div className="text-center">
-          <p className="text-2xl font-bold text-red-600">Access Denied</p>
-          <p className="text-slate-600 mt-2">
+          <p className="text-2xl font-bold text-red-600 dark:text-red-400">Access Denied</p>
+          <p className="text-slate-600 dark:text-slate-400 mt-2">
             Complete 5 lines to view this page
           </p>
           <a
@@ -83,19 +83,19 @@ export default function CongratulationsPage() {
     );
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-white to-blue-50 flex items-center justify-center px-4">
-      <div className="bg-white border rounded-2xl shadow-xl p-8 w-full max-w-lg text-center">
+    <div className="min-h-screen bg-gradient-to-b from-white to-blue-50 dark:from-slate-900 dark:to-slate-800 flex items-center justify-center px-4">
+      <div className="bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-2xl shadow-xl p-8 w-full max-w-lg text-center">
         <div className="text-4xl">🎉</div>
-        <h1 className="text-2xl font-extrabold text-slate-900 mt-2">
+        <h1 className="text-2xl font-extrabold text-slate-900 dark:text-slate-100 mt-2">
           Congratulations!
         </h1>
-        <p className="text-slate-600 mt-1">You Completed Bingo!</p>
+        <p className="text-slate-600 dark:text-slate-400 mt-1">You Completed Bingo!</p>
         <div className="mt-4">
-          <p className="text-lg font-semibold text-slate-800">
+          <p className="text-lg font-semibold text-slate-800 dark:text-slate-200">
             Team: {team?.team_name}
           </p>
           {rank && (
-            <p className="text-blue-700 font-medium mt-1">Rank: #{rank}</p>
+            <p className="text-blue-700 dark:text-blue-400 font-medium mt-1">Rank: #{rank}</p>
           )}
         </div>
         <div className="mt-6 flex gap-3 justify-center">

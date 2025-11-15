@@ -8,6 +8,8 @@ import Connect4Game from "./games/Connect4Game";
 import MemoryGame from "./games/MemoryGame";
 import RaceGame from "./games/RaceGame";
 import CrosswordGame from "./games/CrosswordGame";
+import QuizGame from "./games/QuizGame";
+import PuzzleHuntGame from "./games/PuzzleHuntGame";
 
 function safeParse<T>(raw: string | null): T | null {
   try {
@@ -74,6 +76,10 @@ export default function GameRouter() {
       return <RaceGame />;
     case "crossword":
       return <CrosswordGame />;
+    case "quiz":
+      return <QuizGame />;
+    case "puzzlehunt":
+      return <PuzzleHuntGame />;
     case "bingo":
     default:
       return <GamePage />;

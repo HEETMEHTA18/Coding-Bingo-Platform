@@ -133,7 +133,7 @@ export default function MemoryGame() {
         body: JSON.stringify({
           room: room?.code,
           teamId: String(teamId),
-          questionId: String(currentQuestion.id),
+          questionId: String(currentQuestion.question_id),
           answer: answer,
         }),
       });

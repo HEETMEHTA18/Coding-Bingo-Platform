@@ -97,78 +97,93 @@ async function generateQuestionMapping(
 
 // Ensure up to 25 questions are mapped for the team by assigning unmapped questions to unused cells.
 async function ensureMappingsFilled(teamId: string, roomCode: string) {
-  // Build grid positions
-  const letters = ["A", "B", "C", "D", "E"];
-  const gridPositions: string[] = [];
-  for (const L of letters)
-    for (let c = 1; c <= 5; c++) gridPositions.push(`${L}${c}`);
+  try {
+    // Build grid positions
+    const letters = ["A", "B", "C", "D", "E"];
+    const gridPositions: string[] = [];
+    for (const L of letters)
+      for (let c = 1; c <= 5; c++) gridPositions.push(`${L}${c}`);
 
-  // Load existing mappings for team
-  const existingMappings = await db
-    .select()
-    .from(teamQuestionMapping)
-    .where(eq(teamQuestionMapping.teamId, teamId));
-  const mappedQids = new Set(existingMappings.map((m) => m.questionId));
-  const mappedPositions = new Set(existingMappings.map((m) => m.gridPosition));
+    // Load existing mappings for team
+    const existingMappings = await db
+      .select()
+      .from(teamQuestionMapping)
+      .where(eq(teamQuestionMapping.teamId, teamId));
+    const mappedQids = new Set(existingMappings.map((m) => m.questionId));
+    const mappedPositions = new Set(existingMappings.map((m) => m.gridPosition));
 
-  // Load solved positions to avoid collisions
-  const solvedRes = await db
-    .select()
-    .from(teamSolvedPositions)
-    .where(eq(teamSolvedPositions.teamId, teamId));
-  for (const s of solvedRes) mappedPositions.add(s.position);
+    // Load solved positions to avoid collisions
+    const solvedRes = await db
+      .select()
+      .from(teamSolvedPositions)
+      .where(eq(teamSolvedPositions.teamId, teamId));
+    for (const s of solvedRes) mappedPositions.add(s.position);
 
-  // Get all room questions
-  const roomQuestions = await db
-    .select()
-    .from(questionsTable)
-    .where(eq(questionsTable.roomCode, roomCode));
-  // Filter questions that are not mapped yet
-  let unmapped = roomQuestions.filter((q) => !mappedQids.has(q.questionId));
+    // Get all room questions
+    const roomQuestions = await db
+      .select()
+      .from(questionsTable)
+      .where(eq(questionsTable.roomCode, roomCode));
+    
+    // Filter valid questions only
+    const validQuestions = roomQuestions.filter(q => q && q.questionId !== undefined && q.questionId !== null);
+    
+    // Filter questions that are not mapped yet
+    let unmapped = validQuestions.filter((q) => !mappedQids.has(q.questionId));
 
-  // Available positions
-  let available = gridPositions.filter((p) => !mappedPositions.has(p));
+    // Available positions
+    let available = gridPositions.filter((p) => !mappedPositions.has(p));
 
-  // Shuffle both pools so mapping is random instead of deterministic
-  // Use a simple seed based on teamId so mapped boards are reproducible per team (but appear random)
-  unmapped = seededShuffle(unmapped, teamId);
-  available = seededShuffle(available, teamId + "-pos");
+    // Shuffle both pools so mapping is random instead of deterministic
+    // Use a simple seed based on teamId so mapped boards are reproducible per team (but appear random)
+    unmapped = seededShuffle(unmapped, teamId);
+    available = seededShuffle(available, teamId + "-pos");
 
-  // Map as many as possible (up to available slots)
-  const toMap = Math.min(available.length, unmapped.length);
-  if (toMap > 0) {
-    console.debug(
-      `ensureMappingsFilled: team=${teamId} room=${roomCode} toMap=${toMap} unmapped=${unmapped.length} available=${available.length} existingMappings=${existingMappings.length} solvedRes=${solvedRes.length}`,
-    );
-    // log a sample of unmapped ids/positions
-    console.debug(
-      "ensureMappingsFilled: sampleUnmapped=",
-      unmapped.slice(0, 5).map((u) => ({ id: u?.questionId })),
-      "sampleAvailable=",
-      available.slice(0, 5),
-    );
-  }
-  for (let i = 0; i < toMap; i++) {
-    const q = unmapped[i];
-    const pos = available[i];
-    if (!q || q.questionId === undefined || !pos) {
+    // Map as many as possible (up to available slots)
+    const toMap = Math.min(available.length, unmapped.length);
+    if (toMap > 0) {
       console.debug(
-        `ensureMappingsFilled: skipping mapping at i=${i} q=${JSON.stringify(q)} pos=${pos}`,
+        `ensureMappingsFilled: team=${teamId} room=${roomCode} toMap=${toMap} unmapped=${unmapped.length} available=${available.length} existingMappings=${existingMappings.length} solvedRes=${solvedRes.length}`,
       );
-      continue;
+      // log a sample of unmapped ids/positions
+      console.debug(
+        "ensureMappingsFilled: sampleUnmapped=",
+        unmapped.slice(0, 5).map((u) => ({ id: u?.questionId })),
+        "sampleAvailable=",
+        available.slice(0, 5),
+      );
     }
-    try {
-      await db
-        .insert(teamQuestionMapping)
-        .values({ teamId, questionId: q.questionId, gridPosition: pos });
-    } catch (err) {
-      console.error("ensureMappingsFilled: failed to insert mapping", {
-        teamId,
-        questionId: q.questionId,
-        pos,
-        err,
-      });
+    
+    // Only map valid questions
+    const validMappings = [];
+    for (let i = 0; i < toMap; i++) {
+      const q = unmapped[i];
+      const pos = available[i];
+      if (!q || q.questionId === undefined || q.questionId === null || !pos) {
+        console.debug(
+          `ensureMappingsFilled: skipping mapping at i=${i} q=${q ? 'invalid' : 'undefined'} pos=${pos}`,
+        );
+        continue;
+      }
+      validMappings.push({ teamId, questionId: q.questionId, gridPosition: pos });
     }
+    
+    // Batch insert all valid mappings
+    if (validMappings.length > 0) {
+      try {
+        await db.insert(teamQuestionMapping).values(validMappings);
+        console.debug(`Successfully mapped ${validMappings.length} questions for team ${teamId}`);
+      } catch (err) {
+        console.error("ensureMappingsFilled: failed to insert mappings", {
+          teamId,
+          count: validMappings.length,
+          err,
+        });
+      }
+    }
+  } catch (err) {
+    console.error('ensureMappingsFilled: error', { teamId, roomCode, err });
+    throw err;
   }
 }
 
@@ -338,21 +353,36 @@ export const handleGameState: RequestHandler = async (req, res) => {
     // Enforce max length 10 for room code
     const code = roomCode.toUpperCase().slice(0, 10);
 
-    // Get room
-    const roomResult = await db
-      .select()
-      .from(rooms)
-      .where(eq(rooms.code, code));
+    // Get room with timeout protection
+    const roomResult = await Promise.race([
+      db.select().from(rooms).where(eq(rooms.code, code)),
+      new Promise<never>((_, reject) => 
+        setTimeout(() => reject(new Error('Room query timeout')), 15000)
+      )
+    ]).catch(err => {
+      console.error('Error fetching room:', err);
+      if (err.code === 'ENOTFOUND' || err.message?.includes('ENOTFOUND')) {
+        throw new Error('Database connection lost - please check your internet connection');
+      }
+      throw err;
+    });
+    
     if (roomResult.length === 0) {
       return res.status(404).json({ error: "Room not found" });
     }
     const room = roomResult[0];
 
-    // Get team
-    const teamResult = await db
-      .select()
-      .from(teams)
-      .where(eq(teams.teamId, teamId));
+    // Get team with timeout protection
+    const teamResult = await Promise.race([
+      db.select().from(teams).where(eq(teams.teamId, teamId)),
+      new Promise<never>((_, reject) => 
+        setTimeout(() => reject(new Error('Team query timeout')), 15000)
+      )
+    ]).catch(err => {
+      console.error('Error fetching team:', err);
+      throw err;
+    });
+    
     if (teamResult.length === 0) {
       return res.status(404).json({ error: "Team not found" });
     }
@@ -693,9 +723,9 @@ export const handleRecentSubmissions: RequestHandler = async (req, res) => {
       .orderBy(sql`${submissionAttempts.attemptedAt} DESC`)
       .limit(20);
 
-    // Set a 10 second timeout for the query
+    // Set a 30 second timeout for the query (increased from 10s)
     const timeoutPromise = new Promise<never>((_, reject) => {
-      setTimeout(() => reject(new Error('Query timeout')), 10000);
+      setTimeout(() => reject(new Error('Query timeout after 30s')), 30000);
     });
 
     const recentSubmissions = await Promise.race([queryPromise, timeoutPromise]);

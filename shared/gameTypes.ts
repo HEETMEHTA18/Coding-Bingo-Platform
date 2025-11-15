@@ -1,6 +1,6 @@
 // Shared game type definitions for all games
 
-export type GameType = 'bingo' | 'sudoku' | 'connect4' | 'memory' | 'race' | 'crossword';
+export type GameType = 'bingo' | 'sudoku' | 'connect4' | 'memory' | 'race' | 'crossword' | 'quiz' | 'puzzlehunt';
 
 export interface GameConfig {
   id: GameType;
@@ -79,6 +79,28 @@ export const GAME_CONFIGS: Record<GameType, GameConfig> = {
     maxPlayers: 20,
     estimatedDuration: 25,
     difficulty: 'medium',
+    category: 'puzzle',
+  },
+  quiz: {
+    id: 'quiz',
+    name: 'Code Quiz Master',
+    description: 'Answer multiple-choice programming questions to score points',
+    icon: '❓',
+    minPlayers: 1,
+    maxPlayers: 50,
+    estimatedDuration: 15,
+    difficulty: 'easy',
+    category: 'speed',
+  },
+  puzzlehunt: {
+    id: 'puzzlehunt',
+    name: 'Code Puzzle Hunt',
+    description: 'Solve coding riddles and find hidden patterns in code',
+    icon: '🔍',
+    minPlayers: 1,
+    maxPlayers: 30,
+    estimatedDuration: 30,
+    difficulty: 'hard',
     category: 'puzzle',
   },
 };

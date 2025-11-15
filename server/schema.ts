@@ -3,7 +3,7 @@ import { pgTable, text, integer, boolean, timestamp } from "drizzle-orm/pg-core"
 export const rooms = pgTable("rooms", {
   code: text("code").primaryKey(),
   title: text("title").notNull(),
-  gameType: text("game_type").notNull().default("bingo"), // 'bingo', 'sudoku', 'connect4', 'memory', 'race', 'crossword'
+  gameType: text("game_type").notNull().default("bingo"), // 'bingo', 'sudoku', 'connect4', 'memory', 'race', 'crossword', 'quiz', 'puzzlehunt'
   roundEndAt: timestamp("round_end_at"),
   isDeleted: boolean("is_deleted")
     .default(false)

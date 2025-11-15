@@ -17,6 +17,9 @@ import {
   handleDeleteQuestion,
   handleUploadQuestions,
   handleWipeUserData,
+  handleGenerateFakeQuestions,
+  handleDeleteQuestionsByType,
+  handleDeleteAllQuestions,
 } from "./routes/admin";
 import { handleLeaderboard, handleLeaderboardAll } from "./routes/leaderboard";
 import { handleLogin, handleGameState, handleSubmit, handleRecentSubmissions } from "./routes/game";
@@ -134,6 +137,9 @@ export const createServer = () => {
   app.post("/api/admin/add-question", express.json({ limit: "10mb" }), handleAddQuestion);
   app.post("/api/admin/delete-question", express.json({ limit: "10mb" }), handleDeleteQuestion);
   app.post("/api/admin/upload-questions", handleUploadQuestions); // No JSON parsing for file uploads
+  app.post("/api/admin/generate-fake-questions", express.json({ limit: "10mb" }), handleGenerateFakeQuestions);
+  app.post("/api/admin/delete-questions-by-type", express.json({ limit: "10mb" }), handleDeleteQuestionsByType);
+  app.post("/api/admin/delete-all-questions", express.json({ limit: "10mb" }), handleDeleteAllQuestions);
   app.post("/api/admin/wipe", express.json({ limit: "10mb" }), handleWipeUserData);
 
   // Leaderboard routes

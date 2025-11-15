@@ -1,6 +1,6 @@
 // Shared types used by both client & server
 
-export type GameType = 'bingo' | 'sudoku' | 'connect4' | 'memory' | 'race' | 'crossword';
+export type GameType = 'bingo' | 'sudoku' | 'connect4' | 'memory' | 'race' | 'crossword' | 'quiz' | 'puzzlehunt';
 
 export interface DemoResponse {
   message: string;
@@ -35,7 +35,7 @@ export interface Question {
   id: string;
   text: string;
   options: string[];
-  correctAnswer?: number;
+  correctAnswer?: number | string;
   points: number;
   grid_position?: string | null;
   question_id?: number;
@@ -99,7 +99,7 @@ export interface AdminAddQuestionRequest {
 
 export interface AdminDeleteQuestionRequest {
   room: string;
-  questionId: string;
+  questionId: string | number;
 }
 
 // Login

@@ -18,15 +18,15 @@ function getSqlConnection() {
       const isNeon = connectionString.includes('neon.tech');
       const config: any = {
         max: parseInt(process.env.PG_MAX_POOL || "10"), // Reduced from 20 for better serverless compatibility
-        idle_timeout: parseInt(process.env.PG_IDLE_TIMEOUT || "20"), // Reduced from 30s
-        connect_timeout: parseInt(process.env.PG_CONNECTION_TIMEOUT || "10"), // Reduced from 15s
+        idle_timeout: parseInt(process.env.PG_IDLE_TIMEOUT || "30"), // Increased for stability
+        connect_timeout: parseInt(process.env.PG_CONNECTION_TIMEOUT || "30"), // Increased to 30s
         prepare: false, // Disable prepared statements for better compatibility
         // Neon-specific SSL configuration
         ssl: isNeon ? "require" : false,
         // Connection pooling and keep-alive
         keep_alive: 60,
         backoff: (attempt: number) => Math.min(Math.max(100, 40 * Math.pow(2, attempt)), 10000),
-        max_lifetime: 60 * 10, // 10 minutes max connection lifetime for serverless
+        max_lifetime: 60 * 15, // 15 minutes max connection lifetime
         connection: {
           application_name: 'bingo-platform',
         },
@@ -36,6 +36,9 @@ function getSqlConnection() {
         transform: {
           undefined: null,
         },
+        // Add retry logic
+        onnotice: () => {}, // Suppress notices
+        debug: false, // Disable debug for production
       };
       
       console.log('Database config:', {
@@ -48,8 +51,29 @@ function getSqlConnection() {
       
       sql = postgres(connectionString, config);
       console.log('Database connection established successfully');
-    } catch (error) {
+      
+      // Test the connection immediately
+      sql`SELECT 1 as test`.then(() => {
+        console.log('✅ Database connection verified');
+      }).catch(err => {
+        console.error('⚠️ Database connection test failed:', err.message);
+        if (err.code === 'ENOTFOUND') {
+          console.error('❌ DNS resolution failed - check your internet connection or database hostname');
+        }
+      });
+    } catch (error: any) {
       console.error('Database connection failed:', error);
+      
+      // Provide specific guidance based on error type
+      if (error.code === 'ENOTFOUND') {
+        console.error('❌ Cannot resolve database hostname - check:');
+        console.error('   1. Internet connection');
+        console.error('   2. DATABASE_URL in .env file');
+        console.error('   3. Database service is accessible');
+      } else if (error.code === 'ETIMEDOUT' || error.code === 'ECONNREFUSED') {
+        console.error('❌ Connection timeout or refused - database may be down');
+      }
+      
       // In development, provide a more helpful error message
       if (process.env.NODE_ENV !== 'production') {
         console.error('💡 Development tip: Check your DATABASE_URL in .env file');
