@@ -1,6 +1,6 @@
 // Shared types used by both client & server
 
-export type GameType = 'bingo' | 'sudoku' | 'connect4' | 'memory' | 'race' | 'crossword' | 'quiz' | 'puzzlehunt';
+export type GameType = 'bingo' | 'sudoku' | 'connect4' | 'memory' | 'race' | 'crossword' | 'quiz' | 'puzzlehunt' | 'codecanvas';
 
 export interface DemoResponse {
   message: string;

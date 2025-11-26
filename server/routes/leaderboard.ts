@@ -80,26 +80,21 @@ export const handleLeaderboard: RequestHandler = async (req, res) => {
     const sortedTeams = teamsWithSolvedCount
       .map((item) => {
         // Calculate time based on first and last solved questions
+        // Calculate time based on team start time
         let timeTakenMs = 0;
-        const teamSolvedQuestions = solvedQuestionsByTeam[item.team.teamId] || [];
+        const startTime = item.team.startTime;
 
-        if (teamSolvedQuestions.length > 0) {
-          // Filter out invalid dates
-          const validQuestions = teamSolvedQuestions.filter(q => q && !isNaN(q.getTime()));
-
-          if (validQuestions.length > 0) {
-            const firstSolve = validQuestions[0];
-            const lastSolve = validQuestions[validQuestions.length - 1];
-
-            // If team has completed (has endTime or is a winner), use time from first to last question
-            // If team is still playing, use time from first question to now
-            const isCompleted = (item.team.endTime && item.team.endTime.getTime() > 0) || item.team.linesCompleted >= 5;
-            if (isCompleted) {
-              timeTakenMs = lastSolve.getTime() - firstSolve.getTime();
-            } else {
-              // Team is still active, show time from first question to now
-              timeTakenMs = Date.now() - firstSolve.getTime();
-            }
+        if (startTime && startTime.getTime() > 0) {
+          const isCompleted = (item.team.endTime && item.team.endTime.getTime() > 0) || item.team.linesCompleted >= 5;
+          if (isCompleted) {
+            // If team has completed, use time from start to end
+            const endTime = item.team.endTime && item.team.endTime.getTime() > 0
+              ? item.team.endTime
+              : new Date(); // Fallback if endTime missing but lines >= 5
+            timeTakenMs = endTime.getTime() - startTime.getTime();
+          } else {
+            // Team is still active, show time from start to now
+            timeTakenMs = Date.now() - startTime.getTime();
           }
         }
 
