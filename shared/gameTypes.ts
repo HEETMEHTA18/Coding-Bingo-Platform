@@ -1,6 +1,6 @@
 // Shared game type definitions for all games
 
-export type GameType = 'bingo' | 'sudoku' | 'connect4' | 'memory' | 'race' | 'crossword' | 'quiz' | 'puzzlehunt';
+export type GameType = 'bingo' | 'sudoku' | 'connect4' | 'memory' | 'race' | 'crossword' | 'quiz' | 'puzzlehunt' | 'codecanvas';
 
 export interface GameConfig {
   id: GameType;
@@ -101,6 +101,17 @@ export const GAME_CONFIGS: Record<GameType, GameConfig> = {
     maxPlayers: 30,
     estimatedDuration: 30,
     difficulty: 'hard',
+    category: 'puzzle',
+  },
+  codecanvas: {
+    id: 'codecanvas',
+    name: 'Code Canvas',
+    description: 'Write JavaScript code to draw patterns on a grid',
+    icon: '🎨',
+    minPlayers: 1,
+    maxPlayers: 20,
+    estimatedDuration: 25,
+    difficulty: 'medium',
     category: 'puzzle',
   },
 };

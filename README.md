@@ -1,187 +1,104 @@
-# 🎮 Coding Bingo Platform
+# 🎮 Coding Bingo Platform - Complete Guide
 
-A real-time multiplayer coding challenge platform where teams compete to solve programming problems and complete bingo patterns on a 5x5 grid.
+Welcome to the **Coding Bingo Platform**, a comprehensive suite of multiplayer coding games designed to test your programming skills, logic, and teamwork. This guide provides an overview of all available game modes and features.
 
-## ✨ Features
+![Coding Bingo Interface](./assets/images/coding_bingo_interface_1764177835362.png)
 
-- **Real-time Multiplayer**: Multiple teams compete simultaneously
-- **Random Grid Assignment**: Each correct answer fills a random grid position
-- **Fake Questions**: Bonus questions that don't contribute to the bingo grid
-- **Live Leaderboard**: Track team rankings in real-time
-- **Admin Dashboard**: Manage rooms, questions, and game state
-- **Code Formatting**: Automatic proper indentation for C code questions
-- **CSV Upload**: Bulk upload questions via CSV
-- **Production Ready**: Security hardening, rate limiting, error handling
+## 🌟 Introduction
 
-## 🚀 Tech Stack
+The Coding Bingo Platform is a real-time multiplayer environment where teams compete in various coding-themed challenges. Whether you're debugging code against the clock, solving logic puzzles, or competing in a classic game of Connect 4 with a twist, there's something for every coder.
 
-- **Frontend**: React 18 + TypeScript + Vite + TailwindCSS + Shadcn/ui
-- **Backend**: Express.js + Node.js
-- **Database**: PostgreSQL (Neon) with Drizzle ORM
-- **Deployment**: Vercel / Netlify / Docker ready
+## 🕹️ Game Modes
 
-## 📋 Prerequisites
+### 1. Coding Bingo (Flagship Game)
+The core experience of the platform. Teams solve coding problems to claim spots on a 5x5 grid.
+- **Objective:** Complete a row, column, or diagonal (Bingo) or fill the entire grid.
+- **Mechanics:** Correct answers fill random spots. "Fake" questions test your knowledge without filling the grid.
+- **Visuals:** Split-screen view with code editor and live bingo grid.
 
-- Node.js 18+ or 20+
-- PostgreSQL database (Neon recommended)
-- pnpm (or npm/yarn)
+![Coding Bingo](./assets/images/coding_bingo_interface_1764177835362.png)
 
-## 🔧 Installation
+### 2. Speed Coding Race
+A high-octane race against other teams to fix buggy code.
+- **Objective:** Fix syntax and logic errors in the provided code snippets as fast as possible.
+- **Mechanics:** Real-time progress bar shows your standing against other teams.
+- **Visuals:** Dark-themed editor with diff-view capabilities and live race status.
 
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/HEETMEHTA18/Coding-Bingo-Platform.git
-   cd Coding-Bingo-Platform
-   ```
+![Speed Coding Race](./assets/images/speed_coding_race_interface_1764177880806.png)
 
-2. **Install dependencies**
-   ```bash
-   pnpm install
-   # or
-   npm install
-   ```
+### 3. Code Canvas
+Unleash your creativity by drawing with code.
+- **Objective:** Create pixel art or patterns using code commands.
+- **Mechanics:** Use a custom API to draw on the canvas. Best designs win!
+- **Visuals:** Large canvas area with a command palette and color picker.
 
-3. **Set up environment variables**
-   ```bash
-   cp .env.example .env
-   ```
-   Edit `.env` and add your database URL and other configuration.
+![Code Canvas](./assets/images/code_canvas_interface_1764177958866.png)
 
-4. **Run database migrations**
-   ```bash
-   pnpm run generate
-   pnpm run migrate
-   ```
+### 4. Memory Match
+Test your memory and code knowledge.
+- **Objective:** Match pairs of cards. Pairs can be `Code <-> Output`, `Concept <-> Definition`, or identical symbols.
+- **Mechanics:** Turn-based or time-attack modes.
+- **Visuals:** Grid of flip-cards with coding symbols.
 
-5. **Start development server**
-   ```bash
-   pnpm run dev
-   ```
+![Memory Match](./assets/images/memory_match_interface_1764177993590.png)
 
-   The app will be available at `http://localhost:5173`
+### 5. Connect 4 (Coder's Edition)
+The classic strategy game reimagined.
+- **Objective:** Connect 4 discs in a row.
+- **Mechanics:** To drop a disc, you must answer a quick coding question correctly.
+- **Visuals:** Vertical game board with neon-styled discs.
 
-## 🎯 Usage
+![Connect 4](./assets/images/connect4_interface_1764178020699.png)
 
-### Creating a Game Room (Admin)
+### 6. Sudoku
+Logic puzzle for the analytical mind.
+- **Objective:** Fill the 9x9 grid so that each column, row, and 3x3 box contains all digits from 1 to 9.
+- **Mechanics:** Standard Sudoku rules, with a coding twist (hexadecimal mode available).
+- **Visuals:** Clean, minimalist grid with helper tools.
 
-1. Navigate to `/admin`
-2. Create a new room with code, title, and duration
-3. Upload questions via CSV or add manually
-4. Start the game when teams are ready
+![Sudoku](./assets/images/sudoku_interface_1764178039755.png)
 
-### Playing as a Team
+### 7. Coding Crossword
+Test your terminology.
+- **Objective:** Fill the crossword grid with programming terms based on clues.
+- **Mechanics:** Clues cover languages, algorithms, and computer science history.
+- **Visuals:** Classic crossword layout with a modern dark theme.
 
-1. Navigate to home page
-2. Enter room code and team name
-3. Solve coding questions
-4. Each correct answer fills a random grid position
-5. Complete bingo patterns (row, column, diagonal, or full grid)
+![Crossword](./assets/images/crossword_interface_1764178082222.png)
 
-### CSV Question Format
+### 8. Tech Quiz & Puzzle Hunt
+- **Tech Quiz:** Fast-paced multiple choice questions to test broad knowledge.
+- **Puzzle Hunt:** A series of cryptic logic puzzles and riddles that require out-of-the-box thinking.
 
-```csv
-question_text,correct_answer,is_real
-"#include <stdio.h>\nint main() { printf(\"Hello\"); }",Hello,true
-"int x = 5 + 3;",8,false
-```
+## 🛠️ Admin Panel Guide
 
-- `question_text`: The code question (can include \n for newlines)
-- `correct_answer`: Expected output
-- `is_real`: `true` for real questions (contribute to grid), `false` for fake/bonus questions
+The Admin Panel is the control center for the platform.
 
-## 📦 Build for Production
+1.  **Access:** Navigate to `/admin`.
+2.  **Create Room:** Enter a unique Room Code, Title, and select the Game Type.
+3.  **Manage Questions:** Upload questions via CSV or add them manually.
+4.  **Control Game:** Start, pause, or force-end games. Monitor the live leaderboard.
+
+## 🚀 Installation & Deployment
+
+For detailed instructions on how to deploy this platform to production (Railway, VPS, etc.), please refer to the **[DEPLOYMENT.md](./DEPLOYMENT.md)** file.
+
+### Quick Start (Local)
 
 ```bash
-pnpm run build
+# Install dependencies
+npm install
+
+# Setup Database
+# (Ensure .env is configured with DATABASE_URL)
+npm run migrate
+
+# Start Server
+npm run dev
 ```
 
-This creates:
-- `dist/spa/*` - Frontend static files
-- `dist/server/*` - Backend server files
-
-## 🚀 Deployment
-
-### Vercel (Recommended)
-
-```bash
-vercel
-```
-
-Or connect your GitHub repo to Vercel dashboard.
-
-**Environment Variables to Set:**
-- `DATABASE_URL`
-- `NODE_ENV=production`
-- `ADMIN_SECRET` (optional)
-
-### Netlify
-
-```bash
-netlify deploy --prod
-```
-
-### Docker
-
-```bash
-docker build -t coding-bingo .
-docker run -p 8080:8080 -e DATABASE_URL="your-db-url" coding-bingo
-```
-
-## 🔒 Security Features
-
-- ✅ Helmet.js for security headers
-- ✅ Rate limiting on all endpoints
-- ✅ Database connection pooling with timeouts
-- ✅ Retry logic with exponential backoff
-- ✅ Input validation and sanitization
-- ✅ SSL/TLS for database connections
-- ✅ Environment variables for secrets
-
-## 📊 API Endpoints
-
-### Game Endpoints
-- `POST /api/join` - Join a room as a team
-- `GET /api/game-state` - Get current game state
-- `POST /api/submit` - Submit an answer
-- `GET /api/leaderboard` - Get room leaderboard
-
-### Admin Endpoints
-- `POST /api/admin/create-room` - Create a new room
-- `POST /api/admin/upload-questions` - Bulk upload questions
-- `POST /api/admin/add-question` - Add single question
-- `POST /api/admin/start-game` - Start the game
-- `POST /api/admin/force-end` - Force end the game
-
-## 🎨 Key Game Mechanics
-
-### Random Grid Assignment
-- When a team answers correctly, a random **unoccupied** grid position is assigned
-- No pre-mapping of questions to positions
-- Each team has their own unique grid layout
-
-### Fake Questions
-- Questions marked as `is_real=false` are bonus questions
-- Players receive confirmation but **no grid position**
-- No points awarded for fake questions
-- Used to test knowledge without affecting bingo progress
-
-### Bingo Win Conditions
-- Complete any row, column, or diagonal
-- Complete the full 5x5 grid
-- First team to complete wins
-
-## 📝 License
-
-MIT License - feel free to use for educational purposes
-
-## 🤝 Contributing
-
-Pull requests are welcome! For major changes, please open an issue first.
-
-## 📧 Support
-
-For issues or questions, open a GitHub issue or contact the maintainer.
+Visit `http://localhost:5173` to start playing!
 
 ---
 
-Built with ❤️ for competitive programming education
+*Built with ❤️ for the developer community.*

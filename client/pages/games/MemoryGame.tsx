@@ -1,7 +1,11 @@
-// Code Memory Match Game with Questions & Power-Ups
+// Code Memory Match Game
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import GameHeader from "../../components/GameHeader";
 import type { Team, Room, GameStateResponse } from "@shared/api";
 
@@ -22,15 +26,17 @@ type Question = {
   is_real: boolean;
 };
 
-type MemoryCard = {
+type CardItem = {
   id: number;
-  code: string;
+  content: string;
+  type: 'code' | 'concept';
   isFlipped: boolean;
   isMatched: boolean;
 };
 
 type PowerUp = {
-  type: "peek" | "reveal";
+  type: "peek" | "time";
+  name: string;
   isUnlocked: boolean;
 };
 
@@ -41,10 +47,11 @@ export default function MemoryGame() {
   const room = safeParse<Room>(localStorage.getItem("bingo.room"));
 
   // Game state
-  const [cards, setCards] = useState<MemoryCard[]>([]);
+  const [cards, setCards] = useState<CardItem[]>([]);
   const [flippedCards, setFlippedCards] = useState<number[]>([]);
-  const [matchedPairs, setMatchedPairs] = useState(0);
+  const [matchedPairs, setMatchedPairs] = useState<number>(0);
   const [moves, setMoves] = useState(0);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   // Questions system
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -53,22 +60,65 @@ export default function MemoryGame() {
   const [solvedQuestions, setSolvedQuestions] = useState<number[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
-  // Power-ups system
+  // Power-ups
   const [powerUps, setPowerUps] = useState<PowerUp[]>([
-    { type: "peek", isUnlocked: false },
-    { type: "reveal", isUnlocked: false },
+    { type: "peek", name: "Peek All", isUnlocked: false },
+    { type: "time", name: "Extra Time", isUnlocked: false }, // Placeholder for now
   ]);
-  const [peeksUsed, setPeeksUsed] = useState(0);
-  const [revealsUsed, setRevealsUsed] = useState(0);
 
   useEffect(() => {
     if (!team || !room) {
       navigate("/");
       return;
     }
-    loadQuestions();
     initializeGame();
+    loadQuestions();
   }, [team, room, navigate]);
+
+  const initializeGame = () => {
+    const pairs = [
+      { code: "[]", concept: "Array" },
+      { code: "{}", concept: "Object" },
+      { code: "() => {}", concept: "Arrow Function" },
+      { code: "useState", concept: "Hook" },
+      { code: "< />", concept: "JSX" },
+      { code: "async", concept: "Promise" },
+      { code: "npm", concept: "Package Manager" },
+      { code: "git", concept: "Version Control" },
+    ];
+
+    const gameCards: CardItem[] = [];
+    pairs.forEach((pair, index) => {
+      gameCards.push({
+        id: index * 2,
+        content: pair.code,
+        type: 'code',
+        isFlipped: false,
+        isMatched: false,
+      });
+      gameCards.push({
+        id: index * 2 + 1,
+        content: pair.concept,
+        type: 'concept',
+        isFlipped: false,
+        isMatched: false,
+      });
+    });
+
+    setCards(shuffle(gameCards));
+    setFlippedCards([]);
+    setMatchedPairs(0);
+    setMoves(0);
+  };
+
+  const shuffle = (array: any[]) => {
+    const newArray = [...array];
+    for (let i = newArray.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
+    }
+    return newArray;
+  };
 
   const loadQuestions = async () => {
     try {
@@ -91,28 +141,58 @@ export default function MemoryGame() {
     }
   };
 
-  const initializeGame = () => {
-    // Create 6 pairs of code snippets (12 cards total)
-    const codeSnippets = [
-      "if (x > 5)",
-      "for (i = 0)",
-      "while (true)",
-      "return x",
-      "break;",
-      "continue;",
-    ];
-    
-    const cardPairs = codeSnippets.flatMap((code, index) => [
-      { id: index * 2, code, isFlipped: false, isMatched: false },
-      { id: index * 2 + 1, code, isFlipped: false, isMatched: false },
-    ]);
-    
-    // Shuffle cards
-    const shuffled = cardPairs.sort(() => Math.random() - 0.5);
-    setCards(shuffled);
-    setMatchedPairs(0);
-    setMoves(0);
-    setFlippedCards([]);
+  const handleCardClick = (id: number) => {
+    if (isProcessing) return;
+
+    const clickedCard = cards.find(c => c.id === id);
+    if (!clickedCard || clickedCard.isMatched || clickedCard.isFlipped) return;
+
+    const newCards = cards.map(c => c.id === id ? { ...c, isFlipped: true } : c);
+    setCards(newCards);
+
+    const newFlipped = [...flippedCards, id];
+    setFlippedCards(newFlipped);
+
+    if (newFlipped.length === 2) {
+      setIsProcessing(true);
+      setMoves(prev => prev + 1);
+      checkForMatch(newFlipped, newCards);
+    }
+  };
+
+  const checkForMatch = (flippedIds: number[], currentCards: CardItem[]) => {
+    const [id1, id2] = flippedIds;
+    const card1 = currentCards.find(c => c.id === id1);
+    const card2 = currentCards.find(c => c.id === id2);
+
+    if (!card1 || !card2) return;
+
+    // Check if they are a pair (based on ID logic: pair IDs are N and N+1 where N is even)
+    // Actually, my ID logic was index * 2 and index * 2 + 1. So Math.floor(id/2) should be equal.
+    const isMatch = Math.floor(card1.id / 2) === Math.floor(card2.id / 2);
+
+    if (isMatch) {
+      setTimeout(() => {
+        setCards(prev => prev.map(c =>
+          c.id === id1 || c.id === id2 ? { ...c, isMatched: true } : c
+        ));
+        setFlippedCards([]);
+        setIsProcessing(false);
+        setMatchedPairs(prev => prev + 1);
+        toast({
+          title: "✨ Match Found!",
+          className: "bg-green-50 border-green-200 text-green-800"
+        });
+      }, 500);
+    } else {
+      setTimeout(() => {
+        setCards(prev => prev.map(c =>
+          c.id === id1 || c.id === id2 ? { ...c, isFlipped: false } : c
+        ));
+        setFlippedCards([]);
+        setIsProcessing(false);
+      }, 1000);
+    }
   };
 
   const handleSubmitAnswer = async () => {
@@ -133,42 +213,30 @@ export default function MemoryGame() {
         body: JSON.stringify({
           room: room?.code,
           teamId: String(teamId),
-          questionId: String(currentQuestion.question_id),
+          questionId: String(currentQuestion.id),
           answer: answer,
         }),
       });
 
-      if (!res.ok) {
-        let errMsg = `Submit failed: ${res.status}`;
-        try {
-          const body = await res.text();
-          try {
-            const j = JSON.parse(body);
-            if (j && j.error) errMsg = `${errMsg} - ${j.error}`;
-          } catch {}
-        } catch {}
-        throw new Error(errMsg);
-      }
+      if (!res.ok) throw new Error("Submit failed");
 
       const result = await res.json();
-      
+
       if (result.correct) {
         setSolvedQuestions(prev => [...prev, currentQuestionIndex]);
-        
-        // Unlock next power-up
+
+        // Unlock power-up
         const nextUnlocked = powerUps.findIndex(p => !p.isUnlocked);
         if (nextUnlocked !== -1) {
           const newPowerUps = [...powerUps];
           newPowerUps[nextUnlocked] = { ...newPowerUps[nextUnlocked], isUnlocked: true };
           setPowerUps(newPowerUps);
-          toast({ 
-            title: "✅ Correct!", 
-            description: `Power-up "${newPowerUps[nextUnlocked].type}" unlocked!`,
+          toast({
+            title: "✅ Correct!",
+            description: `Power-up "${newPowerUps[nextUnlocked].name}" unlocked!`,
           });
-        } else {
-          toast({ title: "✅ Correct!", description: "All power-ups unlocked!" });
         }
-        
+
         if (currentQuestionIndex < questions.length - 1) {
           setCurrentQuestionIndex(prev => prev + 1);
           setAnswer("");
@@ -177,266 +245,171 @@ export default function MemoryGame() {
         toast({ title: "❌ Incorrect", description: "Try again!", variant: "destructive" });
       }
     } catch (error) {
-      console.error("Failed to submit answer:", error);
       toast({ title: "Failed to submit answer", variant: "destructive" });
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleCardClick = (cardId: number) => {
-    if (flippedCards.length >= 2) return;
-    if (flippedCards.includes(cardId)) return;
-    if (cards[cardId].isMatched) return;
-
-    const newFlipped = [...flippedCards, cardId];
-    setFlippedCards(newFlipped);
-
-    if (newFlipped.length === 2) {
-      setMoves(prev => prev + 1);
-      const [first, second] = newFlipped;
-      if (cards[first].code === cards[second].code) {
-        // Match found
-        const newCards = [...cards];
-        newCards[first].isMatched = true;
-        newCards[second].isMatched = true;
-        setCards(newCards);
-        setMatchedPairs(prev => prev + 1);
-        setTimeout(() => setFlippedCards([]), 500);
-        toast({ title: "✅ Match!", description: "Great job!" });
-      } else {
-        // No match
-        setTimeout(() => setFlippedCards([]), 1000);
-      }
-    }
-  };
-
-  const handleUsePeek = () => {
+  const handlePeek = () => {
     const peekPowerUp = powerUps.find(p => p.type === "peek" && p.isUnlocked);
     if (!peekPowerUp) {
-      toast({ title: "🔒 Locked", description: "Answer questions to unlock Peek!", variant: "default" });
+      toast({ title: "🔒 Locked", description: "Answer questions to unlock!", variant: "default" });
       return;
     }
-    
-    // Flip all unmatched cards for 2 seconds
-    const newCards = cards.map(c => ({ ...c, isFlipped: !c.isMatched || c.isFlipped }));
-    setCards(newCards);
-    setPeeksUsed(prev => prev + 1);
-    toast({ title: "👀 Peek Used!", description: "All cards revealed for 2 seconds" });
-    
+
+    setIsProcessing(true);
+    const originalState = cards.map(c => ({ ...c }));
+
+    // Flip all unmatched cards
+    setCards(prev => prev.map(c => !c.isMatched ? { ...c, isFlipped: true } : c));
+
+    toast({ title: "👀 Peeking...", description: "Memorize quickly!" });
+
     setTimeout(() => {
-      setCards(cards.map(c => ({ ...c, isFlipped: c.isMatched })));
+      setCards(originalState); // Restore original state (flipped status)
+      // Actually, we need to be careful not to revert matched cards if they were matched during peek (impossible)
+      // But we should revert to 'isFlipped: false' for unmatched cards.
+      setCards(prev => prev.map(c => !c.isMatched ? { ...c, isFlipped: false } : c));
+      setIsProcessing(false);
     }, 2000);
   };
 
-  const handleUseReveal = () => {
-    const revealPowerUp = powerUps.find(p => p.type === "reveal" && p.isUnlocked);
-    if (!revealPowerUp) {
-      toast({ title: "🔒 Locked", description: "Answer questions to unlock Reveal!", variant: "default" });
-      return;
-    }
-
-    // Reveal one random unmatched pair
-    const unmatchedCards = cards.filter(c => !c.isMatched);
-    if (unmatchedCards.length < 2) return;
-    
-    const randomCode = unmatchedCards[0].code;
-    const pairIndexes = cards
-      .map((c, i) => ({ c, i }))
-      .filter(({ c }) => c.code === randomCode && !c.isMatched)
-      .map(({ i }) => i);
-    
-    if (pairIndexes.length === 2) {
-      const newCards = [...cards];
-      newCards[pairIndexes[0]].isMatched = true;
-      newCards[pairIndexes[1]].isMatched = true;
-      setCards(newCards);
-      setMatchedPairs(prev => prev + 1);
-      setRevealsUsed(prev => prev + 1);
-      toast({ title: "💡 Reveal Used!", description: "A pair has been revealed!" });
-    }
-  };
-
   const currentQuestion = questions[currentQuestionIndex];
-  const isComplete = matchedPairs === 6;
-  const progress = Math.round((matchedPairs / 6) * 100);
 
   return (
-    <div className="min-h-screen bg-[#0f172a]">
+    <div className="min-h-screen bg-gradient-to-br from-violet-50 via-fuchsia-50 to-pink-50 dark:from-slate-950 dark:via-violet-950/30 dark:to-fuchsia-950/30">
       <GameHeader
-        gameTitle="Code Memory Match"
+        gameTitle="Memory Match"
         gameIcon="🧠"
         team={team}
         room={room}
         extraInfo={
-          <>
-            <div className="px-3 sm:px-4 py-2 rounded-lg bg-blue-900/30 border border-blue-700 shadow-md">
-              <span className="text-blue-200 font-semibold text-sm sm:text-base">Progress: {progress}%</span>
-            </div>
-            <div className="px-3 sm:px-4 py-2 rounded-lg bg-purple-900/30 border border-purple-700 shadow-md">
-              <span className="text-purple-200 font-semibold text-sm sm:text-base">Moves: {moves}</span>
-            </div>
-          </>
+          <Badge variant="outline" className="text-sm py-1 border-violet-200 text-violet-700 dark:border-violet-800 dark:text-violet-300">
+            Moves: {moves}
+          </Badge>
         }
       />
 
-      <main className="container mx-auto px-4 sm:px-6 py-6 sm:py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
-          {/* Questions Panel */}
-          <div className="lg:col-span-1">
-            <div className="bg-gradient-to-br from-[#1e293b] to-[#0f172a] rounded-2xl border-2 border-blue-500/30 shadow-2xl shadow-blue-500/10 p-4 sm:p-6 mb-4">
+      <main className="container mx-auto px-4 py-8 max-w-6xl">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Left Column: Questions & Power-ups */}
+          <div className="lg:col-span-1 space-y-6">
+            <Card className="p-6 bg-white dark:bg-slate-900 shadow-xl border-slate-200 dark:border-slate-800">
               <div className="flex items-center gap-3 mb-4">
-                <div className="bg-blue-500/20 p-3 rounded-xl">
-                  <span className="text-2xl">📝</span>
+                <div className="w-10 h-10 rounded-lg bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center text-xl">
+                  ❓
                 </div>
-                <h2 className="text-lg sm:text-xl font-bold text-white">Coding Challenge</h2>
+                <h2 className="text-xl font-bold text-slate-900 dark:text-white">Quiz Challenge</h2>
               </div>
-              
+
               {currentQuestion ? (
                 <>
                   <div className="mb-4">
                     <div className="flex items-center justify-between mb-3">
-                      <span className="text-xs sm:text-sm font-semibold text-blue-400 bg-blue-500/10 px-3 py-1 rounded-full">
-                        Question {currentQuestionIndex + 1} / {questions.length}
-                      </span>
-                      <span className="text-xs sm:text-sm font-semibold text-green-400 bg-green-500/10 px-3 py-1 rounded-full">
-                        ✅ {solvedQuestions.length}
-                      </span>
+                      <Badge variant="secondary" className="bg-violet-50 text-violet-700 dark:bg-violet-900/20 dark:text-violet-300">
+                        Q{currentQuestionIndex + 1}
+                      </Badge>
+                      <Badge variant="outline" className="text-green-600 border-green-200 dark:text-green-400 dark:border-green-800">
+                        {solvedQuestions.length} Solved
+                      </Badge>
                     </div>
-                    <div className="bg-slate-900/70 backdrop-blur-sm p-4 rounded-xl border border-slate-700/50">
-                      <p className="text-white text-sm sm:text-base">{currentQuestion.question_text}</p>
+                    <p className="text-sm text-slate-700 dark:text-slate-300 mb-4">{currentQuestion.question_text}</p>
+                    <div className="space-y-2">
+                      <Input
+                        value={answer}
+                        onChange={(e) => setAnswer(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && handleSubmitAnswer()}
+                        placeholder="Answer..."
+                        className="bg-white dark:bg-slate-950"
+                      />
+                      <Button
+                        onClick={handleSubmitAnswer}
+                        disabled={submitting}
+                        className="w-full bg-violet-600 hover:bg-violet-700 text-white"
+                      >
+                        Submit
+                      </Button>
                     </div>
                   </div>
-                  
-                  <input
-                    type="text"
-                    value={answer}
-                    onChange={(e) => setAnswer(e.target.value)}
-                    onKeyPress={(e) => e.key === "Enter" && !submitting && handleSubmitAnswer()}
-                    placeholder="Type your answer..."
-                    disabled={submitting}
-                    className="w-full px-4 py-3 bg-slate-900/70 border-2 border-slate-700/50 rounded-xl text-white placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 disabled:opacity-50 transition-all text-sm"
-                  />
-                  
-                  <button
-                    onClick={handleSubmitAnswer}
-                    disabled={submitting}
-                    className="w-full mt-3 px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold disabled:opacity-50 transition-all text-sm"
-                  >
-                    {submitting ? "⏳ Submitting..." : "Submit Answer"}
-                  </button>
                 </>
               ) : (
-                <div className="text-center py-4 text-slate-400">No questions available</div>
+                <div className="text-center py-4 text-slate-500">All questions solved!</div>
               )}
-            </div>
+            </Card>
 
-            {/* Power-ups Panel */}
-            <div className="bg-gradient-to-br from-[#1e293b] to-[#0f172a] rounded-2xl border-2 border-purple-500/30 shadow-2xl shadow-purple-500/10 p-4 sm:p-6">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="bg-purple-500/20 p-3 rounded-xl">
-                  <span className="text-2xl">⚡</span>
-                </div>
-                <h2 className="text-lg sm:text-xl font-bold text-white">Power-Ups</h2>
-              </div>
-              
-              <div className="space-y-3">
-                <button
-                  onClick={handleUsePeek}
-                  disabled={!powerUps.find(p => p.type === "peek")?.isUnlocked}
-                  className={`w-full p-4 rounded-xl transition-all ${
-                    powerUps.find(p => p.type === "peek")?.isUnlocked
-                      ? "bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 cursor-pointer"
-                      : "bg-slate-800/50 opacity-50 cursor-not-allowed"
+            <Card className="p-6 bg-white dark:bg-slate-900 shadow-xl border-slate-200 dark:border-slate-800">
+              <h3 className="font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+                <span>⚡</span> Power-Ups
+              </h3>
+              <Button
+                onClick={handlePeek}
+                disabled={!powerUps.find(p => p.type === "peek")?.isUnlocked || isProcessing}
+                className={`w-full ${powerUps.find(p => p.type === "peek")?.isUnlocked
+                    ? "bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white"
+                    : "bg-slate-100 text-slate-400 dark:bg-slate-800"
                   }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-white font-bold">👀 Peek (2s)</span>
-                    {!powerUps.find(p => p.type === "peek")?.isUnlocked && <span>🔒</span>}
-                  </div>
-                </button>
-                
-                <button
-                  onClick={handleUseReveal}
-                  disabled={!powerUps.find(p => p.type === "reveal")?.isUnlocked}
-                  className={`w-full p-4 rounded-xl transition-all ${
-                    powerUps.find(p => p.type === "reveal")?.isUnlocked
-                      ? "bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 cursor-pointer"
-                      : "bg-slate-800/50 opacity-50 cursor-not-allowed"
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-white font-bold">💡 Reveal Pair</span>
-                    {!powerUps.find(p => p.type === "reveal")?.isUnlocked && <span>🔒</span>}
-                  </div>
-                </button>
-              </div>
-              
-              <div className="mt-4 text-xs text-slate-400 text-center">
-                Used: Peek {peeksUsed} | Reveal {revealsUsed}
-              </div>
-            </div>
+              >
+                👀 Peek All (2s)
+              </Button>
+            </Card>
           </div>
 
-          {/* Memory Grid */}
+          {/* Right Column: Game Grid */}
           <div className="lg:col-span-2">
-            <div className="bg-gradient-to-br from-[#1e293b] to-[#0f172a] rounded-2xl border-2 border-indigo-500/30 shadow-2xl shadow-indigo-500/10 p-4 sm:p-6">
-              <div className="flex items-center gap-3 mb-6">
-                <div className="bg-indigo-500/20 p-3 rounded-xl">
-                  <span className="text-2xl">🧠</span>
+            <Card className="p-6 bg-white dark:bg-slate-900 shadow-2xl border-slate-200 dark:border-slate-800 min-h-[500px] flex flex-col items-center justify-center">
+              {matchedPairs === cards.length / 2 && cards.length > 0 ? (
+                <div className="text-center animate-in zoom-in duration-500">
+                  <div className="text-6xl mb-4">🎉</div>
+                  <h2 className="text-3xl font-bold text-slate-900 dark:text-white mb-2">Memory Master!</h2>
+                  <p className="text-slate-600 dark:text-slate-400 mb-6">You completed the game in {moves} moves.</p>
+                  <Button
+                    onClick={initializeGame}
+                    size="lg"
+                    className="bg-violet-600 hover:bg-violet-700 text-white font-bold px-8"
+                  >
+                    Play Again
+                  </Button>
                 </div>
-                <h2 className="text-lg sm:text-xl font-bold text-white">Memory Grid</h2>
-              </div>
+              ) : (
+                <div className="grid grid-cols-4 gap-3 sm:gap-4 w-full max-w-2xl mx-auto perspective-1000">
+                  {cards.map(card => (
+                    <div
+                      key={card.id}
+                      onClick={() => handleCardClick(card.id)}
+                      className={`aspect-[3/4] relative cursor-pointer transition-all duration-500 transform-style-3d ${card.isFlipped || card.isMatched ? "rotate-y-180" : ""
+                        }`}
+                    >
+                      {/* Front (Back of card) */}
+                      <div className="absolute inset-0 bg-gradient-to-br from-violet-600 to-indigo-600 rounded-xl shadow-lg flex items-center justify-center backface-hidden border-2 border-white/20">
+                        <span className="text-3xl opacity-50">🧠</span>
+                      </div>
 
-              <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 sm:gap-4">
-                {cards.map((card) => (
-                  <button
-                    key={card.id}
-                    onClick={() => handleCardClick(card.id)}
-                    disabled={card.isMatched || flippedCards.includes(card.id)}
-                    className={`aspect-square p-4 rounded-xl font-mono text-sm font-bold transition-all transform ${
-                      card.isMatched
-                        ? "bg-green-600/30 text-green-200 border-2 border-green-500/50 cursor-default"
-                        : flippedCards.includes(card.id)
-                          ? "bg-blue-600 text-white border-2 border-blue-400 scale-95"
-                          : "bg-slate-800/70 text-slate-800 border-2 border-slate-700/50 hover:bg-slate-700 hover:scale-105 cursor-pointer"
-                    }`}
-                  >
-                    {(card.isMatched || flippedCards.includes(card.id)) ? card.code : "?"}
-                  </button>
-                ))}
-              </div>
-
-              {isComplete && (
-                <div className="mt-6 p-6 bg-gradient-to-br from-green-900/50 to-emerald-900/50 border-2 border-green-500/50 rounded-xl text-center">
-                  <div className="text-4xl mb-2 animate-bounce">🎉</div>
-                  <h3 className="text-green-200 font-bold text-xl mb-2">Perfect Match!</h3>
-                  <p className="text-green-300 text-sm mb-4">
-                    Completed in {moves} moves | Power-ups: {peeksUsed + revealsUsed}
-                  </p>
-                  <button
-                    onClick={() => {
-                      initializeGame();
-                      setCurrentQuestionIndex(0);
-                      setSolvedQuestions([]);
-                      setPowerUps([
-                        { type: "peek", isUnlocked: false },
-                        { type: "reveal", isUnlocked: false },
-                      ]);
-                      setPeeksUsed(0);
-                      setRevealsUsed(0);
-                      setAnswer("");
-                    }}
-                    className="px-6 py-3 rounded-xl bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-bold"
-                  >
-                    🎮 New Game
-                  </button>
+                      {/* Back (Content) */}
+                      <div className={`absolute inset-0 bg-white dark:bg-slate-800 rounded-xl shadow-xl flex items-center justify-center p-2 text-center backface-hidden rotate-y-180 border-2 ${card.isMatched ? "border-green-500 bg-green-50 dark:bg-green-900/20" : "border-violet-200 dark:border-violet-700"
+                        }`}>
+                        <span className={`font-bold ${card.type === 'code'
+                            ? "font-mono text-sm sm:text-base text-pink-600 dark:text-pink-400"
+                            : "text-xs sm:text-sm text-slate-700 dark:text-slate-300"
+                          }`}>
+                          {card.content}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
-            </div>
+            </Card>
           </div>
         </div>
       </main>
+
+      <style>{`
+        .perspective-1000 { perspective: 1000px; }
+        .transform-style-3d { transform-style: preserve-3d; }
+        .backface-hidden { backface-visibility: hidden; }
+        .rotate-y-180 { transform: rotateY(180deg); }
+      `}</style>
     </div>
   );
 }

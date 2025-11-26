@@ -353,35 +353,54 @@ export const handleGameState: RequestHandler = async (req, res) => {
     // Enforce max length 10 for room code
     const code = roomCode.toUpperCase().slice(0, 10);
 
-    // Get room with timeout protection
-    const roomResult = await Promise.race([
-      db.select().from(rooms).where(eq(rooms.code, code)),
-      new Promise<never>((_, reject) => 
-        setTimeout(() => reject(new Error('Room query timeout')), 15000)
-      )
-    ]).catch(err => {
-      console.error('Error fetching room:', err);
-      if (err.code === 'ENOTFOUND' || err.message?.includes('ENOTFOUND')) {
-        throw new Error('Database connection lost - please check your internet connection');
+    // Helper function for retrying queries with exponential backoff
+    async function queryWithRetry<T>(queryFn: () => Promise<T>, queryName: string, maxRetries = 2): Promise<T> {
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+          const result = await Promise.race([
+            queryFn(),
+            new Promise<never>((_, reject) => 
+              setTimeout(() => reject(new Error(`${queryName} timeout (10s)`)), 10000)
+            )
+          ]);
+          return result;
+        } catch (err: any) {
+          console.error(`${queryName} attempt ${attempt + 1}/${maxRetries + 1} failed:`, err.message);
+          
+          if (attempt === maxRetries) {
+            // Last attempt failed
+            if (err.code === 'ENOTFOUND' || err.message?.includes('ENOTFOUND')) {
+              throw new Error('Database connection lost - check internet connection');
+            }
+            if (err.message?.includes('timeout')) {
+              throw new Error(`Database query slow or unresponsive. ${queryName} timed out after ${maxRetries + 1} attempts.`);
+            }
+            throw err;
+          }
+          
+          // Wait before retry (exponential backoff: 200ms, 400ms)
+          await new Promise(resolve => setTimeout(resolve, 200 * Math.pow(2, attempt)));
+        }
       }
-      throw err;
-    });
+      throw new Error('Query retry logic failed');
+    }
+
+    // Get room with retry logic
+    const roomResult = await queryWithRetry(
+      () => db.select().from(rooms).where(eq(rooms.code, code)),
+      'Room query'
+    );
     
     if (roomResult.length === 0) {
       return res.status(404).json({ error: "Room not found" });
     }
     const room = roomResult[0];
 
-    // Get team with timeout protection
-    const teamResult = await Promise.race([
-      db.select().from(teams).where(eq(teams.teamId, teamId)),
-      new Promise<never>((_, reject) => 
-        setTimeout(() => reject(new Error('Team query timeout')), 15000)
-      )
-    ]).catch(err => {
-      console.error('Error fetching team:', err);
-      throw err;
-    });
+    // Get team with retry logic
+    const teamResult = await queryWithRetry(
+      () => db.select().from(teams).where(eq(teams.teamId, teamId)),
+      'Team query'
+    );
     
     if (teamResult.length === 0) {
       return res.status(404).json({ error: "Team not found" });

@@ -20,9 +20,15 @@ import {
   handleGenerateFakeQuestions,
   handleDeleteQuestionsByType,
   handleDeleteAllQuestions,
+  handleDeleteTeam,
+  handleDeleteAllTeams,
+  handleListRooms,
+  handleDeleteRoom,
+  handleDeleteAllRooms,
 } from "./routes/admin";
 import { handleLeaderboard, handleLeaderboardAll } from "./routes/leaderboard";
 import { handleLogin, handleGameState, handleSubmit, handleRecentSubmissions } from "./routes/game";
+import compileRouter from "./routes/compile";
 import {
   requestTimingMiddleware,
   getRequestTimings,
@@ -140,6 +146,11 @@ export const createServer = () => {
   app.post("/api/admin/generate-fake-questions", express.json({ limit: "10mb" }), handleGenerateFakeQuestions);
   app.post("/api/admin/delete-questions-by-type", express.json({ limit: "10mb" }), handleDeleteQuestionsByType);
   app.post("/api/admin/delete-all-questions", express.json({ limit: "10mb" }), handleDeleteAllQuestions);
+  app.post("/api/admin/delete-team", express.json({ limit: "10mb" }), handleDeleteTeam);
+  app.post("/api/admin/delete-all-teams", express.json({ limit: "10mb" }), handleDeleteAllTeams);
+  app.get("/api/admin/rooms", express.json({ limit: "10mb" }), handleListRooms);
+  app.post("/api/admin/delete-room", express.json({ limit: "10mb" }), handleDeleteRoom);
+  app.post("/api/admin/delete-all-rooms", express.json({ limit: "10mb" }), handleDeleteAllRooms);
   app.post("/api/admin/wipe", express.json({ limit: "10mb" }), handleWipeUserData);
 
   // Leaderboard routes
@@ -151,6 +162,9 @@ export const createServer = () => {
   app.get("/api/game", express.json({ limit: "10mb" }), handleGameState);
   app.post("/api/submit", express.json({ limit: "10mb" }), handleSubmit);
   app.get("/api/recent-submissions", express.json({ limit: "10mb" }), handleRecentSubmissions);
+
+  // C/C++ Compiler routes (needs JSON parsing)
+  app.use(express.json({ limit: "50mb" }), compileRouter);
 
   // Admin/debug: recent request timings
   app.get("/api/admin/request-timings", (req, res) => {
@@ -164,7 +178,7 @@ export const createServer = () => {
         checkDbHealth(),
         new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 5000))
       ]);
-      
+
       res.json({
         status: dbHealthy ? "healthy" : "degraded",
         database: dbHealthy ? "connected" : "timeout",

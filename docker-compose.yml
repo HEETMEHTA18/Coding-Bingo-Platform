@@ -5,6 +5,9 @@ services:
     build: .
     ports:
       - "8080:8080"
+    volumes:
+      # Mount Docker socket for Docker-in-Docker GCC compilation
+      - /var/run/docker.sock:/var/run/docker.sock
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - NODE_ENV=production
@@ -15,6 +18,7 @@ services:
       - RATE_LIMIT_MAX_REQUESTS=5000
       - GAME_RATE_LIMIT_MAX=200
       - ADMIN_SECRET=${ADMIN_SECRET}
+      - USE_ONLINE_COMPILER=false
     env_file:
       - .env
     restart: unless-stopped

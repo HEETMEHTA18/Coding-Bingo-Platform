@@ -17,6 +17,8 @@ import {
   teamQuestionMapping,
   wipeAudits,
   submissionAttempts,
+  gameBoards,
+  gameMoves,
 } from "../schema.js";
 import { eq, inArray, sql } from "drizzle-orm";
 
@@ -133,10 +135,10 @@ export const handleAdminState: RequestHandler = async (req, res) => {
     const response: AdminStateResponse = {
       room: room
         ? {
-            code: room.code,
-            title: room.title,
-            roundEndAt: room.roundEndAt?.toISOString() || null,
-          }
+          code: room.code,
+          title: room.title,
+          roundEndAt: room.roundEndAt?.toISOString() || null,
+        }
         : null,
       questions: questionsResult.map((q: any) => ({
         id: String(q.questionId),
@@ -303,37 +305,37 @@ export const handleAddQuestion: RequestHandler = async (req, res) => {
 export const handleDeleteQuestion: RequestHandler = async (req, res) => {
   const body: AdminDeleteQuestionRequest = req.body;
   console.log('Delete question request:', body);
-  
+
   if (!body || !body.questionId || !body.room) {
     console.log('Missing required fields:', { hasBody: !!body, hasQuestionId: !!body?.questionId, hasRoom: !!body?.room });
     return res.status(400).json({ error: "room and questionId required" });
   }
-  
+
   const questionIdInt = parseInt(String(body.questionId), 10);
   console.log('Parsed question ID:', questionIdInt);
-  
+
   if (Number.isNaN(questionIdInt)) {
     console.log('Invalid question ID format');
     return res.status(400).json({ error: "Invalid questionId" });
   }
-  
+
   try {
     // Delete dependent records first to avoid foreign key constraint violations
     // 1. Delete from teamQuestionMapping
     await db
       .delete(teamQuestionMapping)
       .where(eq(teamQuestionMapping.questionId, questionIdInt));
-    
+
     // 2. Delete from teamSolvedQuestions
     await db
       .delete(teamSolvedQuestions)
       .where(eq(teamSolvedQuestions.questionId, questionIdInt));
-    
+
     // 3. Delete from submissionAttempts
     await db
       .delete(submissionAttempts)
       .where(eq(submissionAttempts.questionId, questionIdInt));
-    
+
     // 4. Finally delete the question
     await db
       .delete(questionsTable)
@@ -444,8 +446,8 @@ export const handleUploadQuestions = [
         const looksLikeCode = (s: string) => {
           if (!s || s.length < 10) return false;
           return s.includes("#") || s.includes("int ") || s.includes("printf") ||
-                 s.includes(";") || s.includes("{") || s.includes("}") ||
-                 s.includes("\n") || /^\d+$/.test(s);
+            s.includes(";") || s.includes("{") || s.includes("}") ||
+            s.includes("\n") || /^\d+$/.test(s);
         };
 
         // If it looks like code, preserve/restore formatting
@@ -454,7 +456,7 @@ export const handleUploadQuestions = [
           questionText = questionText
             .replace(/\\n/g, '\n')
             .replace(/\\t/g, '  '); // Convert tabs to 2 spaces
-          
+
           // If the code has line numbers at the start of lines, preserve them
           // Otherwise, ensure proper indentation is maintained
           const lines = questionText.split('\n');
@@ -488,13 +490,13 @@ export const handleUploadQuestions = [
         // Randomly select indices to mark as fake
         const totalQuestions = questionsToInsert.length;
         const indices = Array.from({ length: totalQuestions }, (_, i) => i);
-        
+
         // Shuffle indices using Fisher-Yates algorithm
         for (let i = indices.length - 1; i > 0; i--) {
           const j = Math.floor(Math.random() * (i + 1));
           [indices[i], indices[j]] = [indices[j], indices[i]];
         }
-        
+
         // Mark first numRandomFake questions as fake
         const fakeIndices = new Set(indices.slice(0, numRandomFake));
         questionsToInsert.forEach((q, idx) => {
@@ -502,7 +504,7 @@ export const handleUploadQuestions = [
             q.isReal = false;
           }
         });
-        
+
         console.log(`Marked ${numRandomFake} random questions as fake out of ${totalQuestions} total`);
       }
 
@@ -769,23 +771,23 @@ export const handleDeleteQuestionsByType: RequestHandler = async (req, res) => {
     let deletedCount = 0;
     if (questionsToDelete.length > 0) {
       const ids = questionsToDelete.map((q) => q.id);
-      
+
       // Delete dependent records first to avoid foreign key constraint violations
       // 1. Delete from teamQuestionMapping
       await db
         .delete(teamQuestionMapping)
         .where(inArray(teamQuestionMapping.questionId, ids));
-      
+
       // 2. Delete from teamSolvedQuestions
       await db
         .delete(teamSolvedQuestions)
         .where(inArray(teamSolvedQuestions.questionId, ids));
-      
+
       // 3. Delete from submissionAttempts
       await db
         .delete(submissionAttempts)
         .where(inArray(submissionAttempts.questionId, ids));
-      
+
       // 4. Finally delete the questions
       await db
         .delete(questionsTable)
@@ -800,9 +802,66 @@ export const handleDeleteQuestionsByType: RequestHandler = async (req, res) => {
     });
   } catch (err) {
     console.error("Error deleting questions by type:", err);
-    res.status(500).json({ error: "Failed to delete questions" });
+    res.status(500).json({ error: "Internal server error" });
   }
 };
+
+export const handleDeleteTeam: RequestHandler = async (req, res) => {
+  try {
+    const { room, teamId } = req.body;
+    if (!room || !teamId) {
+      res.status(400).json({ error: "Room and teamId required" });
+      return;
+    }
+
+    // Delete cascading data
+    await db.delete(teamSolvedPositions).where(eq(teamSolvedPositions.teamId, teamId));
+    await db.delete(teamSolvedQuestions).where(eq(teamSolvedQuestions.teamId, teamId));
+    await db.delete(teamQuestionMapping).where(eq(teamQuestionMapping.teamId, teamId));
+    await db.delete(submissionAttempts).where(eq(submissionAttempts.teamId, teamId));
+    await db.delete(gameMoves).where(eq(gameMoves.teamId, teamId));
+    await db.delete(gameBoards).where(eq(gameBoards.teamId, teamId));
+
+    // Finally delete team
+    await db.delete(teams).where(eq(teams.teamId, teamId));
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Error deleting team:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+export const handleDeleteAllTeams: RequestHandler = async (req, res) => {
+  try {
+    const { room } = req.body;
+    if (!room) {
+      res.status(400).json({ error: "Room required" });
+      return;
+    }
+    const code = room.toUpperCase();
+
+    // Get all teams in room
+    const teamsInRoom = await db.select().from(teams).where(eq(teams.roomCode, code));
+    const teamIds = teamsInRoom.map((t) => t.teamId);
+
+    if (teamIds.length > 0) {
+      await db.delete(teamSolvedPositions).where(inArray(teamSolvedPositions.teamId, teamIds));
+      await db.delete(teamSolvedQuestions).where(inArray(teamSolvedQuestions.teamId, teamIds));
+      await db.delete(teamQuestionMapping).where(inArray(teamQuestionMapping.teamId, teamIds));
+      await db.delete(submissionAttempts).where(inArray(submissionAttempts.teamId, teamIds));
+      await db.delete(gameMoves).where(inArray(gameMoves.teamId, teamIds));
+      await db.delete(gameBoards).where(inArray(gameBoards.teamId, teamIds));
+      await db.delete(teams).where(inArray(teams.teamId, teamIds));
+    }
+
+    res.json({ success: true, count: teamIds.length });
+  } catch (err) {
+    console.error("Error deleting all teams:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
 
 // Delete all questions in a room
 export const handleDeleteAllQuestions: RequestHandler = async (req, res) => {
@@ -825,23 +884,23 @@ export const handleDeleteAllQuestions: RequestHandler = async (req, res) => {
     let deletedCount = 0;
     if (questionsToDelete.length > 0) {
       const ids = questionsToDelete.map((q) => q.id);
-      
+
       // Delete dependent records first to avoid foreign key constraint violations
       // 1. Delete from teamQuestionMapping
       await db
         .delete(teamQuestionMapping)
         .where(inArray(teamQuestionMapping.questionId, ids));
-      
+
       // 2. Delete from teamSolvedQuestions
       await db
         .delete(teamSolvedQuestions)
         .where(inArray(teamSolvedQuestions.questionId, ids));
-      
+
       // 3. Delete from submissionAttempts
       await db
         .delete(submissionAttempts)
         .where(inArray(submissionAttempts.questionId, ids));
-      
+
       // 4. Finally delete the questions
       await db
         .delete(questionsTable)
@@ -856,5 +915,92 @@ export const handleDeleteAllQuestions: RequestHandler = async (req, res) => {
   } catch (err) {
     console.error("Error deleting all questions:", err);
     res.status(500).json({ error: "Failed to delete all questions" });
+  }
+};
+
+export const handleListRooms: RequestHandler = async (req, res) => {
+  try {
+    const allRooms = await db.select().from(rooms);
+
+    // Get counts for each room
+    const roomsWithCounts = await Promise.all(allRooms.map(async (room) => {
+      const qCount = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(questionsTable)
+        .where(eq(questionsTable.roomCode, room.code));
+
+      const tCount = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(teams)
+        .where(eq(teams.roomCode, room.code));
+
+      return {
+        ...room,
+        questionCount: Number(qCount[0].count),
+        teamCount: Number(tCount[0].count),
+      };
+    }));
+
+    res.json({ rooms: roomsWithCounts });
+  } catch (err) {
+    console.error("Error listing rooms:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+export const handleDeleteRoom: RequestHandler = async (req, res) => {
+  try {
+    const { room } = req.body;
+    if (!room) {
+      res.status(400).json({ error: "Room code required" });
+      return;
+    }
+    const code = room.toUpperCase();
+
+    // Delete everything related to this room
+    // 1. Get all teams to delete their related data
+    const teamsInRoom = await db.select().from(teams).where(eq(teams.roomCode, code));
+    const teamIds = teamsInRoom.map(t => t.teamId);
+
+    if (teamIds.length > 0) {
+      await db.delete(teamSolvedPositions).where(inArray(teamSolvedPositions.teamId, teamIds));
+      await db.delete(teamSolvedQuestions).where(inArray(teamSolvedQuestions.teamId, teamIds));
+      await db.delete(teamQuestionMapping).where(inArray(teamQuestionMapping.teamId, teamIds));
+      await db.delete(submissionAttempts).where(inArray(submissionAttempts.teamId, teamIds));
+      await db.delete(gameMoves).where(inArray(gameMoves.teamId, teamIds));
+      await db.delete(gameBoards).where(inArray(gameBoards.teamId, teamIds));
+      await db.delete(teams).where(inArray(teams.teamId, teamIds));
+    }
+
+    // 2. Delete questions
+    await db.delete(questionsTable).where(eq(questionsTable.roomCode, code));
+
+    // 3. Delete room
+    await db.delete(rooms).where(eq(rooms.code, code));
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Error deleting room:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+export const handleDeleteAllRooms: RequestHandler = async (req, res) => {
+  try {
+    // Delete EVERYTHING
+    await db.delete(teamSolvedPositions);
+    await db.delete(teamSolvedQuestions);
+    await db.delete(teamQuestionMapping);
+    await db.delete(submissionAttempts);
+    await db.delete(gameMoves);
+    await db.delete(gameBoards);
+    await db.delete(teams);
+    await db.delete(questionsTable);
+    await db.delete(rooms);
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Error deleting all rooms:", err);
+    res.status(500).json({ error: "Internal server error" });
   }
 };

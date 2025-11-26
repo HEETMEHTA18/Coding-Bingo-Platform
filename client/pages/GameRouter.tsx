@@ -10,6 +10,7 @@ import RaceGame from "./games/RaceGame";
 import CrosswordGame from "./games/CrosswordGame";
 import QuizGame from "./games/QuizGame";
 import PuzzleHuntGame from "./games/PuzzleHuntGame";
+import CodeCanvasGame from "./games/CodeCanvasGame";
 
 function safeParse<T>(raw: string | null): T | null {
   try {
@@ -80,6 +81,8 @@ export default function GameRouter() {
       return <QuizGame />;
     case "puzzlehunt":
       return <PuzzleHuntGame />;
+    case "codecanvas":
+      return <CodeCanvasGame />;
     case "bingo":
     default:
       return <GamePage />;

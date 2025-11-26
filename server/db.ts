@@ -93,6 +93,20 @@ function getDbInstance() {
   return dbInstance;
 }
 
+// Graceful shutdown - cleanup connections
+export async function closeDbConnections() {
+  if (sql) {
+    try {
+      await sql.end({ timeout: 5 });
+      console.log('Database connections closed gracefully');
+      sql = null;
+      dbInstance = null;
+    } catch (err) {
+      console.error('Error closing database connections:', err);
+    }
+  }
+}
+
 // Health check function to test database connectivity
 export async function checkDbHealth(): Promise<boolean> {
   try {

@@ -49,12 +49,12 @@ export default function GamePage() {
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [now, setNow] = useState<number>(Date.now());
   const [recentSubs, setRecentSubs] = useState<
-    { 
-      teamId: string; 
-      questionId: number; 
+    {
+      teamId: string;
+      questionId: number;
       submittedAnswer?: string;
       isCorrect?: boolean;
-      solvedAt: string | Date; 
+      solvedAt: string | Date;
       position: string | null;
     }[]
   >([]);
@@ -73,7 +73,7 @@ export default function GamePage() {
       navigate("/");
       return;
     }
-    
+
     // Validate team and room consistency
     const storedRoom = useRoom();
     if (!storedRoom) {
@@ -82,7 +82,7 @@ export default function GamePage() {
       navigate("/");
       return;
     }
-    
+
     // Ensure team ID exists and is valid
     if (!team.team_id && !team.id) {
       console.warn("⚠️ Invalid team data, clearing and redirecting");
@@ -102,7 +102,7 @@ export default function GamePage() {
       navigate("/");
       return;
     }
-    
+
     const teamId = team.team_id || team.id;
     if (!teamId) {
       console.warn("⚠️ Invalid team ID in loadState");
@@ -110,7 +110,7 @@ export default function GamePage() {
       navigate("/");
       return;
     }
-    
+
     const res = await fetch(
       `/api/game?room=${encodeURIComponent(roomToUse.code)}&team=${encodeURIComponent(teamId)}`,
     );
@@ -124,7 +124,7 @@ export default function GamePage() {
           localStorage.removeItem("bingo.room");
           navigate("/");
         }
-      } catch {}
+      } catch { }
       return; // keep previous state
     }
     const data = (await res.json()) as Partial<GameStateResponse> &
@@ -138,18 +138,18 @@ export default function GamePage() {
       return;
     setRoom(data.room as GameStateResponse["room"]);
     localStorage.setItem("bingo.room", JSON.stringify(data.room));
-    
+
     // // Debug logging
     // console.log("📊 Total questions received:", data.questions?.length);
     // console.log("📊 Questions with grid_position:", (data.questions as GameStateResponse["questions"]).filter(q => q.grid_position).length);
-    
+
     // Show ALL questions, not just mapped ones
     // Users can browse all questions, but only mapped ones contribute to bingo
     const allQuestions = data.questions as GameStateResponse["questions"];
-    
+
     // console.log("📊 All questions to display:", allQuestions.length);
     setQuestions(allQuestions);
-    
+
     setSolved(data.solved_positions as string[]);
     // derive lines
     setLines(computeLines(data.solved_positions as string[]));
@@ -204,7 +204,7 @@ export default function GamePage() {
               })));
             }
           })
-          .catch(() => {});
+          .catch(() => { });
       }
     }, 5000);
     return () => {
@@ -275,100 +275,100 @@ export default function GamePage() {
     () => (questions ?? []).find((q) => q.question_id === selectedQid) || null,
     [questions, selectedQid],
   );
-  
+
   // Format code with proper indentation for C programs
   const formatCode = (code: string): string => {
     if (!code) return '';
-    
+
     let formatted = code;
-    
+
     // Step 1: Aggressively break everything onto separate lines
     formatted = formatted
       // Newline after preprocessor directives
       .replace(/(#include\s*<[^>]+>)/g, '$1\n')
       .replace(/(#include\s*"[^"]+")/g, '$1\n')
       .replace(/(#define\s+\w+[^\n]*)/g, '$1\n')
-      
+
       // Break function declaration
       .replace(/\b(int|void|float|double|char|long|short|unsigned)\s+(main|[a-zA-Z_]\w*)\s*\(/g, '\n$1 $2(')
-      
+
       // Newline after function opening brace
       .replace(/\)\s*\{/g, ') {\n')
-      
+
       // Break variable declarations - newline after each semicolon
       .replace(/;\s*(?![\n})\s])/g, ';\n')
-      
+
       // Break if statements - ensure condition and body on separate logical lines
       .replace(/\bif\s*\(/g, 'if (')
       .replace(/\)\s*(?=\w)/g, ')\n')
-      
+
       // Break else if chains - CRITICAL for your case
       .replace(/;\s*}\s*else\s+if\s*\(/g, ';\n}\nelse if (')
       .replace(/\}\s*else\s+if\s*\(/g, '}\nelse if (')
       .replace(/;\s*else\s+if\s*\(/g, ';\n}\nelse if (')
-      
+
       // Break else statements
       .replace(/;\s*}\s*else\s+(?!if)/g, ';\n}\nelse ')
       .replace(/\}\s*else\s+(?!if)/g, '}\nelse ')
       .replace(/;\s*else\s+(?!if)/g, ';\n}\nelse ')
-      
+
       // Ensure opening braces start blocks properly
       .replace(/\{(?!\n)/g, '{\n')
-      
+
       // Break switch/case statements
       .replace(/\bswitch\s*\(/g, 'switch (')
       .replace(/\bcase\s+/g, '\ncase ')
       .replace(/\bdefault\s*:/g, '\ndefault:')
       .replace(/break\s*;/g, 'break;\n')
-      
+
       // Break while/for loops
       .replace(/\bwhile\s*\(/g, 'while (')
       .replace(/\bfor\s*\(/g, 'for (')
-      
+
       // Keep for loop parts together but add spaces
       .replace(/;\s*(?=[^)]*\))/g, '; ')
-      
+
       // Break do-while
       .replace(/\bdo\s*\{/g, 'do {\n')
       .replace(/\}\s*while/g, '}\nwhile')
-      
+
       // Function calls - keep on one line but ensure newline after
       .replace(/(printf|scanf|fprintf|fscanf|sprintf|sscanf|puts|gets|getchar|putchar)\s*\([^)]*\)\s*;/g, '$&\n')
-      
+
       // Return statements
       .replace(/\breturn\s+/g, 'return ')
       .replace(/return\s+([^;]+);/g, 'return $1;\n')
-      
+
       // Closing braces
       .replace(/([^{\s])\s*\}/g, '$1\n}')
       .replace(/\}\s*(?!\n)/g, '}\n')
-      
+
       // Clean up operators with proper spacing
       .replace(/\s*(==|!=|<=|>=|&&|\|\||>>|<<)\s*/g, ' $1 ')
       .replace(/\s*([+\-*/%])\s*/g, ' $1 ')
       .replace(/([^=!<>])\s*=\s*(?!=)/g, '$1 = ')
-      
+
       // Space after commas
       .replace(/,(?!\s)/g, ', ')
-      
+
       // Clean up multiple spaces
       .replace(/  +/g, ' ');
-    
+
     // Step 2: Clean up excessive newlines
     formatted = formatted
       .replace(/\n\s*\n\s*\n+/g, '\n\n')
       .replace(/\{\s*\n\s*\n/g, '{\n')
       .replace(/\n\s*\n\s*\}/g, '\n}')
       .replace(/^\s*\n/g, '');
-    
+
     // Step 3: Apply consistent indentation
     const lines = formatted.split('\n');
     let indentLevel = 0;
     const indentedLines: string[] = [];
-    
+
     for (let i = 0; i < lines.length; i++) {
       let line = lines[i].trim();
-      
+
       // Skip empty lines but preserve structure
       if (!line) {
         if (indentedLines.length > 0 && indentedLines[indentedLines.length - 1] !== '') {
@@ -376,7 +376,7 @@ export default function GamePage() {
         }
         continue;
       }
-      
+
       // Decrease indent before closing braces, case/default labels, and else
       if (line.startsWith('}')) {
         indentLevel = Math.max(0, indentLevel - 1);
@@ -385,23 +385,23 @@ export default function GamePage() {
       } else if (line.startsWith('else')) {
         indentLevel = Math.max(0, indentLevel - 1);
       }
-      
+
       // Apply indentation
       const indent = '  '.repeat(indentLevel);
       indentedLines.push(indent + line);
-      
+
       // Increase indent after opening braces
       if (line.endsWith('{')) {
         indentLevel++;
       } else if (line.startsWith('case ') || line.startsWith('default:')) {
         indentLevel++;
       }
-      
+
       // Special handling: if else is followed by opening brace
       if (line.startsWith('else') && line.endsWith('{')) {
         // Indent already increased above
       }
-      
+
       // Handle lines with both open and close braces
       const openBraces = (line.match(/\{/g) || []).length;
       const closeBraces = (line.match(/\}/g) || []).length;
@@ -409,10 +409,10 @@ export default function GamePage() {
         indentLevel = Math.max(0, indentLevel + openBraces - closeBraces);
       }
     }
-    
+
     return indentedLines.join('\n');
   };
-  
+
   const formattedQuestionText = useMemo(() => {
     return selectedQuestion?.question_text ? formatCode(selectedQuestion.question_text) : '';
   }, [selectedQuestion]);
@@ -428,9 +428,9 @@ export default function GamePage() {
     const list = questions;
     const idx = selectedQid
       ? Math.max(
-          0,
-          list.findIndex((q) => q.question_id === selectedQid),
-        )
+        0,
+        list.findIndex((q) => q.question_id === selectedQid),
+      )
       : 0;
     const nextIdx = (idx + delta + list.length) % list.length;
     onSelectQuestion(list[nextIdx].question_id);
@@ -470,7 +470,7 @@ export default function GamePage() {
           title: "ℹ️ Already Solved",
           description: "You've already solved this question correctly!",
         });
-        
+
         // Auto-advance to next question after 1 second
         setTimeout(() => {
           setAnswer("");
@@ -484,7 +484,7 @@ export default function GamePage() {
           description: "This was a bonus question - no grid position earned.",
         });
         await loadState();
-        
+
         // Auto-advance to next question after 1.5 seconds
         setTimeout(() => {
           setAnswer("");
@@ -496,8 +496,8 @@ export default function GamePage() {
         setStatus({ type: "success", text: "Correct Answer!" });
         toast({
           title: "✅ Correct!",
-          description: data.assignedPosition 
-            ? `Great job! Grid position ${data.assignedPosition} filled!` 
+          description: data.assignedPosition
+            ? `Great job! Grid position ${data.assignedPosition} filled!`
             : "Great job! Keep going!",
         });
         // Check for achievement
@@ -507,7 +507,7 @@ export default function GamePage() {
             description: data.achievement.description,
           });
         }
-        
+
         // Auto-advance to next question after 1.5 seconds
         setTimeout(() => {
           setAnswer("");
@@ -537,8 +537,8 @@ export default function GamePage() {
 
   const isSolvedPos = (pos: string) => solved.includes(pos);
 
-  const currentQuestionIndex = selectedQid 
-    ? questions.findIndex(q => q.question_id === selectedQid) 
+  const currentQuestionIndex = selectedQid
+    ? questions.findIndex(q => q.question_id === selectedQid)
     : 0;
   const totalQuestions = questions.length;
   const solvedCount = solved.filter(pos => pos).length;
@@ -551,14 +551,7 @@ export default function GamePage() {
         gameIcon="🎯"
         team={team}
         room={room}
-        extraInfo={
-          timeLeft ? (
-            <div className="px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white flex items-center gap-2">
-              <span>⏱️</span>
-              <span className="font-mono font-semibold">{timeLeft}</span>
-            </div>
-          ) : null
-        }
+        extraInfo={null}
       />
 
       {/* Main Content */}
@@ -603,7 +596,7 @@ export default function GamePage() {
                         </div>
                       </div>
                     </div>
-                    
+
                     {/* Code Display */}
                     <div className="relative bg-[#0f1419]">
                       <pre className="p-6 text-sm leading-relaxed overflow-x-auto">
@@ -622,7 +615,7 @@ export default function GamePage() {
                           <p className="text-sm text-slate-400">Enter the output of the C program</p>
                         </div>
                       </div>
-                      
+
                       <form onSubmit={onSubmit} className="space-y-4">
                         <div className="relative">
                           <input
@@ -644,7 +637,7 @@ export default function GamePage() {
                             </button>
                           )}
                         </div>
-                        
+
                         <div className="flex gap-3">
                           <button
                             type="button"
@@ -690,11 +683,10 @@ export default function GamePage() {
                           return (
                             <span
                               key={i}
-                              className={`w-2 h-2 rounded-full transition-all ${
-                                isActive
+                              className={`w-2 h-2 rounded-full transition-all ${isActive
                                   ? "bg-blue-500 w-6"
                                   : "bg-slate-700"
-                              }`}
+                                }`}
                             />
                           );
                         })}
@@ -711,15 +703,14 @@ export default function GamePage() {
 
                   {status && (
                     <div
-                      className={`px-5 py-4 rounded-xl border-2 font-semibold flex items-center gap-3 shadow-lg animate-in ${
-                        status.type === "success"
+                      className={`px-5 py-4 rounded-xl border-2 font-semibold flex items-center gap-3 shadow-lg animate-in ${status.type === "success"
                           ? "bg-green-900/40 border-green-500 text-green-200"
                           : status.type === "error"
                             ? "bg-red-900/40 border-red-500 text-red-200"
                             : status.type === "warn"
                               ? "bg-amber-900/40 border-amber-500 text-amber-200"
                               : "bg-blue-900/40 border-blue-500 text-blue-200"
-                      }`}
+                        }`}
                     >
                       <span className="text-xl">
                         {status.type === "success" ? "✓" : status.type === "error" ? "✗" : status.type === "warn" ? "⚠️" : "ℹ️"}
@@ -776,33 +767,31 @@ export default function GamePage() {
                 ) : (
                   <div className="max-h-[280px] overflow-y-auto p-4 space-y-2">
                     {recentSubs.slice(0, 10).map((sub, idx) => {
-                      const timeAgo = sub.solvedAt 
+                      const timeAgo = sub.solvedAt
                         ? Math.floor((Date.now() - new Date(sub.solvedAt).getTime()) / 1000)
                         : 0;
-                      const timeStr = timeAgo < 60 
+                      const timeStr = timeAgo < 60
                         ? `${timeAgo}s ago`
                         : timeAgo < 3600
                           ? `${Math.floor(timeAgo / 60)}m ago`
                           : `${Math.floor(timeAgo / 3600)}h ago`;
-                      
+
                       const isCorrect = sub.isCorrect !== false; // Default to true for backward compatibility
-                      
+
                       return (
-                        <div 
+                        <div
                           key={`${sub.teamId}-${sub.questionId}-${idx}`}
-                          className={`px-4 py-3 rounded-lg border transition-colors ${
-                            isCorrect 
+                          className={`px-4 py-3 rounded-lg border transition-colors ${isCorrect
                               ? 'bg-slate-800/70 border-slate-700 hover:bg-slate-800'
                               : 'bg-red-900/20 border-red-800/50 hover:bg-red-900/30'
-                          }`}
+                            }`}
                         >
                           <div className="flex items-center justify-between gap-3">
                             <div className="flex items-center gap-3 min-w-0 flex-1">
-                              <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                                isCorrect
+                              <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${isCorrect
                                   ? 'bg-green-500/20 border border-green-500/30'
                                   : 'bg-red-500/20 border border-red-500/30'
-                              }`}>
+                                }`}>
                                 <span className={`text-sm ${isCorrect ? 'text-green-400' : 'text-red-400'}`}>
                                   {isCorrect ? '✓' : '✗'}
                                 </span>
@@ -888,15 +877,15 @@ export default function GamePage() {
   );
 }
 
-function BingoGrid({ solved, onSelectQuestion, questions, highlightedPositions }: { 
-  solved: string[]; 
+function BingoGrid({ solved, onSelectQuestion, questions, highlightedPositions }: {
+  solved: string[];
   onSelectQuestion: (qid: number) => void;
   questions: GameStateResponse["questions"];
   highlightedPositions?: string[];
 }) {
   const bingoLetters = ["B", "I", "N", "G", "O"];
   const gridRows = ["A", "B", "C", "D", "E"];
-  
+
   return (
     <div className="space-y-3">
       {/* B-I-N-G-O Letters */}
@@ -916,7 +905,7 @@ function BingoGrid({ solved, onSelectQuestion, questions, highlightedPositions }
           );
         })}
       </div>
-      
+
       {/* Grid Cells */}
       <div className="grid grid-cols-5 gap-2.5">
         {gridRows.map((row) =>
@@ -924,16 +913,15 @@ function BingoGrid({ solved, onSelectQuestion, questions, highlightedPositions }
             const position = `${row}${colIndex + 1}`;
             const isSolved = solved.includes(position);
             const isHighlighted = highlightedPositions?.includes(position) ?? false;
-            
+
             return (
               <button
                 key={position}
                 onClick={() => onSelectQuestion(getQuestionIdForPosition(questions, position))}
-                className={`aspect-square rounded-xl flex items-center justify-center text-lg font-bold border-2 transition-all duration-200 ${
-                  isSolved
+                className={`aspect-square rounded-xl flex items-center justify-center text-lg font-bold border-2 transition-all duration-200 ${isSolved
                     ? `bg-gradient-to-br from-emerald-500 to-green-600 border-emerald-400 text-white shadow-lg shadow-emerald-500/30 ${isHighlighted ? 'animate-pulse scale-105' : ''}`
                     : "bg-slate-800/70 border-slate-600 text-slate-300 cursor-default"
-                }`}
+                  }`}
               >
                 {isSolved ? (
                   <span className="text-2xl">✓</span>
@@ -989,8 +977,8 @@ function computeCompletedLinesPositionsFromSolved(posList: string[]) {
   }
 
   // diags
-  const diag1 = ["A1","B2","C3","D4","E5"];
-  const diag2 = ["A5","B4","C3","D2","E1"];
+  const diag1 = ["A1", "B2", "C3", "D4", "E5"];
+  const diag2 = ["A5", "B4", "C3", "D2", "E1"];
   if (diag1.every((p) => set.has(p))) results.push({ id: 'diag_1', type: 'diag', positions: diag1 });
   if (diag2.every((p) => set.has(p))) results.push({ id: 'diag_2', type: 'diag', positions: diag2 });
 
@@ -998,7 +986,7 @@ function computeCompletedLinesPositionsFromSolved(posList: string[]) {
 }
 
 function isColumnCompleted(solved: string[], colIndex: number) {
-  const rows = ["A","B","C","D","E"];
+  const rows = ["A", "B", "C", "D", "E"];
   return rows.every((r) => solved.includes(`${r}${colIndex}`));
 }
 

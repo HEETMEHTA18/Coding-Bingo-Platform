@@ -24,6 +24,7 @@
     "typecheck": "tsc"
   },
   "dependencies": {
+    "@monaco-editor/react": "^4.7.0",
     "@types/multer": "^2.0.0",
     "@types/pg": "^8.15.5",
     "@types/react-syntax-highlighter": "^15.5.13",

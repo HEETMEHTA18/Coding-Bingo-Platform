@@ -15,6 +15,11 @@ import {
   DialogDescription,
 } from "../components/ui/dialog";
 
+interface RoomWithCounts extends Room {
+  questionCount: number;
+  teamCount: number;
+}
+
 export default function AdminPage() {
   const navigate = useNavigate();
   const [roomCode, setRoomCode] = useState("");
@@ -22,6 +27,7 @@ export default function AdminPage() {
   const [state, setState] = useState<AdminStateResponse | null>(null);
   const [loading, setLoading] = useState<{ [key: string]: boolean }>({});
   const [selectedQuestion, setSelectedQuestion] = useState<any>(null);
+  const [roomsList, setRoomsList] = useState<RoomWithCounts[]>([]);
 
   useEffect(() => {
     const isAdmin = localStorage.getItem("bingo.admin") === "true";
@@ -29,16 +35,34 @@ export default function AdminPage() {
   }, [navigate]);
 
   const load = async (code: string) => {
-    const res = await apiFetch(
-      `/api/admin/state?room=${encodeURIComponent(code)}`,
-    );
-    if (res.ok) {
-      const data = (await res.json()) as AdminStateResponse;
-      console.log('Admin state loaded:', data);
-      console.log('Sample question:', data.questions[0]);
-      setState(data);
-    } else {
+    try {
+      const res = await apiFetch(
+        `/api/admin/state?room=${encodeURIComponent(code)}`,
+      );
+      if (res.ok) {
+        const data = (await res.json()) as AdminStateResponse;
+        console.log('Admin state loaded:', data);
+        console.log('Sample question:', data.questions[0]);
+        setState(data);
+      } else {
+        console.error('Failed to load admin state:', res.status);
+        setState(null);
+      }
+    } catch (error) {
+      console.error('Error loading admin state:', error);
       setState(null);
+    }
+  };
+
+  const loadRooms = async () => {
+    try {
+      const res = await apiFetch("/api/admin/rooms");
+      if (res.ok) {
+        const data = await res.json();
+        setRoomsList(data.rooms);
+      }
+    } catch (error) {
+      console.error("Error loading rooms:", error);
     }
   };
 
@@ -46,6 +70,7 @@ export default function AdminPage() {
     if (roomCode) {
       load(roomCode);
     }
+    loadRooms();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomCode]);
 
@@ -64,6 +89,7 @@ export default function AdminPage() {
         body: JSON.stringify(body),
       });
       await load(body.code);
+      await loadRooms();
     } finally {
       setLoading((prev) => ({ ...prev, createRoom: false }));
     }
@@ -173,6 +199,67 @@ export default function AdminPage() {
     }
   };
 
+  const deleteRoom = async (code: string) => {
+    if (!confirm(`Are you sure you want to delete room ${code}? This will delete ALL data for this room.`)) return;
+    setLoading((prev) => ({ ...prev, [`deleteRoom_${code}`]: true }));
+    try {
+      await apiFetch("/api/admin/delete-room", {
+        method: "POST",
+        body: JSON.stringify({ room: code }),
+      });
+      await loadRooms();
+      if (roomCode === code) {
+        setRoomCode("");
+        setState(null);
+      }
+    } finally {
+      setLoading((prev) => ({ ...prev, [`deleteRoom_${code}`]: false }));
+    }
+  };
+
+  const deleteAllRooms = async () => {
+    if (!confirm("Are you sure you want to delete ALL rooms? This is extremely destructive.")) return;
+    setLoading((prev) => ({ ...prev, deleteAllRooms: true }));
+    try {
+      await apiFetch("/api/admin/delete-all-rooms", {
+        method: "POST",
+      });
+      await loadRooms();
+      setRoomCode("");
+      setState(null);
+    } finally {
+      setLoading((prev) => ({ ...prev, deleteAllRooms: false }));
+    }
+  };
+
+  const deleteTeam = async (teamId: string) => {
+    if (!confirm("Are you sure you want to delete this team? This action cannot be undone.")) return;
+    setLoading((prev) => ({ ...prev, [`deleteTeam_${teamId}`]: true }));
+    try {
+      await apiFetch("/api/admin/delete-team", {
+        method: "POST",
+        body: JSON.stringify({ room: roomCode, teamId }),
+      });
+      await load(roomCode);
+    } finally {
+      setLoading((prev) => ({ ...prev, [`deleteTeam_${teamId}`]: false }));
+    }
+  };
+
+  const deleteAllTeams = async () => {
+    if (!confirm("Are you sure you want to delete ALL teams? This action cannot be undone.")) return;
+    setLoading((prev) => ({ ...prev, deleteAllTeams: true }));
+    try {
+      await apiFetch("/api/admin/delete-all-teams", {
+        method: "POST",
+        body: JSON.stringify({ room: roomCode }),
+      });
+      await load(roomCode);
+    } finally {
+      setLoading((prev) => ({ ...prev, deleteAllTeams: false }));
+    }
+  };
+
   const [showFakeQuestionDialog, setShowFakeQuestionDialog] = useState(false);
   const [fakeQuestionCount, setFakeQuestionCount] = useState(0);
   const [uploadedRealCount, setUploadedRealCount] = useState(0);
@@ -192,7 +279,7 @@ export default function AdminPage() {
       const fileData = new FormData();
       fileData.append("file", file);
       fileData.append("room", roomCode.toUpperCase());
-      
+
       // Add numRandomFake parameter if specified
       const numRandomFake = parseInt(numRandomFakeQuestions);
       if (!isNaN(numRandomFake) && numRandomFake > 0) {
@@ -378,6 +465,59 @@ export default function AdminPage() {
               Room Management
             </h2>
           </div>
+
+          <div className="mb-6 p-4 bg-slate-800/50 rounded-xl border border-slate-700">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-slate-300">Existing Rooms (Team Codes)</h3>
+              <button
+                onClick={deleteAllRooms}
+                disabled={loading.deleteAllRooms || !roomsList.length}
+                className="px-3 py-1.5 rounded-lg bg-red-500/20 text-red-400 text-xs font-semibold hover:bg-red-500/30 border border-red-500/30 transition-all"
+              >
+                {loading.deleteAllRooms ? "Deleting..." : "Delete All Rooms"}
+              </button>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
+              {roomsList.map((r) => (
+                <div
+                  key={r.code}
+                  className={`p-3 rounded-lg border transition-all cursor-pointer flex items-center justify-between group ${roomCode === r.code
+                    ? "bg-blue-500/20 border-blue-500/50"
+                    : "bg-slate-700/30 border-slate-600/50 hover:border-slate-500"
+                    }`}
+                  onClick={() => setRoomCode(r.code)}
+                >
+                  <div>
+                    <div className="font-bold text-white">{r.code}</div>
+                    <div className="text-xs text-slate-400 flex gap-2">
+                      <span>{r.teamCount} teams</span>
+                      <span>•</span>
+                      <span>{r.questionCount} questions</span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      deleteRoom(r.code);
+                    }}
+                    disabled={loading[`deleteRoom_${r.code}`]}
+                    className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-md transition-colors opacity-0 group-hover:opacity-100"
+                    title="Delete Room"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
+                </div>
+              ))}
+              {!roomsList.length && (
+                <div className="col-span-full text-center py-4 text-slate-500 text-sm italic">
+                  No rooms created yet.
+                </div>
+              )}
+            </div>
+          </div>
+
           <form
             onSubmit={createRoom}
             className="flex flex-col sm:flex-row gap-4 items-start sm:items-end mb-4"
@@ -409,6 +549,7 @@ export default function AdminPage() {
                 <option value="memory">🧠 Code Memory Match</option>
                 <option value="race">🏁 Code Race (Debug)</option>
                 <option value="crossword">📝 Code Crossword</option>
+                <option value="codecanvas">🎨 Code Canvas</option>
               </select>
             </div>
             <button
@@ -655,6 +796,55 @@ export default function AdminPage() {
           )}
         </section>
 
+        <section className="bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 dark:from-slate-800 dark:via-slate-700 dark:to-slate-800 border border-white/20 dark:border-slate-600/50 rounded-2xl p-6 shadow-xl backdrop-blur-sm">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center">
+                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                </svg>
+              </div>
+              <h2 className="text-xl font-bold text-slate-800 dark:text-slate-200">
+                Team Management
+              </h2>
+            </div>
+            <button
+              onClick={deleteAllTeams}
+              disabled={loading.deleteAllTeams || !state?.teams.length}
+              className="px-4 py-2 rounded-lg bg-red-500 text-white text-sm font-semibold hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg"
+            >
+              {loading.deleteAllTeams ? "Deleting..." : "Delete All Teams"}
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {state?.teams.map((team: any) => (
+              <div key={team.id} className="bg-white/50 dark:bg-slate-800/50 p-4 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center justify-between group hover:border-indigo-300 dark:hover:border-indigo-700 transition-all">
+                <div>
+                  <div className="font-semibold text-slate-800 dark:text-slate-200">{team.name}</div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400">ID: {team.id}</div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400">Score: {team.lines_completed}</div>
+                </div>
+                <button
+                  onClick={() => deleteTeam(team.id)}
+                  disabled={loading[`deleteTeam_${team.id}`]}
+                  className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
+                  title="Delete Team"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </button>
+              </div>
+            ))}
+            {!state?.teams.length && (
+              <div className="col-span-full text-center py-8 text-slate-500 dark:text-slate-400 italic">
+                No teams joined yet.
+              </div>
+            )}
+          </div>
+        </section>
+
         <section className="bg-gradient-to-br from-amber-50 via-orange-50 to-red-50 dark:from-slate-800 dark:via-slate-700 dark:to-slate-800 border border-white/20 dark:border-slate-600/50 rounded-2xl p-6 shadow-xl backdrop-blur-sm">
           <div className="flex items-center gap-3 mb-4">
             <div className="w-10 h-10 bg-gradient-to-br from-amber-500 to-orange-600 rounded-xl flex items-center justify-center">
@@ -681,9 +871,9 @@ export default function AdminPage() {
               File Format Requirements:
             </h3>
             <ul className="text-sm text-blue-700 dark:text-blue-300 space-y-1">
-              <li key="csv-upload">• Upload a CSV file with questions data</li>
-              <li key="headers">• First row should be headers</li>
-              <li key="required-cols">
+              <li>• Upload a CSV file with questions data</li>
+              <li>• First row should be headers</li>
+              <li>
                 • Required columns:{" "}
                 <code className="bg-blue-100 dark:bg-blue-900 px-1 rounded">
                   question_text
@@ -701,7 +891,7 @@ export default function AdminPage() {
                   Answer
                 </code>
               </li>
-              <li key="optional-cols">
+              <li>
                 • Optional column:{" "}
                 <code className="bg-blue-100 dark:bg-blue-900 px-1 rounded">
                   is_real
@@ -712,7 +902,7 @@ export default function AdminPage() {
                 </code>{" "}
                 (true/false or 1/0, defaults to true)
               </li>
-              <li key="commas">• Use quotes around text containing commas</li>
+              <li>• Use quotes around text containing commas</li>
             </ul>
             <div className="mt-3 p-3 bg-white dark:bg-slate-800 rounded-lg border text-xs font-mono text-gray-600 dark:text-gray-300">
               ID,Code,Answer,Difficulty,Topic
@@ -958,7 +1148,7 @@ export default function AdminPage() {
                 </div>
                 <div className="bg-slate-50/50 dark:bg-slate-800/50 rounded-lg p-3 border border-slate-200/50 dark:border-slate-600/50 mb-3 overflow-hidden">
                   <code className="text-xs text-slate-800 dark:text-slate-200 font-mono whitespace-pre block overflow-x-auto">
-{q.question_text}
+                    {q.question_text}
                   </code>
                 </div>
                 <div className="flex items-center gap-2 text-xs">
@@ -1304,7 +1494,7 @@ export default function AdminPage() {
                 <h3 className="text-sm font-semibold text-slate-300 mb-2 uppercase tracking-wide">Question</h3>
                 <div className="bg-slate-900/70 border border-slate-500 rounded-lg p-5 overflow-auto max-h-96">
                   <code className="text-sm text-white font-mono whitespace-pre block">
-{selectedQuestion.question_text || selectedQuestion.text || 'No question text available'}
+                    {selectedQuestion.question_text || selectedQuestion.text || 'No question text available'}
                   </code>
                 </div>
               </div>
@@ -1314,7 +1504,7 @@ export default function AdminPage() {
                 <h3 className="text-sm font-semibold text-slate-300 mb-2 uppercase tracking-wide">Correct Answer</h3>
                 <div className="bg-gradient-to-r from-emerald-500/20 to-green-500/20 border-2 border-emerald-400 rounded-lg p-5">
                   <code className="text-lg font-mono font-bold text-emerald-200 whitespace-pre block">
-{selectedQuestion.correct_answer || selectedQuestion.correctAnswer || 'No answer available'}
+                    {selectedQuestion.correct_answer || selectedQuestion.correctAnswer || 'No answer available'}
                   </code>
                 </div>
               </div>

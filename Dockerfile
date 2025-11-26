@@ -1,6 +1,9 @@
 # Use Node.js LTS
 FROM node:20-alpine AS builder
 
+# Install Docker CLI for build stage
+RUN apk add --no-cache docker-cli
+
 # Set working directory
 WORKDIR /app
 
@@ -18,6 +21,9 @@ RUN pnpm run build
 
 # Production stage
 FROM node:20-alpine
+
+# Install Docker CLI and required tools for GCC compilation support
+RUN apk add --no-cache docker-cli ca-certificates
 
 WORKDIR /app
 
@@ -38,4 +44,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
   CMD node -e "require('http').get('http://localhost:8080/api/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
 
 # Start the application
-CMD ["node", "dist/server/node-build.mjs"]
+CMD ["node", "dist/server/index.mjs"]
