@@ -6,7 +6,7 @@ import compression from "compression";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import { checkDbHealth } from "./db.js";
-import { handlePing, handleDemo } from "./routes/demo";
+import { handlePing, handleDemo } from "./routes/demo.js";
 import {
   handleAdminState,
   handleCreateRoom,
@@ -25,14 +25,14 @@ import {
   handleListRooms,
   handleDeleteRoom,
   handleDeleteAllRooms,
-} from "./routes/admin";
-import { handleLeaderboard, handleLeaderboardAll } from "./routes/leaderboard";
-import { handleLogin, handleGameState, handleSubmit, handleRecentSubmissions } from "./routes/game";
-import compileRouter from "./routes/compile";
+} from "./routes/admin.js";
+import { handleLeaderboard, handleLeaderboardAll } from "./routes/leaderboard.js";
+import { handleLogin, handleGameState, handleSubmit, handleRecentSubmissions } from "./routes/game.js";
+import compileRouter from "./routes/compile.js";
 import {
   requestTimingMiddleware,
   getRequestTimings,
-} from "./middleware/requestTiming";
+} from "./middleware/requestTiming.js";
 
 export const createServer = () => {
   const app = express();

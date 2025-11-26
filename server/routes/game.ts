@@ -6,7 +6,7 @@ import type {
   SubmitRequest,
   SubmissionResult,
   GameType,
-} from "../../shared/api";
+} from "../../shared/api.js";
 import { db } from "../db.js";
 import {
   rooms,
@@ -63,16 +63,16 @@ async function generateQuestionMapping(
   // Take up to 25 questions, shuffle them randomly
   const questionsToMap = roomQuestions.slice(0, Math.min(25, roomQuestions.length));
   console.log(`Mapping ${questionsToMap.length} questions for team ${teamId}`);
-  
+
   const shuffledQuestions = seededShuffle(questionsToMap, teamId);
   const shuffledPositions = seededShuffle(gridPositions.slice(0, questionsToMap.length), teamId + "-grid");
 
   // Map questions to positions - only create mappings for questions that have positions
   const mappings = [];
   const limit = Math.min(shuffledQuestions.length, shuffledPositions.length, 25);
-  
+
   console.log(`Creating ${limit} mappings`);
-  
+
   for (let i = 0; i < limit; i++) {
     if (shuffledQuestions[i] && shuffledPositions[i]) {
       mappings.push({
@@ -124,10 +124,10 @@ async function ensureMappingsFilled(teamId: string, roomCode: string) {
       .select()
       .from(questionsTable)
       .where(eq(questionsTable.roomCode, roomCode));
-    
+
     // Filter valid questions only
     const validQuestions = roomQuestions.filter(q => q && q.questionId !== undefined && q.questionId !== null);
-    
+
     // Filter questions that are not mapped yet
     let unmapped = validQuestions.filter((q) => !mappedQids.has(q.questionId));
 
@@ -153,7 +153,7 @@ async function ensureMappingsFilled(teamId: string, roomCode: string) {
         available.slice(0, 5),
       );
     }
-    
+
     // Only map valid questions
     const validMappings = [];
     for (let i = 0; i < toMap; i++) {
@@ -167,7 +167,7 @@ async function ensureMappingsFilled(teamId: string, roomCode: string) {
       }
       validMappings.push({ teamId, questionId: q.questionId, gridPosition: pos });
     }
-    
+
     // Batch insert all valid mappings
     if (validMappings.length > 0) {
       try {
@@ -359,14 +359,14 @@ export const handleGameState: RequestHandler = async (req, res) => {
         try {
           const result = await Promise.race([
             queryFn(),
-            new Promise<never>((_, reject) => 
+            new Promise<never>((_, reject) =>
               setTimeout(() => reject(new Error(`${queryName} timeout (10s)`)), 10000)
             )
           ]);
           return result;
         } catch (err: any) {
           console.error(`${queryName} attempt ${attempt + 1}/${maxRetries + 1} failed:`, err.message);
-          
+
           if (attempt === maxRetries) {
             // Last attempt failed
             if (err.code === 'ENOTFOUND' || err.message?.includes('ENOTFOUND')) {
@@ -377,7 +377,7 @@ export const handleGameState: RequestHandler = async (req, res) => {
             }
             throw err;
           }
-          
+
           // Wait before retry (exponential backoff: 200ms, 400ms)
           await new Promise(resolve => setTimeout(resolve, 200 * Math.pow(2, attempt)));
         }
@@ -390,7 +390,7 @@ export const handleGameState: RequestHandler = async (req, res) => {
       () => db.select().from(rooms).where(eq(rooms.code, code)),
       'Room query'
     );
-    
+
     if (roomResult.length === 0) {
       return res.status(404).json({ error: "Room not found" });
     }
@@ -401,7 +401,7 @@ export const handleGameState: RequestHandler = async (req, res) => {
       () => db.select().from(teams).where(eq(teams.teamId, teamId)),
       'Team query'
     );
-    
+
     if (teamResult.length === 0) {
       return res.status(404).json({ error: "Team not found" });
     }
@@ -702,11 +702,11 @@ export const handleSubmit: RequestHandler = async (req, res) => {
       achievement:
         correct && isRealQuestion && (updatedTeamRow?.linesCompleted || 0) >= 5
           ? {
-              id: "bingo-master",
-              title: "Bingo Master",
-              description: "Completed 5 lines!",
-              icon: "🏆",
-            }
+            id: "bingo-master",
+            title: "Bingo Master",
+            description: "Completed 5 lines!",
+            icon: "🏆",
+          }
           : undefined,
     } as any;
 
@@ -720,7 +720,7 @@ export const handleSubmit: RequestHandler = async (req, res) => {
 // Handler for recent submissions
 export const handleRecentSubmissions: RequestHandler = async (req, res) => {
   const roomCode = (req.query.room as string)?.toUpperCase().slice(0, 10);
-  
+
   if (!roomCode) {
     return res.status(400).json({ error: "Room code required" });
   }
@@ -762,7 +762,7 @@ export const handleRecentSubmissions: RequestHandler = async (req, res) => {
     res.json({ rows });
   } catch (error) {
     console.error("Error fetching recent submissions:", error);
-    
+
     // Return empty array instead of error to prevent UI from breaking
     // This is a non-critical feature (recent activity display)
     res.json({ rows: [] });

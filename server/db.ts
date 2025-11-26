@@ -1,6 +1,6 @@
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import * as schema from "./schema.ts";
+import * as schema from "./schema.js";
 
 // PostgreSQL connection - lazy initialization for serverless
 const defaultLocal = "postgresql://user:password@localhost:5432/bingo";
@@ -14,7 +14,7 @@ function getSqlConnection() {
     try {
       console.log('Attempting database connection...');
       console.log('Connection string hostname:', connectionString.split('@')[1]?.split('/')[0]);
-      
+
       const isNeon = connectionString.includes('neon.tech');
       const config: any = {
         max: parseInt(process.env.PG_MAX_POOL || "10"), // Reduced from 20 for better serverless compatibility
@@ -37,10 +37,10 @@ function getSqlConnection() {
           undefined: null,
         },
         // Add retry logic
-        onnotice: () => {}, // Suppress notices
+        onnotice: () => { }, // Suppress notices
         debug: false, // Disable debug for production
       };
-      
+
       console.log('Database config:', {
         isNeon,
         maxPool: config.max,
@@ -48,10 +48,10 @@ function getSqlConnection() {
         ssl: config.ssl,
         prepare: config.prepare
       });
-      
+
       sql = postgres(connectionString, config);
       console.log('Database connection established successfully');
-      
+
       // Test the connection immediately
       sql`SELECT 1 as test`.then(() => {
         console.log('✅ Database connection verified');
@@ -63,7 +63,7 @@ function getSqlConnection() {
       });
     } catch (error: any) {
       console.error('Database connection failed:', error);
-      
+
       // Provide specific guidance based on error type
       if (error.code === 'ENOTFOUND') {
         console.error('❌ Cannot resolve database hostname - check:');
@@ -73,7 +73,7 @@ function getSqlConnection() {
       } else if (error.code === 'ETIMEDOUT' || error.code === 'ECONNREFUSED') {
         console.error('❌ Connection timeout or refused - database may be down');
       }
-      
+
       // In development, provide a more helpful error message
       if (process.env.NODE_ENV !== 'production') {
         console.error('💡 Development tip: Check your DATABASE_URL in .env file');
@@ -127,26 +127,26 @@ export async function withRetry<T>(
   delayMs: number = 1000
 ): Promise<T> {
   let lastError: Error | undefined;
-  
+
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       return await operation();
     } catch (error) {
       lastError = error as Error;
       console.error(`Database operation attempt ${attempt}/${maxRetries} failed:`, error);
-      
+
       if (attempt < maxRetries) {
         const delay = delayMs * attempt; // Exponential backoff
         console.log(`Retrying in ${delay}ms...`);
         await new Promise(resolve => setTimeout(resolve, delay));
-        
+
         // Reset connection pool on retry
         sql = null;
         dbInstance = null;
       }
     }
   }
-  
+
   throw lastError || new Error('Operation failed after retries');
 }
 

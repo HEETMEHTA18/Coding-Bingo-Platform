@@ -6,7 +6,7 @@ import type {
   AdminAddQuestionRequest,
   AdminDeleteQuestionRequest,
   Question,
-} from "../../shared/api";
+} from "../../shared/api.js";
 import { db } from "../db.js";
 import {
   rooms,

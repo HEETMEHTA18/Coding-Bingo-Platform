@@ -1,5 +1,5 @@
 import { RequestHandler } from "express";
-import type { LeaderboardResponse } from "../../shared/api";
+import type { LeaderboardResponse } from "../../shared/api.js";
 import { db } from "../db.js";
 import { teams, rooms, teamSolvedQuestions } from "../schema.js";
 import { eq, sql } from "drizzle-orm";

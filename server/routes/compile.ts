@@ -32,7 +32,7 @@ async function compileWithJudge0(
   try {
     const apiKey = process.env.JUDGE0_API_KEY;
     const apiUrl = process.env.JUDGE0_API_URL || "https://judge0-ce.p.rapidapi.com";
-    
+
     if (!apiKey) {
       return {
         success: false,
@@ -148,14 +148,14 @@ router.post("/api/compile", async (req, res) => {
   // Check if Docker is available
   const useOnlineCompiler = process.env.USE_ONLINE_COMPILER === "true";
   const dockerAvailable = !useOnlineCompiler && await checkDockerAvailable();
-  
+
   if (useOnlineCompiler) {
     console.log("Using online Judge0 compiler (Docker disabled)");
     const result = await compileWithJudge0(language, source, stdin);
     result.executionTime = Date.now() - startTime;
     return res.json(result);
   }
-  
+
   if (!dockerAvailable) {
     return res.status(503).json({
       error: "Docker is not available. Set USE_ONLINE_COMPILER=true in .env to use online compiler instead.",
