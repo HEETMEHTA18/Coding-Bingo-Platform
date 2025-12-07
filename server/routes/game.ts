@@ -7,7 +7,7 @@ import type {
   SubmissionResult,
   GameType,
 } from "../../shared/api.js";
-import { db } from "../db.js";
+import { db, withRetry } from "../db.js";
 import {
   rooms,
   questions as questionsTable,
@@ -223,20 +223,20 @@ export const handleLogin: RequestHandler = async (req, res) => {
     const code = body.room_code.toUpperCase().slice(0, 10);
 
     // Check if room exists
-    const roomResult = await db
+    const roomResult = await withRetry(() => db
       .select()
       .from(rooms)
-      .where(eq(rooms.code, code));
+      .where(eq(rooms.code, code)));
     if (roomResult.length === 0) {
       return res.status(404).json({ error: "Room not found" });
     }
     const room = roomResult[0];
 
     // Check if team name already exists
-    const existingTeam = await db
+    const existingTeam = await withRetry(() => db
       .select()
       .from(teams)
-      .where(and(eq(teams.roomCode, code), eq(teams.teamName, body.team_name)));
+      .where(and(eq(teams.roomCode, code), eq(teams.teamName, body.team_name))));
     if (existingTeam.length > 0) {
       const team = existingTeam[0];
       // If team has ended (has endTime), allow them to create a new team with the same name
@@ -353,42 +353,9 @@ export const handleGameState: RequestHandler = async (req, res) => {
     // Enforce max length 10 for room code
     const code = roomCode.toUpperCase().slice(0, 10);
 
-    // Helper function for retrying queries with exponential backoff
-    async function queryWithRetry<T>(queryFn: () => Promise<T>, queryName: string, maxRetries = 2): Promise<T> {
-      for (let attempt = 0; attempt <= maxRetries; attempt++) {
-        try {
-          const result = await Promise.race([
-            queryFn(),
-            new Promise<never>((_, reject) =>
-              setTimeout(() => reject(new Error(`${queryName} timeout (10s)`)), 10000)
-            )
-          ]);
-          return result;
-        } catch (err: any) {
-          console.error(`${queryName} attempt ${attempt + 1}/${maxRetries + 1} failed:`, err.message);
-
-          if (attempt === maxRetries) {
-            // Last attempt failed
-            if (err.code === 'ENOTFOUND' || err.message?.includes('ENOTFOUND')) {
-              throw new Error('Database connection lost - check internet connection');
-            }
-            if (err.message?.includes('timeout')) {
-              throw new Error(`Database query slow or unresponsive. ${queryName} timed out after ${maxRetries + 1} attempts.`);
-            }
-            throw err;
-          }
-
-          // Wait before retry (exponential backoff: 200ms, 400ms)
-          await new Promise(resolve => setTimeout(resolve, 200 * Math.pow(2, attempt)));
-        }
-      }
-      throw new Error('Query retry logic failed');
-    }
-
     // Get room with retry logic
-    const roomResult = await queryWithRetry(
-      () => db.select().from(rooms).where(eq(rooms.code, code)),
-      'Room query'
+    const roomResult = await withRetry(
+      () => db.select().from(rooms).where(eq(rooms.code, code))
     );
 
     if (roomResult.length === 0) {
@@ -397,9 +364,8 @@ export const handleGameState: RequestHandler = async (req, res) => {
     const room = roomResult[0];
 
     // Get team with retry logic
-    const teamResult = await queryWithRetry(
-      () => db.select().from(teams).where(eq(teams.teamId, teamId)),
-      'Team query'
+    const teamResult = await withRetry(
+      () => db.select().from(teams).where(eq(teams.teamId, teamId))
     );
 
     if (teamResult.length === 0) {

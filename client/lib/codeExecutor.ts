@@ -11,20 +11,20 @@ export interface ExecutionResult {
  */
 async function executeNativeCode(code: string, timeout: number): Promise<ExecutionResult> {
   const startTime = Date.now();
-  
+
   try {
     // Detect language
     const language = code.includes('using namespace') || code.includes('std::') ? 'cpp' : 'c';
-    
-    console.log(`Compiling ${language.toUpperCase()} code using Docker...`);
-    
+
+    console.log(`Compiling ${language.toUpperCase()} code using Docker (Timeout: ${timeout}ms)...`);
+
     const response = await fetch('/api/compile', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ language, source: code }),
       signal: AbortSignal.timeout(timeout + 5000), // Give 5s extra for network
     });
-    
+
     if (!response.ok) {
       const error = await response.json();
       return {
@@ -33,9 +33,9 @@ async function executeNativeCode(code: string, timeout: number): Promise<Executi
         executionTime: Date.now() - startTime,
       };
     }
-    
+
     const result = await response.json();
-    
+
     if (!result.success) {
       // Compilation or runtime error
       const errorMsg = result.compileOutput || result.error || result.stderr || 'Unknown error';
@@ -45,10 +45,10 @@ async function executeNativeCode(code: string, timeout: number): Promise<Executi
         executionTime: Date.now() - startTime,
       };
     }
-    
-    // Parse output - program should output JSON array: [[x,y],[x,y],...]
-    const stdout = (result.stdout || '').trim();
-    
+
+    // Trim output
+    let stdout = (result.stdout || '').trim();
+
     if (!stdout) {
       return {
         success: false,
@@ -56,11 +56,26 @@ async function executeNativeCode(code: string, timeout: number): Promise<Executi
         executionTime: Date.now() - startTime,
       };
     }
-    
+
+    // Try to find a JSON array in the output (handles debug prints)
+    // Matches the first [...] block that looks like it could be the coordinates
+    const jsonMatch = stdout.match(/\[\s*\[.*?\]\s*\]/s);
+    if (jsonMatch) {
+      stdout = jsonMatch[0];
+    } else {
+      // Fallback for single array like [] or simple arrays, but our format is [[x,y]...]
+      // If we didn't find a nested array, maybe it's just a single array or malformed.
+      // We'll try to parse the whole string if specific match fails.
+      const simpleMatch = stdout.match(/\[.*\]/s);
+      if (simpleMatch) {
+        stdout = simpleMatch[0];
+      }
+    }
+
     // Try to parse JSON coordinates
     try {
       const coordinates = JSON.parse(stdout);
-      
+
       if (!Array.isArray(coordinates)) {
         return {
           success: false,
@@ -68,7 +83,7 @@ async function executeNativeCode(code: string, timeout: number): Promise<Executi
           executionTime: Date.now() - startTime,
         };
       }
-      
+
       // Validate coordinates
       for (let i = 0; i < coordinates.length; i++) {
         const coord = coordinates[i];
@@ -79,7 +94,7 @@ async function executeNativeCode(code: string, timeout: number): Promise<Executi
             executionTime: Date.now() - startTime,
           };
         }
-        
+
         const [x, y] = coord;
         if (typeof x !== 'number' || typeof y !== 'number') {
           return {
@@ -88,7 +103,7 @@ async function executeNativeCode(code: string, timeout: number): Promise<Executi
             executionTime: Date.now() - startTime,
           };
         }
-        
+
         if (!Number.isInteger(x) || !Number.isInteger(y)) {
           return {
             success: false,
@@ -96,7 +111,7 @@ async function executeNativeCode(code: string, timeout: number): Promise<Executi
             executionTime: Date.now() - startTime,
           };
         }
-        
+
         if (x < 0 || x > 9 || y < 0 || y > 9) {
           return {
             success: false,
@@ -105,13 +120,13 @@ async function executeNativeCode(code: string, timeout: number): Promise<Executi
           };
         }
       }
-      
+
       return {
         success: true,
         coordinates: coordinates as [number, number][],
         executionTime: Date.now() - startTime,
       };
-      
+
     } catch (parseErr) {
       return {
         success: false,
@@ -119,7 +134,7 @@ async function executeNativeCode(code: string, timeout: number): Promise<Executi
         executionTime: Date.now() - startTime,
       };
     }
-    
+
   } catch (err: any) {
     if (err.name === 'TimeoutError' || err.name === 'AbortError') {
       return {
@@ -128,7 +143,7 @@ async function executeNativeCode(code: string, timeout: number): Promise<Executi
         executionTime: Date.now() - startTime,
       };
     }
-    
+
     return {
       success: false,
       error: `Network error: ${err.message || 'Failed to reach compiler service'}`,
@@ -148,7 +163,10 @@ export function executeCode(code: string, timeout: number = 2000): ExecutionResu
     // Check if code is C/C++ - now we support compilation!
     if (code.includes('#include') || code.includes('int main') || code.includes('using namespace')) {
       // Delegate to backend compiler service
-      return executeNativeCode(code, timeout);
+      // Native compilation takes longer (Docker startup + compilation + execution)
+      // We need to give it enough time, overriding the default short timeout for JS
+      const nativeTimeout = Math.max(timeout, 60000); // Minimum 60s for native code
+      return executeNativeCode(code, nativeTimeout);
     }
 
     // Security check for dangerous patterns (case-sensitive to avoid false positives)
@@ -169,7 +187,7 @@ export function executeCode(code: string, timeout: number = 2000): ExecutionResu
       { pattern: /\b__proto__\b/i, message: '__proto__' },
       { pattern: /\.constructor\s*\(/i, message: 'constructor access' }
     ];
-    
+
     for (const { pattern, message } of forbidden) {
       if (pattern.test(code)) {
         return { success: false, error: `Security: ${message} is not allowed` };
@@ -218,10 +236,10 @@ export function executeCode(code: string, timeout: number = 2000): ExecutionResu
     // Execute the code with proper error handling
     let timedOut = false;
     let timeoutId: NodeJS.Timeout | null = null;
-    
+
     try {
-      timeoutId = setTimeout(() => { 
-        timedOut = true; 
+      timeoutId = setTimeout(() => {
+        timedOut = true;
       }, timeout);
 
       // Use Function constructor for safe evaluation
@@ -278,16 +296,16 @@ export function executeCode(code: string, timeout: number = 2000): ExecutionResu
       return result;
     } catch (execError: any) {
       if (timeoutId) clearTimeout(timeoutId);
-      
+
       // Log execution errors for debugging
       console.error('Execution error in Function constructor:', execError);
-      
+
       throw execError; // Re-throw to be caught by outer catch block
     }
   } catch (error: any) {
     // Provide detailed error information
     let errorMessage = 'Code execution failed';
-    
+
     console.log('=== ERROR CAUGHT IN EXECUTOR ===');
     console.log('Error type:', typeof error);
     console.log('Error instanceof Error:', error instanceof Error);
@@ -295,7 +313,7 @@ export function executeCode(code: string, timeout: number = 2000): ExecutionResu
     console.log('Error.message:', error?.message);
     console.log('Error.toString():', error?.toString?.());
     console.log('================================');
-    
+
     if (error instanceof Error) {
       errorMessage = error.message;
     } else if (typeof error === 'string') {
@@ -308,7 +326,7 @@ export function executeCode(code: string, timeout: number = 2000): ExecutionResu
         errorMessage = stringified !== '[object Object]' ? stringified : 'Unknown error object';
       }
     }
-    
+
     // Add helpful context for common errors
     if (errorMessage.includes('generatePattern is not defined')) {
       errorMessage = 'Function "generatePattern" is not defined. Make sure to define it in your code.';
@@ -317,12 +335,12 @@ export function executeCode(code: string, timeout: number = 2000): ExecutionResu
     } else if (errorMessage.includes('is not a function')) {
       errorMessage = 'Error: ' + errorMessage + '. Check that generatePattern returns an array.';
     }
-    
+
     // Ensure we always have a meaningful error message
     if (!errorMessage || errorMessage === 'Unknown execution error' || errorMessage === 'Code execution failed') {
       errorMessage = 'Unexpected error during code execution. Check your syntax and logic.';
     }
-    
+
     return {
       success: false,
       error: errorMessage,

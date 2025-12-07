@@ -34,11 +34,15 @@ async function compileWithJudge0(
     const apiUrl = process.env.JUDGE0_API_URL || "https://judge0-ce.p.rapidapi.com";
 
     if (!apiKey) {
+      console.error("❌ JUDGE0_API_KEY is missing in .env file!");
+      console.error("👉 To fix: Get a free key at https://rapidapi.com/judge0-official/api/judge0-ce and add JUDGE0_API_KEY=your_key to .env");
       return {
         success: false,
-        error: "JUDGE0_API_KEY not set. Get free key at: https://rapidapi.com/judge0-official/api/judge0-ce",
+        error: "JUDGE0_API_KEY not set. Check server logs for instructions.",
       };
     }
+
+    console.log(`Sending compilation request to ${apiUrl}...`);
 
     // Submit code for compilation
     const response = await fetch(`${apiUrl}/submissions?base64_encoded=false&wait=true`, {
@@ -59,14 +63,17 @@ async function compileWithJudge0(
 
     if (!response.ok) {
       const errorText = await response.text();
+      console.error(`❌ Judge0 API Error: ${response.status} ${response.statusText}`);
+      console.error(`Response: ${errorText}`);
       return {
         success: false,
-        error: `Judge0 API error: ${response.status} ${response.statusText}`,
+        error: `Judge0 API error: ${response.status}`,
         stderr: errorText,
       };
     }
 
     const result = await response.json();
+    console.log("Judge0 response received (Status ID: " + result.status?.id + ")");
 
     // Status codes:
     // 3 = Accepted (success)
@@ -100,6 +107,7 @@ async function compileWithJudge0(
       };
     }
   } catch (error: any) {
+    console.error("❌ Compile function error:", error);
     return {
       success: false,
       error: `Judge0 request failed: ${error.message}`,

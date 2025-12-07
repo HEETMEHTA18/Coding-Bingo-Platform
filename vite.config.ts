@@ -21,6 +21,16 @@ export default defineConfig(({ mode }) => ({
   },
   build: {
     outDir: "dist",
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ["react", "react-dom", "react-router-dom", "framer-motion"],
+          ui: ["@radix-ui/react-dialog", "@radix-ui/react-slot", "@radix-ui/react-toast", "lucide-react"],
+          three: ["three", "@react-three/fiber", "@react-three/drei"],
+          editor: ["@monaco-editor/react"],
+        },
+      },
+    },
   },
   plugins: [react(), expressPlugin()],
   resolve: {
