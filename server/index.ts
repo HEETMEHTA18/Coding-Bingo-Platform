@@ -28,6 +28,22 @@ import {
 } from "./routes/admin.js";
 import { handleLeaderboard, handleLeaderboardAll } from "./routes/leaderboard.js";
 import { handleLogin, handleGameState, handleSubmit, handleRecentSubmissions } from "./routes/game.js";
+import { 
+  handleAuthLogin, 
+  handleAuthLogout,
+  handleGetCurrentUser,
+  handleListAdmins,
+  handleCreateAdmin,
+  handleUpdateAdmin,
+  handleDeleteAdmin,
+  handleGetActivityLogs,
+  handleGetActiveSessions,
+  handleTerminateSession,
+  handleGetWebsiteStats,
+  handleGetAllTeams,
+  handleGetAllQuestions,
+  ensureDefaultAdmin 
+} from "./routes/auth.js";
 import compileRouter from "./routes/compile.js";
 import {
   requestTimingMiddleware,
@@ -36,6 +52,9 @@ import {
 
 export const createServer = () => {
   const app = express();
+
+  // Ensure default admin exists
+  ensureDefaultAdmin().catch(err => console.error("Failed to seed admin:", err));
 
   // Configure multer for file uploads
   const upload = multer({ storage: multer.memoryStorage() });
@@ -125,7 +144,7 @@ export const createServer = () => {
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'x-admin-secret', 'x-initiated-by'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-admin-secret', 'x-initiated-by', 'x-session-token'],
   };
 
   app.use(cors(corsOptions));
@@ -159,9 +178,24 @@ export const createServer = () => {
 
   // Game routes
   app.post("/api/login", express.json({ limit: "10mb" }), handleLogin);
+  app.post("/api/auth/login", express.json({ limit: "10mb" }), handleAuthLogin);
+  app.post("/api/auth/logout", express.json({ limit: "10mb" }), handleAuthLogout);
+  app.get("/api/auth/me", handleGetCurrentUser);
   app.get("/api/game", express.json({ limit: "10mb" }), handleGameState);
   app.post("/api/submit", express.json({ limit: "10mb" }), handleSubmit);
   app.get("/api/recent-submissions", express.json({ limit: "10mb" }), handleRecentSubmissions);
+
+  // Super Admin routes
+  app.get("/api/superadmin/admins", handleListAdmins);
+  app.post("/api/superadmin/admins", express.json({ limit: "10mb" }), handleCreateAdmin);
+  app.put("/api/superadmin/admins", express.json({ limit: "10mb" }), handleUpdateAdmin);
+  app.delete("/api/superadmin/admins", express.json({ limit: "10mb" }), handleDeleteAdmin);
+  app.get("/api/superadmin/activity-logs", handleGetActivityLogs);
+  app.get("/api/superadmin/sessions", handleGetActiveSessions);
+  app.post("/api/superadmin/terminate-session", express.json({ limit: "10mb" }), handleTerminateSession);
+  app.get("/api/superadmin/stats", handleGetWebsiteStats);
+  app.get("/api/superadmin/teams", handleGetAllTeams);
+  app.get("/api/superadmin/questions", handleGetAllQuestions);
 
   // C/C++ Compiler routes (needs JSON parsing)
   app.use(express.json({ limit: "50mb" }), compileRouter);

@@ -200,6 +200,14 @@ export default function LeaderboardPage() {
                 📊 Export CSV
               </button>
             )}
+            {isAdmin && (
+              <button
+                onClick={() => navigate("/leaderboard-all")}
+                className="px-4 py-2 rounded-xl bg-gradient-to-r from-purple-500 to-pink-500 text-white font-semibold hover:from-purple-600 hover:to-pink-600 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+              >
+                🌍 All Rooms
+              </button>
+            )}
             <button
               onClick={() => navigate(isAdmin ? "/admin" : "/game")}
               className={`px-6 py-2.5 rounded-xl bg-gradient-to-r from-green-500 to-teal-500 text-white font-semibold hover:from-green-600 hover:to-teal-600 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 ${fromCongratulations && gameCompleted ? "hidden" : ""}`}
@@ -212,6 +220,47 @@ export default function LeaderboardPage() {
 
       <main className="container py-8">
         <div className="space-y-8">
+          {/* Room Winner Banner */}
+          {hasWinner && rows.length > 0 && (
+            <div className="bg-gradient-to-r from-yellow-100 via-amber-100 to-orange-100 dark:from-yellow-900/30 dark:via-amber-900/30 dark:to-orange-900/30 border-2 border-yellow-300 dark:border-yellow-600 rounded-2xl p-6 shadow-2xl animate-in slide-in-from-top-5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="w-16 h-16 rounded-full bg-gradient-to-br from-yellow-400 to-orange-500 flex items-center justify-center shadow-xl animate-bounce">
+                    <span className="text-4xl">👑</span>
+                  </div>
+                  <div>
+                    <div className="text-sm text-yellow-700 dark:text-yellow-300 font-semibold uppercase tracking-wider">
+                      🎉 Room Winner
+                    </div>
+                    <div className="text-2xl font-bold text-slate-800 dark:text-slate-100">
+                      {rows.find(r => (r.team.lines_completed ?? 0) >= 5)?.team.team_name}
+                    </div>
+                    <div className="flex items-center gap-4 mt-1 text-sm text-slate-600 dark:text-slate-400">
+                      <span>⏱️ {formatTime(rows.find(r => (r.team.lines_completed ?? 0) >= 5)?.team.time_taken_ms || 0)}</span>
+                      <span>📏 {rows.find(r => (r.team.lines_completed ?? 0) >= 5)?.team.lines_completed}/5 lines</span>
+                      <span>✅ {rows.find(r => (r.team.lines_completed ?? 0) >= 5)?.team.solved_questions_count || 0} questions solved</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="hidden md:block">
+                  <div className="text-6xl animate-pulse">🏆</div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* No Winner Yet Banner */}
+          {!hasWinner && rows.length > 0 && (
+            <div className="bg-gradient-to-r from-blue-100 via-indigo-100 to-purple-100 dark:from-blue-900/30 dark:via-indigo-900/30 dark:to-purple-900/30 border border-blue-300 dark:border-blue-600 rounded-2xl p-4 shadow-lg">
+              <div className="flex items-center justify-center gap-3">
+                <span className="text-2xl animate-pulse">⏳</span>
+                <span className="text-slate-700 dark:text-slate-300 font-medium">
+                  No winner yet! First team to complete 5 lines wins 🎯
+                </span>
+              </div>
+            </div>
+          )}
+
           {/* Dashboard Header with Key Metrics */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
             <div className="bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm border border-white/20 dark:border-slate-700/50 rounded-2xl p-6 shadow-xl">

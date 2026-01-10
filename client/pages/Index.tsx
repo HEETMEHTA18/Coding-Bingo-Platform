@@ -1,27 +1,88 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import type { ErrorResponse, LoginRequest, LoginResponse } from "@shared/api";
+import type { ErrorResponse, LoginRequest, LoginResponse, AuthLoginRequest, AuthLoginResponse } from "@shared/api";
 import { ThemeToggle } from "../components/ThemeProvider";
 import { apiFetch } from "../lib/api";
 import { clearGameData, saveGameData, setAdmin } from "../lib/localStorage";
+import Confetti from 'react-confetti';
+
+// Simple useWindowSize hook implementation
+const useWindowSize = () => {
+  const [windowSize, setWindowSize] = useState({
+    width: window.innerWidth,
+    height: window.innerHeight,
+  });
+
+  useEffect(() => {
+    const handleResize = () => {
+      setWindowSize({
+        width: window.innerWidth,
+        height: window.innerHeight,
+      });
+    };
+
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  return windowSize;
+};
+
+const CelebrationComponent = () => {
+  const [runConfetti, setRunConfetti] = useState(false);
+  const { width, height } = useWindowSize();
+
+  useEffect(() => {
+    // Trigger the confetti when the component mounts
+    setRunConfetti(true);
+    // Stop the confetti after a few seconds
+    const timer = setTimeout(() => setRunConfetti(false), 5000);
+    return () => clearTimeout(timer);
+  }, []);
+
+  if (!runConfetti) return null;
+
+  return (
+    <div className="fixed inset-0 pointer-events-none z-50">
+      <Confetti
+        width={width}
+        height={height}
+        recycle={false}
+        numberOfPieces={500}
+        onConfettiComplete={(confetti) => {
+          if (confetti) confetti.reset();
+        }}
+      />
+    </div>
+  );
+};
 
 export default function Index() {
   const navigate = useNavigate();
+  const [isAdminLogin, setIsAdminLogin] = useState(false);
   const [teamName, setTeamName] = useState("");
   const [roomCode, setRoomCode] = useState("");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState<string>("");
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    // If already logged in, go to game
+    // If already logged in, go to game or admin
     const saved = localStorage.getItem("bingo.team");
+    const isAdmin = localStorage.getItem("bingo.admin");
+
+    if (isAdmin === "true") {
+      navigate("/admin");
+      return;
+    }
+
     try {
       const parsed =
         saved && saved !== "undefined" && saved !== "null"
           ? JSON.parse(saved)
           : null;
       if (parsed && parsed.team_id) {
-        localStorage.removeItem("bingo.admin");
         navigate("/game");
       }
     } catch {
@@ -33,67 +94,111 @@ export default function Index() {
     e.preventDefault();
     setError("");
 
-    if (!teamName.trim()) {
-      setError("Team name is required");
-      return;
-    }
-    if (!roomCode.trim()) {
-      setError("Room code is required");
-      return;
-    }
-
-    // Admin quick login
-    if (
-      teamName.trim().toUpperCase() === "ADMINLOGIN" &&
-      roomCode.trim() === "HELLOWORLD@123"
-    ) {
-      // Clear all game data before admin login
-      clearGameData();
-      setAdmin(true);
-      navigate("/admin");
-      return;
-    }
-
-    setLoading(true);
-    try {
-      // Clear all previous game data before new login to prevent data mixing
-      clearGameData();
-      
-      const body: LoginRequest = {
-        team_name: teamName.trim(),
-        room_code: roomCode.trim(),
-      };
-      const res = await apiFetch("/api/login", {
-        method: "POST",
-        body: JSON.stringify(body),
-      });
-      const data = (await res.json()) as LoginResponse | ErrorResponse;
-      if (!res.ok || ("ok" in data && data.ok === false)) {
-        const msg = (data as ErrorResponse).error || "Login failed";
-        setError(msg);
+    if (isAdminLogin) {
+      // Admin Login
+      if (!username.trim() || !password.trim()) {
+        setError("Username and password required");
         return;
       }
-      const success = data as LoginResponse;
-      
-      // Store new team and room data using utility function
-      saveGameData(success.team, success.room);
-      
-      navigate("/game");
-    } catch (err) {
-      setError("Network error");
-    } finally {
-      setLoading(false);
+
+      setLoading(true);
+      try {
+        const body: AuthLoginRequest = {
+          username: username.trim(),
+          password: password.trim(),
+        };
+        const res = await apiFetch("/api/auth/login", {
+          method: "POST",
+          body: JSON.stringify(body),
+        });
+
+        // Handle response
+        if (res.ok) {
+          const data = (await res.json()) as AuthLoginResponse;
+          if (data.success && data.admin) {
+            clearGameData();
+            setAdmin(true);
+            // Store session token and role for the new admin system
+            if (data.sessionToken) {
+              localStorage.setItem("bingo.sessionToken", data.sessionToken);
+            }
+            if (data.admin.role) {
+              localStorage.setItem("bingo.role", data.admin.role);
+            }
+            // Redirect based on role
+            if (data.admin.role === "superadmin") {
+              navigate("/superadmin");
+            } else {
+              navigate("/admin");
+            }
+            return;
+          } else {
+            setError(data.error || "Login failed");
+          }
+        } else {
+          const data = await res.json().catch(() => ({}));
+          setError(data.error || "Login failed");
+        }
+      } catch (err) {
+        setError("Network error");
+      } finally {
+        setLoading(false);
+      }
+
+    } else {
+      // Team Login
+      if (!teamName.trim()) {
+        setError("Team name is required");
+        return;
+      }
+      if (!roomCode.trim()) {
+        setError("Room code is required");
+        return;
+      }
+
+      setLoading(true);
+      try {
+        // Clear all previous game data before new login to prevent data mixing
+        clearGameData();
+
+        const body: LoginRequest = {
+          team_name: teamName.trim(),
+          room_code: roomCode.trim(),
+        };
+        const res = await apiFetch("/api/login", {
+          method: "POST",
+          body: JSON.stringify(body),
+        });
+        const data = (await res.json()) as LoginResponse | ErrorResponse;
+        if (!res.ok || ("ok" in data && data.ok === false)) {
+          const msg = (data as ErrorResponse).error || "Login failed";
+          setError(msg);
+          return;
+        }
+        const success = data as LoginResponse;
+
+        // Store new team and room data using utility function
+        saveGameData(success.team, success.room);
+
+        navigate("/game");
+      } catch (err) {
+        setError("Network error");
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 dark:from-black dark:via-slate-950 dark:to-slate-900 flex items-center justify-center px-4 relative overflow-hidden">
-      {/* Animated background elements */}
-      <div className="absolute inset-0 overflow-hidden">
-        {/* Floating orbs */}
-        <div className="absolute top-20 left-10 w-96 h-96 bg-blue-600/10 dark:bg-blue-600/20 rounded-full blur-3xl animate-pulse" style={{ animation: 'float 8s ease-in-out infinite' }}></div>
-        <div className="absolute bottom-20 right-10 w-96 h-96 bg-purple-600/10 dark:bg-purple-600/20 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '2s', animation: 'float 8s ease-in-out infinite reverse' }}></div>
-        <div className="absolute top-1/2 left-1/3 w-80 h-80 bg-indigo-600/5 dark:bg-indigo-600/10 rounded-full blur-3xl" style={{ animation: 'float 12s ease-in-out infinite' }}></div>
+      {/* <CelebrationComponent /> */}
+      {/* <Animated background elements /> */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        {/* Floating orbs - positioned "around" the page (edges) */}
+        <div className="absolute -top-[10%] -left-[10%] w-[500px] h-[500px] bg-blue-600/10 dark:bg-blue-600/20 rounded-full blur-3xl animate-pulse" style={{ animation: 'float 8s ease-in-out infinite' }}></div>
+        <div className="absolute -bottom-[10%] -right-[10%] w-[500px] h-[500px] bg-purple-600/10 dark:bg-purple-600/20 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '2s', animation: 'float 8s ease-in-out infinite reverse' }}></div>
+        <div className="absolute top-[20%] -right-[5%] w-96 h-96 bg-pink-600/5 dark:bg-pink-600/10 rounded-full blur-3xl" style={{ animationDelay: '4s', animation: 'float 12s ease-in-out infinite' }}></div>
+        <div className="absolute bottom-[20%] -left-[5%] w-96 h-96 bg-indigo-600/5 dark:bg-indigo-600/10 rounded-full blur-3xl" style={{ animationDelay: '6s', animation: 'float 10s ease-in-out infinite reverse' }}></div>
       </div>
 
       {/* Grid background */}
@@ -108,7 +213,7 @@ export default function Index() {
         {/* Animated header */}
         <div className="text-center mb-8 animate-in fade-in slide-in-from-top-6 duration-1000">
           <div className="inline-block mb-4">
-            <div className="text-6xl font-bold bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent animate-pulse">
+            <div className="text-6xl font-bold animate-pulse">
               🏆
             </div>
           </div>
@@ -125,39 +230,100 @@ export default function Index() {
           onSubmit={submit}
           className="bg-white/90 dark:bg-slate-800/40 backdrop-blur-2xl border border-slate-200 dark:border-slate-700/50 rounded-2xl p-8 space-y-5 shadow-2xl hover:shadow-2xl transition-all duration-700 animate-in fade-in slide-in-from-bottom-4 delay-200 ring-1 ring-slate-300/20 dark:ring-slate-600/20"
         >
-          {/* Team Name Input */}
-          <div className="group">
-            <label className="flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">
-              <span className="text-lg">👥</span>
-              Team Name
-            </label>
-            <div className="relative">
-              <input
-                className="w-full rounded-xl border border-slate-300 dark:border-slate-600/50 px-4 py-3 bg-white dark:bg-slate-700/40 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 dark:focus:bg-slate-700/60 transition-all shadow-lg backdrop-blur-sm group-hover:border-slate-400 dark:group-hover:border-slate-500/50 duration-300"
-                placeholder="e.g. Code Ninjas"
-                value={teamName}
-                onChange={(e) => setTeamName(e.target.value)}
-              />
-              <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-blue-500/0 to-purple-500/0 group-hover:from-blue-500/5 group-hover:to-purple-500/5 transition-all pointer-events-none"></div>
+          {/* Toggle Login Mode */}
+          <div className="flex justify-center mb-6">
+            <div className="bg-slate-100 dark:bg-slate-700/50 p-1 rounded-xl flex">
+              <button
+                type="button"
+                onClick={() => setIsAdminLogin(false)}
+                className={`px-6 py-2 rounded-lg text-sm font-semibold transition-all duration-300 ${!isAdminLogin ? 'bg-white dark:bg-slate-600 shadow-sm text-blue-600 dark:text-blue-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'}`}
+              >
+                Player Join
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsAdminLogin(true)}
+                className={`px-6 py-2 rounded-lg text-sm font-semibold transition-all duration-300 ${isAdminLogin ? 'bg-white dark:bg-slate-600 shadow-sm text-purple-600 dark:text-purple-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'}`}
+              >
+                Admin Login
+              </button>
             </div>
           </div>
 
-          {/* Room Code Input */}
-          <div className="group">
-            <label className="flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">
-              <span className="text-lg">🔐</span>
-              Room Code
-            </label>
-            <div className="relative">
-              <input
-                className="w-full rounded-xl border border-slate-300 dark:border-slate-600/50 px-4 py-3 bg-white dark:bg-slate-700/40 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 uppercase tracking-wider focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 dark:focus:bg-slate-700/60 transition-all shadow-lg backdrop-blur-sm group-hover:border-slate-400 dark:group-hover:border-slate-500/50 duration-300"
-                placeholder="e.g. ABC123"
-                value={roomCode}
-                onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
-              />
-              <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-purple-500/0 to-pink-500/0 group-hover:from-purple-500/5 group-hover:to-pink-500/5 transition-all pointer-events-none"></div>
-            </div>
-          </div>
+          {!isAdminLogin ? (
+            <>
+              {/* Team Name Input */}
+              <div className="group">
+                <label className="flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">
+                  <span className="text-lg">👥</span>
+                  Team Name
+                </label>
+                <div className="relative">
+                  <input
+                    className="w-full rounded-xl border border-slate-300 dark:border-slate-600/50 px-4 py-3 bg-white dark:bg-slate-700/40 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 dark:focus:bg-slate-700/60 transition-all shadow-lg backdrop-blur-sm group-hover:border-slate-400 dark:group-hover:border-slate-500/50 duration-300"
+                    placeholder="e.g. Code Ninjas"
+                    value={teamName}
+                    onChange={(e) => setTeamName(e.target.value)}
+                  />
+                  <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-blue-500/0 to-purple-500/0 group-hover:from-blue-500/5 group-hover:to-purple-500/5 transition-all pointer-events-none"></div>
+                </div>
+              </div>
+
+              {/* Room Code Input */}
+              <div className="group">
+                <label className="flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">
+                  <span className="text-lg">🔐</span>
+                  Room Code
+                </label>
+                <div className="relative">
+                  <input
+                    className="w-full rounded-xl border border-slate-300 dark:border-slate-600/50 px-4 py-3 bg-white dark:bg-slate-700/40 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 uppercase tracking-wider focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 dark:focus:bg-slate-700/60 transition-all shadow-lg backdrop-blur-sm group-hover:border-slate-400 dark:group-hover:border-slate-500/50 duration-300"
+                    placeholder="e.g. ABC123"
+                    value={roomCode}
+                    onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
+                  />
+                  <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-purple-500/0 to-pink-500/0 group-hover:from-purple-500/5 group-hover:to-pink-500/5 transition-all pointer-events-none"></div>
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              {/* Username Input */}
+              <div className="group">
+                <label className="flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">
+                  <span className="text-lg">👤</span>
+                  Username
+                </label>
+                <div className="relative">
+                  <input
+                    className="w-full rounded-xl border border-slate-300 dark:border-slate-600/50 px-4 py-3 bg-white dark:bg-slate-700/40 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500/50 dark:focus:bg-slate-700/60 transition-all shadow-lg backdrop-blur-sm group-hover:border-slate-400 dark:group-hover:border-slate-500/50 duration-300"
+                    placeholder="e.g. admin"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                  />
+                  <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-purple-500/0 to-pink-500/0 group-hover:from-purple-500/5 group-hover:to-pink-500/5 transition-all pointer-events-none"></div>
+                </div>
+              </div>
+
+              {/* Password Input */}
+              <div className="group">
+                <label className="flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">
+                  <span className="text-lg">🔑</span>
+                  Password
+                </label>
+                <div className="relative">
+                  <input
+                    type="password"
+                    className="w-full rounded-xl border border-slate-300 dark:border-slate-600/50 px-4 py-3 bg-white dark:bg-slate-700/40 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500/50 dark:focus:bg-slate-700/60 transition-all shadow-lg backdrop-blur-sm group-hover:border-slate-400 dark:group-hover:border-slate-500/50 duration-300"
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                  />
+                  <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-purple-500/0 to-pink-500/0 group-hover:from-purple-500/5 group-hover:to-pink-500/5 transition-all pointer-events-none"></div>
+                </div>
+              </div>
+            </>
+          )}
 
           {/* Error Message */}
           {error && (

@@ -8,6 +8,20 @@
       "when": 1761744481250,
       "tag": "0000_daily_goliath",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1766246304243,
+      "tag": "0001_last_thunderbolt_ross",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1768048084747,
+      "tag": "0002_breezy_emma_frost",
+      "breakpoints": true
     }
   ]
 }

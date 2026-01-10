@@ -1,4 +1,4 @@
-// Shared types used by both client & server
+w// Shared types used by both client & server
 
 export type GameType = 'bingo' | 'sudoku' | 'connect4' | 'memory' | 'race' | 'crossword' | 'quiz' | 'puzzlehunt' | 'codecanvas';
 
@@ -144,24 +144,65 @@ export interface Achievement {
 export interface ErrorResponse {
   error: string;
 }
-export interface SubmitRequest {
-  room: string;
-  teamId: string;
-  questionId: string;
-  answer: string;
+// Auth Login
+export interface AuthLoginRequest {
+  username?: string;
+  password?: string;
 }
 
-export interface SubmissionResult {
-  correct: boolean;
-  points: number;
-  newScore: number;
-  achievement?: Achievement;
+export interface AuthLoginResponse {
+  success: boolean;
+  admin?: {
+    id: number;
+    username: string;
+    role: string;
+    createdBy?: number | null;
+  };
+  sessionToken?: string;
+  error?: string;
 }
 
-// Achievement (from achievements.ts)
-export interface Achievement {
-  id: string;
-  title: string;
-  description: string;
-  icon: string;
+// Super Admin types
+export interface AdminUser {
+  id: number;
+  username: string;
+  role: 'superadmin' | 'admin';
+  createdAt: string;
+  createdBy: number | null;
+  createdByUsername?: string;
+}
+
+export interface ActivityLog {
+  id: number;
+  userId: number;
+  username: string;
+  action: string;
+  details: string | null;
+  ipAddress: string | null;
+  userAgent: string | null;
+  deviceInfo: object | null;
+  timestamp: string;
+}
+
+export interface AdminSession {
+  id: number;
+  userId: number;
+  username?: string;
+  sessionToken: string;
+  ipAddress: string | null;
+  userAgent: string | null;
+  deviceInfo: object | null;
+  createdAt: string;
+  lastActiveAt: string;
+  expiresAt: string;
+  isActive: boolean;
+}
+
+export interface WebsiteStats {
+  totalRooms: number;
+  activeRooms: number;
+  totalTeams: number;
+  totalQuestions: number;
+  totalAdmins: number;
+  recentActivity: ActivityLog[];
 }

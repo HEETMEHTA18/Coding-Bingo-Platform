@@ -1,5 +1,13 @@
 import { pgTable, text, integer, boolean, timestamp } from "drizzle-orm/pg-core";
 
+export const users = pgTable("users", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  username: text("username").notNull().unique(),
+  password: text("password").notNull(),
+  role: text("role").notNull().default("admin"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 export const rooms = pgTable("rooms", {
   code: text("code").primaryKey(),
   title: text("title").notNull(),
@@ -141,4 +149,33 @@ export const gameMoves = pgTable("game_moves", {
   isDeleted: boolean("is_deleted")
     .default(false)
     .notNull(),
+});
+
+// Activity logs for tracking all admin/user actions
+export const activityLogs = pgTable("activity_logs", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  userId: integer("user_id").references(() => users.id),
+  username: text("username"),
+  action: text("action").notNull(), // 'login', 'logout', 'create_room', 'delete_room', etc.
+  details: text("details"), // JSON with additional info
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  deviceInfo: text("device_info"), // JSON: browser, os, device type
+  timestamp: timestamp("timestamp").notNull().defaultNow(),
+});
+
+// Admin sessions for tracking active logins
+export const adminSessions = pgTable("admin_sessions", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  userId: integer("user_id")
+    .notNull()
+    .references(() => users.id),
+  sessionToken: text("session_token").notNull().unique(),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  deviceInfo: text("device_info"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  lastActiveAt: timestamp("last_active_at").notNull().defaultNow(),
+  expiresAt: timestamp("expires_at").notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
 });

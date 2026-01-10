@@ -16,6 +16,7 @@ const Leaderboard = lazy(() => import("./pages/Leaderboard"));
 const LeaderboardAll = lazy(() => import("./pages/LeaderboardAll"));
 const Congratulations = lazy(() => import("./pages/Congratulations"));
 const Admin = lazy(() => import("./pages/Admin"));
+const SuperAdmin = lazy(() => import("./pages/SuperAdmin"));
 const Achievements = lazy(() => import("./pages/Achievements"));
 
 const queryClient = new QueryClient();
@@ -48,6 +49,7 @@ const App = () => (
               <Route path="/leaderboard-all" element={<LeaderboardAll />} />
               <Route path="/congratulations" element={<Congratulations />} />
               <Route path="/admin" element={<Admin />} />
+              <Route path="/superadmin" element={<SuperAdmin />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>

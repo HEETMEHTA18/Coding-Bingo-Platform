@@ -150,14 +150,99 @@ export const handleLeaderboard: RequestHandler = async (req, res) => {
 
 export const handleLeaderboardAll: RequestHandler = async (req, res) => {
   try {
-    // Temporary simple response to test if route works
-    res.json({
-      DEMO: {
-        rows: []
-      }
-    });
+    // Get all rooms
+    const allRooms = await db.select().from(rooms);
+    
+    const result: Record<string, any> = {};
+    
+    for (const room of allRooms) {
+      const code = room.code;
+      
+      // Get teams for this room with solved question counts
+      const teamsWithSolvedCount = await db
+        .select({
+          team: teams,
+          solvedQuestionsCount: sql<number>`COUNT(${teamSolvedQuestions.questionId})`.as("solved_count"),
+        })
+        .from(teams)
+        .leftJoin(teamSolvedQuestions, eq(teams.teamId, teamSolvedQuestions.teamId))
+        .where(eq(teams.roomCode, code))
+        .groupBy(teams.teamId);
+
+      // Calculate leaderboard with proper time calculations
+      const sortedTeams = teamsWithSolvedCount
+        .map((item) => {
+          let timeTakenMs = 0;
+          const startTime = item.team.startTime;
+
+          if (startTime && startTime.getTime() > 0) {
+            const isCompleted = (item.team.endTime && item.team.endTime.getTime() > 0) || item.team.linesCompleted >= 5;
+            if (isCompleted) {
+              const endTime = item.team.endTime && item.team.endTime.getTime() > 0
+                ? item.team.endTime
+                : new Date();
+              timeTakenMs = endTime.getTime() - startTime.getTime();
+            } else {
+              timeTakenMs = Date.now() - startTime.getTime();
+            }
+          }
+
+          return {
+            team: {
+              id: item.team.teamId,
+              name: item.team.teamName,
+              score: item.team.linesCompleted * 10,
+              completedAt: item.team.endTime && item.team.endTime.getTime() > 0
+                ? item.team.endTime.toISOString()
+                : null,
+              isWinner: item.team.linesCompleted >= 5,
+              team_id: item.team.teamId,
+              team_name: item.team.teamName,
+              lines_completed: item.team.linesCompleted,
+              start_time: item.team.startTime && item.team.startTime.getTime() > 0
+                ? item.team.startTime.toISOString()
+                : null,
+              end_time: item.team.endTime && item.team.endTime.getTime() > 0
+                ? item.team.endTime.toISOString()
+                : null,
+              time_taken_ms: timeTakenMs,
+              solved_questions_count: item.solvedQuestionsCount,
+            },
+            linesCompleted: item.team.linesCompleted,
+            solved_questions_count: item.solvedQuestionsCount,
+          };
+        })
+        .sort((a, b) => {
+          if (b.linesCompleted !== a.linesCompleted) {
+            return b.linesCompleted - a.linesCompleted;
+          }
+          return a.team.time_taken_ms - b.team.time_taken_ms;
+        })
+        .map((item, index) => ({
+          team: item.team,
+          rank: index + 1,
+        }));
+
+      // Find the winner (first team with 5+ lines completed)
+      const winner = sortedTeams.find(t => t.team.lines_completed >= 5);
+      
+      result[code] = {
+        room: {
+          code: room.code,
+          title: room.title || room.code,
+          gameType: room.gameType || 'bingo',
+          roundEndAt: room.roundEndAt?.toISOString() || null,
+        },
+        rows: sortedTeams,
+        winner: winner ? winner.team : null,
+        teamCount: sortedTeams.length,
+        hasWinner: !!winner,
+      };
+    }
+    
+    res.json(result);
   } catch (error) {
-    console.error(error);
+    console.error('LeaderboardAll error:', error);
     res.status(500).json({ error: "Internal server error" });
   }
 };

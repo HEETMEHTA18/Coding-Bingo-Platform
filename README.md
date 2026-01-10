@@ -2,7 +2,7 @@
 
 Welcome to the **Coding Bingo Platform**, a comprehensive suite of multiplayer coding games designed to test your programming skills, logic, and teamwork. This guide provides an overview of all available game modes and features.
 
-![Coding Bingo Interface](./assets/images/coding_bingo_interface_1764177835362.png)
+![Coding Bingo Interface](./public/assets/images/coding_bingo_interface_1764177835362.png)
 
 ## 🌟 Introduction
 
@@ -16,7 +16,7 @@ The core experience of the platform. Teams solve coding problems to claim spots 
 - **Mechanics:** Correct answers fill random spots. "Fake" questions test your knowledge without filling the grid.
 - **Visuals:** Split-screen view with code editor and live bingo grid.
 
-![Coding Bingo](./assets/images/coding_bingo_interface_1764177835362.png)
+![Coding Bingo](./public/assets/images/coding_bingo_interface_1764177835362.png)
 
 ### 2. Speed Coding Race
 A high-octane race against other teams to fix buggy code.
@@ -24,7 +24,7 @@ A high-octane race against other teams to fix buggy code.
 - **Mechanics:** Real-time progress bar shows your standing against other teams.
 - **Visuals:** Dark-themed editor with diff-view capabilities and live race status.
 
-![Speed Coding Race](./assets/images/speed_coding_race_interface_1764177880806.png)
+![Speed Coding Race](./public/assets/images/speed_coding_race_interface_1764177880806.png)
 
 ### 3. Code Canvas
 Unleash your creativity by drawing with code.
@@ -32,7 +32,7 @@ Unleash your creativity by drawing with code.
 - **Mechanics:** Use a custom API to draw on the canvas. Best designs win!
 - **Visuals:** Large canvas area with a command palette and color picker.
 
-![Code Canvas](./assets/images/code_canvas_interface_1764177958866.png)
+![Code Canvas](./public/assets/images/code_canvas_interface_1764177958866.png)
 
 ### 4. Memory Match
 Test your memory and code knowledge.
@@ -40,7 +40,7 @@ Test your memory and code knowledge.
 - **Mechanics:** Turn-based or time-attack modes.
 - **Visuals:** Grid of flip-cards with coding symbols.
 
-![Memory Match](./assets/images/memory_match_interface_1764177993590.png)
+![Memory Match](./public/assets/images/memory_match_interface_1764177993590.png)
 
 ### 5. Connect 4 (Coder's Edition)
 The classic strategy game reimagined.
@@ -48,7 +48,7 @@ The classic strategy game reimagined.
 - **Mechanics:** To drop a disc, you must answer a quick coding question correctly.
 - **Visuals:** Vertical game board with neon-styled discs.
 
-![Connect 4](./assets/images/connect4_interface_1764178020699.png)
+![Connect 4](./public/assets/images/connect4_interface_1764178020699.png)
 
 ### 6. Sudoku
 Logic puzzle for the analytical mind.
@@ -56,7 +56,7 @@ Logic puzzle for the analytical mind.
 - **Mechanics:** Standard Sudoku rules, with a coding twist (hexadecimal mode available).
 - **Visuals:** Clean, minimalist grid with helper tools.
 
-![Sudoku](./assets/images/sudoku_interface_1764178039755.png)
+![Sudoku](./public/assets/images/sudoku_interface_1764178039755.png)
 
 ### 7. Coding Crossword
 Test your terminology.
@@ -64,7 +64,7 @@ Test your terminology.
 - **Mechanics:** Clues cover languages, algorithms, and computer science history.
 - **Visuals:** Classic crossword layout with a modern dark theme.
 
-![Crossword](./assets/images/crossword_interface_1764178082222.png)
+![Crossword](./public/assets/images/crossword_interface_1764178082222.png)
 
 ### 8. Tech Quiz & Puzzle Hunt
 - **Tech Quiz:** Fast-paced multiple choice questions to test broad knowledge.
@@ -79,25 +79,75 @@ The Admin Panel is the control center for the platform.
 3.  **Manage Questions:** Upload questions via CSV or add them manually.
 4.  **Control Game:** Start, pause, or force-end games. Monitor the live leaderboard.
 
-## 🚀 Installation & Deployment
+## 🚀 Installation & Setup
 
-For detailed instructions on how to deploy this platform to production (Railway, VPS, etc.), please refer to the **[DEPLOYMENT.md](./DEPLOYMENT.md)** file.
+### Prerequisites
+- Node.js (v18 or higher)
+- PostgreSQL database (local or cloud like [Neon](https://neon.tech))
+- pnpm (recommended) or npm
 
-### Quick Start (Local)
+### Quick Start
 
+1. **Clone the repository**
 ```bash
-# Install dependencies
+git clone https://github.com/HEETMEHTA18/Coding-Bingo-Platform.git
+cd Coding-Bingo-Platform
+```
+
+2. **Install dependencies**
+```bash
+pnpm install
+# or
 npm install
+```
 
-# Setup Database
-# (Ensure .env is configured with DATABASE_URL)
-npm run migrate
+3. **Setup Environment Variables**
+```bash
+# Copy the example file
+cp .env.example .env
 
-# Start Server
+# Edit .env and fill in your values:
+# - DATABASE_URL: Your PostgreSQL connection string
+# - ADMIN_SECRET: Generate a secure random string
+# - JUDGE0_API_KEY: Get from RapidAPI (optional, for online compiler)
+```
+
+4. **Setup Database**
+```bash
+# Run migrations
+pnpm run db:push
+# or
+npm run db:push
+```
+
+5. **Start Development Server**
+```bash
+pnpm run dev
+# or
 npm run dev
 ```
 
-Visit `http://localhost:5173` to start playing!
+6. **Access the Platform**
+- Main App: `http://localhost:5173`
+- Admin Panel: `http://localhost:5173/admin`
+- Super Admin: `http://localhost:5173/superadmin`
+  - Default credentials: `admin` / `SUPERADMIN@123`
+
+### Environment Variables
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `DATABASE_URL` | PostgreSQL connection string | Yes |
+| `ADMIN_SECRET` | Secret key for admin authentication | Yes |
+| `JUDGE0_API_KEY` | API key for Judge0 compiler (from RapidAPI) | No |
+| `PORT` | Server port (default: 8080) | No |
+
+### Deployment
+
+For production deployment to platforms like Railway, Vercel, or VPS, ensure:
+- Set all environment variables in your hosting platform
+- Use a production PostgreSQL database
+- Set `NODE_ENV=production`
 
 ---
 

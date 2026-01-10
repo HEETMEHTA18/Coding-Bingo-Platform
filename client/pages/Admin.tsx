@@ -388,131 +388,196 @@ export default function AdminPage() {
   const fakeCount = state ? state.questions.length - realCount : 0;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-black dark:from-slate-950 dark:via-slate-900 dark:to-black">
-      <header className="sticky top-0 z-10 bg-slate-900/80 dark:bg-slate-950/80 backdrop-blur-xl border-b border-slate-700/50 dark:border-slate-800/50 shadow-2xl">
+    <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-purple-950/20 to-slate-950 relative overflow-hidden">
+      {/* Animated background elements */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute -top-40 -right-40 w-80 h-80 bg-purple-500/10 rounded-full blur-3xl animate-pulse"></div>
+        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-blue-500/10 rounded-full blur-3xl animate-pulse" style={{animationDelay: '1s'}}></div>
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-indigo-500/5 rounded-full blur-3xl"></div>
+        {/* Grid overlay */}
+        <div className="absolute inset-0 bg-[linear-gradient(rgba(139,92,246,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(139,92,246,0.03)_1px,transparent_1px)] bg-[size:50px_50px]"></div>
+      </div>
+      
+      <header className="sticky top-0 z-50 bg-slate-900/70 backdrop-blur-2xl border-b border-purple-500/20 shadow-[0_4px_30px_rgba(139,92,246,0.15)]">
         <div className="container py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-purple-600 via-blue-600 to-indigo-600 flex items-center justify-center shadow-2xl ring-2 ring-purple-400/20">
-              <span className="text-white font-bold text-xl">⚙️</span>
+            <div className="relative group">
+              <div className="absolute inset-0 bg-gradient-to-r from-purple-600 to-blue-600 rounded-2xl blur-lg opacity-50 group-hover:opacity-75 transition-opacity"></div>
+              <div className="relative w-14 h-14 rounded-2xl bg-gradient-to-br from-purple-600 via-blue-600 to-indigo-600 flex items-center justify-center shadow-2xl ring-2 ring-purple-400/30 group-hover:ring-purple-400/50 transition-all">
+                <span className="text-2xl">🎮</span>
+              </div>
             </div>
             <div>
-              <h1 className="font-bold text-2xl text-white bg-gradient-to-r from-purple-400 to-blue-400 bg-clip-text text-transparent">
-                Admin Dashboard
+              <h1 className="font-black text-2xl md:text-3xl bg-gradient-to-r from-purple-400 via-pink-400 to-blue-400 bg-clip-text text-transparent drop-shadow-lg">
+                Game Control Center
               </h1>
               <p className="text-sm text-slate-400 flex items-center gap-2">
-                <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-                Manage rooms, questions, and game settings
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                </span>
+                <span className="hidden sm:inline">Command Center • </span>Manage Games & Teams
               </p>
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 bg-slate-800/50 dark:bg-slate-900/50 backdrop-blur-sm rounded-2xl p-2 border border-slate-700/50 dark:border-slate-800/50 shadow-xl">
+            <div className="flex items-center gap-2 bg-slate-800/40 backdrop-blur-xl rounded-2xl p-2 border border-purple-500/20 shadow-[0_0_30px_rgba(139,92,246,0.1)] hover:shadow-[0_0_40px_rgba(139,92,246,0.15)] transition-all duration-300">
               <a
                 href={`/leaderboard?room=${encodeURIComponent(roomCode.toUpperCase())}`}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold hover:from-blue-500 hover:to-indigo-500 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 border border-blue-400/30 hover:border-blue-400/60"
+                className="group relative flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 text-white font-bold hover:from-cyan-500 hover:to-blue-500 transition-all duration-300 shadow-lg hover:shadow-cyan-500/25 hover:shadow-xl transform hover:-translate-y-1 hover:scale-105 border border-cyan-400/30"
                 title="View Room Leaderboard"
               >
-                <span className="text-lg">🏅</span>
-                <span className="hidden sm:inline">Room Leaderboard</span>
+                <span className="text-lg group-hover:animate-bounce">🏆</span>
+                <span className="hidden sm:inline">Leaderboard</span>
               </a>
 
               <a
                 href="/leaderboard-all"
-                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-semibold hover:from-emerald-500 hover:to-teal-500 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 border border-emerald-400/30 hover:border-emerald-400/60"
+                className="group relative flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-bold hover:from-emerald-500 hover:to-teal-500 transition-all duration-300 shadow-lg hover:shadow-emerald-500/25 hover:shadow-xl transform hover:-translate-y-1 hover:scale-105 border border-emerald-400/30"
                 title="View All Rooms"
               >
-                <span className="text-lg">🌍</span>
+                <span className="text-lg group-hover:animate-spin">🌍</span>
                 <span className="hidden sm:inline">All Rooms</span>
               </a>
 
-              <div className="w-px h-6 bg-slate-600 dark:bg-slate-700 mx-1"></div>
+              <div className="w-px h-8 bg-gradient-to-b from-transparent via-purple-500/50 to-transparent mx-1"></div>
 
               <button
                 onClick={() => {
                   localStorage.removeItem("bingo.admin");
+                  localStorage.removeItem("bingo.role");
+                  localStorage.removeItem("bingo.sessionToken");
                   navigate("/");
                 }}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-red-600 via-rose-600 to-pink-600 text-white font-semibold hover:from-red-500 hover:via-rose-500 hover:to-pink-500 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 border border-red-400/30 hover:border-red-400/60"
+                className="group relative flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-red-600 via-rose-600 to-pink-600 text-white font-bold hover:from-red-500 hover:via-rose-500 hover:to-pink-500 transition-all duration-300 shadow-lg hover:shadow-red-500/25 hover:shadow-xl transform hover:-translate-y-1 hover:scale-105 border border-red-400/30"
                 title="Logout"
               >
-                <span className="text-lg">🚪</span>
-                <span className="hidden sm:inline">Logout</span>
+                <span className="text-lg group-hover:rotate-12 transition-transform">🚀</span>
+                <span className="hidden sm:inline">Exit</span>
               </button>
             </div>
           </div>
         </div>
       </header>
 
-      <main className="container py-6 space-y-6">
-        <section className="bg-gradient-to-br from-slate-800/40 via-slate-800/20 to-slate-900/40 dark:from-slate-800/40 dark:via-slate-800/20 dark:to-slate-900/40 border border-slate-700/30 dark:border-slate-700/30 rounded-2xl p-6 shadow-2xl backdrop-blur-xl">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg ring-2 ring-blue-400/20">
-              <svg
-                className="w-5 h-5 text-white"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-              </svg>
+      <main className="container py-8 space-y-8 relative z-10">
+        {/* Stats Bar */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="group relative bg-slate-800/40 backdrop-blur-xl rounded-2xl p-4 border border-purple-500/20 hover:border-purple-500/40 transition-all hover:shadow-[0_0_30px_rgba(139,92,246,0.15)]">
+            <div className="absolute inset-0 bg-gradient-to-r from-purple-600/10 to-transparent rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity"></div>
+            <div className="relative">
+              <p className="text-xs text-slate-400 uppercase tracking-wider font-medium">Active Rooms</p>
+              <p className="text-3xl font-black text-white mt-1">{roomsList.length}</p>
             </div>
-            <h2 className="text-xl font-bold text-white">
-              Room Management
-            </h2>
+            <div className="absolute top-4 right-4 text-2xl opacity-30 group-hover:opacity-60 transition-opacity">🏠</div>
+          </div>
+          <div className="group relative bg-slate-800/40 backdrop-blur-xl rounded-2xl p-4 border border-cyan-500/20 hover:border-cyan-500/40 transition-all hover:shadow-[0_0_30px_rgba(6,182,212,0.15)]">
+            <div className="absolute inset-0 bg-gradient-to-r from-cyan-600/10 to-transparent rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity"></div>
+            <div className="relative">
+              <p className="text-xs text-slate-400 uppercase tracking-wider font-medium">Total Teams</p>
+              <p className="text-3xl font-black text-white mt-1">{state?.teams.length || 0}</p>
+            </div>
+            <div className="absolute top-4 right-4 text-2xl opacity-30 group-hover:opacity-60 transition-opacity">👥</div>
+          </div>
+          <div className="group relative bg-slate-800/40 backdrop-blur-xl rounded-2xl p-4 border border-amber-500/20 hover:border-amber-500/40 transition-all hover:shadow-[0_0_30px_rgba(245,158,11,0.15)]">
+            <div className="absolute inset-0 bg-gradient-to-r from-amber-600/10 to-transparent rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity"></div>
+            <div className="relative">
+              <p className="text-xs text-slate-400 uppercase tracking-wider font-medium">Questions</p>
+              <p className="text-3xl font-black text-white mt-1">{state?.questions.length || 0}</p>
+            </div>
+            <div className="absolute top-4 right-4 text-2xl opacity-30 group-hover:opacity-60 transition-opacity">❓</div>
+          </div>
+          <div className="group relative bg-slate-800/40 backdrop-blur-xl rounded-2xl p-4 border border-emerald-500/20 hover:border-emerald-500/40 transition-all hover:shadow-[0_0_30px_rgba(16,185,129,0.15)]">
+            <div className="absolute inset-0 bg-gradient-to-r from-emerald-600/10 to-transparent rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity"></div>
+            <div className="relative">
+              <p className="text-xs text-slate-400 uppercase tracking-wider font-medium">Game Status</p>
+              <p className="text-lg font-black text-white mt-1">{room?.roundEndAt ? '🟢 Live' : '⏸️ Idle'}</p>
+            </div>
+            <div className="absolute top-4 right-4 text-2xl opacity-30 group-hover:opacity-60 transition-opacity">🎮</div>
+          </div>
+        </div>
+
+        <section className="relative bg-slate-800/30 backdrop-blur-xl rounded-3xl p-6 border border-purple-500/20 shadow-[0_0_50px_rgba(139,92,246,0.1)] overflow-hidden">
+          {/* Decorative corner accent */}
+          <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-purple-600/20 to-transparent rounded-bl-full"></div>
+          
+          <div className="flex items-center gap-3 mb-6">
+            <div className="relative">
+              <div className="absolute inset-0 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-xl blur-lg opacity-50"></div>
+              <div className="relative w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
+                <span className="text-2xl">🏟️</span>
+              </div>
+            </div>
+            <div>
+              <h2 className="text-2xl font-black text-white">
+                Room Command
+              </h2>
+              <p className="text-sm text-slate-400">Create and manage game rooms</p>
+            </div>
           </div>
 
-          <div className="mb-6 p-4 bg-slate-800/50 rounded-xl border border-slate-700">
+          <div className="mb-6 p-5 bg-slate-900/50 rounded-2xl border border-slate-700/50 backdrop-blur-sm">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-slate-300">Existing Rooms (Team Codes)</h3>
+              <div className="flex items-center gap-2">
+                <span className="text-xl">🎯</span>
+                <h3 className="font-bold text-white text-lg">Active Game Rooms</h3>
+              </div>
               <button
                 onClick={deleteAllRooms}
                 disabled={loading.deleteAllRooms || !roomsList.length}
-                className="px-3 py-1.5 rounded-lg bg-red-500/20 text-red-400 text-xs font-semibold hover:bg-red-500/30 border border-red-500/30 transition-all"
+                className="group px-4 py-2 rounded-xl bg-red-500/10 text-red-400 text-sm font-bold hover:bg-red-500/20 border border-red-500/30 hover:border-red-500/50 transition-all flex items-center gap-2"
               >
-                {loading.deleteAllRooms ? "Deleting..." : "Delete All Rooms"}
+                <span className="group-hover:animate-pulse">🗑️</span>
+                {loading.deleteAllRooms ? "Deleting..." : "Clear All"}
               </button>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 max-h-64 overflow-y-auto pr-2 custom-scrollbar">
               {roomsList.map((r) => (
                 <div
                   key={r.code}
-                  className={`p-3 rounded-lg border transition-all cursor-pointer flex items-center justify-between group ${roomCode === r.code
-                    ? "bg-blue-500/20 border-blue-500/50"
-                    : "bg-slate-700/30 border-slate-600/50 hover:border-slate-500"
+                  className={`group relative p-4 rounded-xl border-2 transition-all duration-300 cursor-pointer overflow-hidden ${roomCode === r.code
+                    ? "bg-gradient-to-br from-purple-600/20 to-blue-600/20 border-purple-500/60 shadow-[0_0_20px_rgba(139,92,246,0.2)]"
+                    : "bg-slate-800/40 border-slate-700/50 hover:border-purple-500/40 hover:shadow-[0_0_15px_rgba(139,92,246,0.1)]"
                     }`}
                   onClick={() => setRoomCode(r.code)}
                 >
-                  <div>
-                    <div className="font-bold text-white">{r.code}</div>
-                    <div className="text-xs text-slate-400 flex gap-2">
-                      <span>{r.teamCount} teams</span>
-                      <span>•</span>
-                      <span>{r.questionCount} questions</span>
+                  {/* Hover glow effect */}
+                  <div className="absolute inset-0 bg-gradient-to-r from-purple-600/0 via-purple-600/5 to-purple-600/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700"></div>
+                  
+                  <div className="relative flex items-center justify-between">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-black text-lg text-white tracking-wide">{r.code}</span>
+                        {roomCode === r.code && (
+                          <span className="px-2 py-0.5 bg-purple-500/30 text-purple-300 text-xs font-bold rounded-full">SELECTED</span>
+                        )}
+                      </div>
+                      <div className="text-xs text-slate-400 flex gap-3 mt-1">
+                        <span className="flex items-center gap-1"><span className="text-cyan-400">👥</span> {r.teamCount}</span>
+                        <span className="flex items-center gap-1"><span className="text-amber-400">❓</span> {r.questionCount}</span>
+                      </div>
                     </div>
-                  </div>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
                       deleteRoom(r.code);
                     }}
                     disabled={loading[`deleteRoom_${r.code}`]}
-                    className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-md transition-colors opacity-0 group-hover:opacity-100"
+                    className="p-2 text-slate-500 hover:text-red-400 hover:bg-red-500/20 rounded-lg transition-all opacity-0 group-hover:opacity-100 hover:scale-110"
                     title="Delete Room"
                   >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                     </svg>
                   </button>
+                  </div>
                 </div>
               ))}
               {!roomsList.length && (
-                <div className="col-span-full text-center py-4 text-slate-500 text-sm italic">
-                  No rooms created yet.
+                <div className="col-span-full text-center py-8 text-slate-400">
+                  <span className="text-4xl block mb-2">🎮</span>
+                  <p className="font-medium">No game rooms yet</p>
+                  <p className="text-sm text-slate-500">Create your first room below!</p>
                 </div>
               )}
             </div>
@@ -520,126 +585,81 @@ export default function AdminPage() {
 
           <form
             onSubmit={createRoom}
-            className="flex flex-col sm:flex-row gap-4 items-start sm:items-end mb-4"
+            className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end"
           >
-            <div className="flex-1 min-w-[200px]">
-              <label className="block text-sm font-medium text-slate-300 mb-2">
-                Room Code
+            <div className="md:col-span-1">
+              <label className="text-sm font-bold text-slate-300 mb-2 flex items-center gap-2">
+                <span className="text-lg">🏷️</span> Room Code
               </label>
               <input
                 value={roomCode}
                 onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
                 required
-                className="w-full rounded-xl border border-slate-600/50 px-4 py-3 bg-slate-700/40 backdrop-blur-sm text-white placeholder-slate-500 focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 focus:bg-slate-700/60 transition-all shadow-lg"
-                placeholder="ABC123"
+                className="w-full rounded-xl border-2 border-slate-600/50 px-4 py-3.5 bg-slate-900/50 backdrop-blur-sm text-white font-mono font-bold text-lg placeholder-slate-500 focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500/50 transition-all shadow-lg uppercase tracking-wider"
+                placeholder="GAME01"
               />
             </div>
-            <div className="flex-1 min-w-[200px]">
-              <label className="block text-sm font-medium text-slate-300 mb-2">
-                Game Type
+            <div className="md:col-span-1">
+              <label className="text-sm font-bold text-slate-300 mb-2 flex items-center gap-2">
+                <span className="text-lg">🎲</span> Game Type
               </label>
               <select
                 value={selectedGameType}
                 onChange={(e) => setSelectedGameType(e.target.value)}
-                className="w-full rounded-xl border border-slate-600/50 px-4 py-3 bg-slate-700/40 backdrop-blur-sm text-white focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 focus:bg-slate-700/60 transition-all shadow-lg"
+                className="w-full rounded-xl border-2 border-slate-600/50 px-4 py-3.5 bg-slate-900/50 backdrop-blur-sm text-white font-bold focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500/50 transition-all shadow-lg cursor-pointer"
               >
                 <option value="bingo">🎯 Code Bingo</option>
                 <option value="sudoku">📊 Code Sudoku</option>
                 <option value="connect4">🔴 Code Connect-4</option>
-                <option value="memory">🧠 Code Memory Match</option>
-                <option value="race">🏁 Code Race (Debug)</option>
-                <option value="crossword">📝 Code Crossword</option>
-                <option value="codecanvas">🎨 Code Canvas</option>
+                <option value="memory">🧠 Code Memory</option>
+                <option value="race">🏁 Code Race</option>
+                <option value="crossword">📝 Crossword</option>
+                <option value="codecanvas">🎨 Canvas</option>
               </select>
             </div>
+            <div className="md:col-span-2 flex flex-wrap gap-3">
             <button
               disabled={loading.createRoom || !roomCode.trim()}
-              className="px-6 py-3 rounded-xl bg-gradient-to-r from-purple-500 to-pink-600 text-white font-semibold hover:from-purple-600 hover:to-pink-700 disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2 shadow-lg hover:shadow-xl transition-all transform hover:scale-105"
+              className="group relative px-6 py-3.5 rounded-xl bg-gradient-to-r from-purple-600 via-fuchsia-600 to-pink-600 text-white font-bold hover:from-purple-500 hover:via-fuchsia-500 hover:to-pink-500 disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2 shadow-lg hover:shadow-purple-500/25 hover:shadow-xl transition-all transform hover:scale-105 overflow-hidden"
             >
               {loading.createRoom && (
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
               )}
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 6v6m0 0v6m0-6h6m-6 0H6"
-                />
-              </svg>
-              Create/Load Room
+              <span className="group-hover:scale-110 transition-transform">🚀</span>
+              Create/Load
             </button>
 
             <button
               type="button"
               onClick={() => setShowStartTimer(true)}
-              className="px-6 py-3 rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 text-white font-semibold hover:from-green-600 hover:to-emerald-700 flex items-center gap-2 shadow-lg hover:shadow-xl transition-all transform hover:scale-105"
+              className="group relative px-5 py-3.5 rounded-xl bg-gradient-to-r from-emerald-600 to-green-600 text-white font-bold hover:from-emerald-500 hover:to-green-500 flex items-center gap-2 shadow-lg hover:shadow-emerald-500/25 hover:shadow-xl transition-all transform hover:scale-105"
             >
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1.586a1 1 0 01.707.293l.707.707A1 1 0 0012.414 11H13m-4 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-              </svg>
-              Start Timer
+              <span className="group-hover:animate-pulse">▶️</span>
+              Start
             </button>
             <button
               type="button"
               onClick={() => setShowExtendTimer(true)}
               disabled={!room}
-              className="px-6 py-3 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-semibold hover:from-blue-600 hover:to-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2 shadow-lg hover:shadow-xl transition-all transform hover:scale-105"
+              className="group relative px-5 py-3.5 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 text-white font-bold hover:from-cyan-500 hover:to-blue-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-lg hover:shadow-cyan-500/25 hover:shadow-xl transition-all transform hover:scale-105"
             >
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 6v6m0 0v6m0-6h6m-6 0H6"
-                />
-              </svg>
+              <span className="group-hover:rotate-45 transition-transform">⏱️</span>
               Extend
             </button>
             <button
               type="button"
               onClick={forceEnd}
               disabled={loading.forceEnd}
-              className="px-6 py-3 rounded-xl bg-gradient-to-r from-red-500 to-rose-600 text-white font-semibold hover:from-red-600 hover:to-rose-700 disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2 shadow-lg hover:shadow-xl transition-all transform hover:scale-105"
+              className="group relative px-5 py-3.5 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 text-white font-bold hover:from-red-500 hover:to-rose-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-lg hover:shadow-red-500/25 hover:shadow-xl transition-all transform hover:scale-105"
             >
-              {loading.forceEnd && (
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+              {loading.forceEnd ? (
+                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+              ) : (
+                <span className="group-hover:scale-125 transition-transform">⏹️</span>
               )}
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"
-                />
-              </svg>
-              Force End
+              End Game
             </button>
+            </div>
           </form>
           <div className="mt-6 p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl backdrop-blur-sm">
             <h3 className="font-semibold text-amber-900 dark:text-amber-200 mb-2 flex items-center gap-2">
@@ -796,90 +816,109 @@ export default function AdminPage() {
           )}
         </section>
 
-        <section className="bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 dark:from-slate-800 dark:via-slate-700 dark:to-slate-800 border border-white/20 dark:border-slate-600/50 rounded-2xl p-6 shadow-xl backdrop-blur-sm">
-          <div className="flex items-center justify-between mb-4">
+        <section className="relative bg-slate-800/30 backdrop-blur-xl rounded-3xl p-6 border border-cyan-500/20 shadow-[0_0_50px_rgba(6,182,212,0.08)] overflow-hidden">
+          {/* Decorative corner accent */}
+          <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-cyan-600/20 to-transparent rounded-bl-full"></div>
+          
+          <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center">
-                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-                </svg>
+              <div className="relative">
+                <div className="absolute inset-0 bg-gradient-to-r from-cyan-500 to-blue-600 rounded-xl blur-lg opacity-50"></div>
+                <div className="relative w-12 h-12 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg">
+                  <span className="text-2xl">👥</span>
+                </div>
               </div>
-              <h2 className="text-xl font-bold text-slate-800 dark:text-slate-200">
-                Team Management
-              </h2>
+              <div>
+                <h2 className="text-2xl font-black text-white">
+                  Team Roster
+                </h2>
+                <p className="text-sm text-slate-400">{state?.teams.length || 0} teams in this room</p>
+              </div>
             </div>
             <button
               onClick={deleteAllTeams}
               disabled={loading.deleteAllTeams || !state?.teams.length}
-              className="px-4 py-2 rounded-lg bg-red-500 text-white text-sm font-semibold hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg"
+              className="group px-4 py-2.5 rounded-xl bg-red-500/10 text-red-400 font-bold hover:bg-red-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all border border-red-500/30 hover:border-red-500/50 flex items-center gap-2"
             >
-              {loading.deleteAllTeams ? "Deleting..." : "Delete All Teams"}
+              <span className="group-hover:animate-pulse">🗑️</span>
+              {loading.deleteAllTeams ? "Clearing..." : "Clear All"}
             </button>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {state?.teams.map((team: any) => (
-              <div key={team.id} className="bg-white/50 dark:bg-slate-800/50 p-4 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center justify-between group hover:border-indigo-300 dark:hover:border-indigo-700 transition-all">
-                <div>
-                  <div className="font-semibold text-slate-800 dark:text-slate-200">{team.name}</div>
-                  <div className="text-xs text-slate-500 dark:text-slate-400">ID: {team.id}</div>
-                  <div className="text-xs text-slate-500 dark:text-slate-400">Score: {team.lines_completed}</div>
+            {state?.teams.map((team: any, index: number) => (
+              <div key={team.id} className="group relative bg-slate-900/50 backdrop-blur-sm p-4 rounded-xl border-2 border-slate-700/50 hover:border-cyan-500/40 transition-all duration-300 hover:shadow-[0_0_20px_rgba(6,182,212,0.1)] overflow-hidden">
+                {/* Rank badge */}
+                <div className="absolute -top-1 -right-1 w-8 h-8 bg-gradient-to-br from-amber-500 to-orange-600 rounded-bl-xl flex items-center justify-center text-white text-xs font-black shadow-lg">
+                  #{index + 1}
                 </div>
+                
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="font-bold text-lg text-white flex items-center gap-2">
+                      {team.isWinner && <span className="text-amber-400">🏆</span>}
+                      {team.name}
+                    </div>
+                    <div className="flex gap-3 mt-1">
+                      <span className="text-xs text-slate-400 bg-slate-800/50 px-2 py-0.5 rounded-full">ID: {team.id.slice(0, 8)}...</span>
+                      <span className="text-xs text-cyan-400 bg-cyan-900/30 px-2 py-0.5 rounded-full font-bold">🎯 {team.lines_completed || 0} pts</span>
+                    </div>
+                  </div>
                 <button
                   onClick={() => deleteTeam(team.id)}
                   disabled={loading[`deleteTeam_${team.id}`]}
-                  className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
+                  className="p-2 text-slate-500 hover:text-red-400 hover:bg-red-500/20 rounded-lg transition-all opacity-0 group-hover:opacity-100 focus:opacity-100 hover:scale-110"
                   title="Delete Team"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                   </svg>
                 </button>
+                </div>
               </div>
             ))}
             {!state?.teams.length && (
-              <div className="col-span-full text-center py-8 text-slate-500 dark:text-slate-400 italic">
-                No teams joined yet.
+              <div className="col-span-full text-center py-12 text-slate-400">
+                <span className="text-5xl block mb-3">👥</span>
+                <p className="font-bold text-lg">No teams yet</p>
+                <p className="text-sm text-slate-500">Teams will appear here when they join the room</p>
               </div>
             )}
           </div>
         </section>
 
-        <section className="bg-gradient-to-br from-amber-50 via-orange-50 to-red-50 dark:from-slate-800 dark:via-slate-700 dark:to-slate-800 border border-white/20 dark:border-slate-600/50 rounded-2xl p-6 shadow-xl backdrop-blur-sm">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 bg-gradient-to-br from-amber-500 to-orange-600 rounded-xl flex items-center justify-center">
-              <svg
-                className="w-5 h-5 text-white"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
-                />
-              </svg>
+        <section className="relative bg-slate-800/30 backdrop-blur-xl rounded-3xl p-6 border border-amber-500/20 shadow-[0_0_50px_rgba(245,158,11,0.08)] overflow-hidden">
+          {/* Decorative corner accent */}
+          <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-amber-600/20 to-transparent rounded-bl-full"></div>
+          
+          <div className="flex items-center gap-3 mb-6">
+            <div className="relative">
+              <div className="absolute inset-0 bg-gradient-to-r from-amber-500 to-orange-600 rounded-xl blur-lg opacity-50"></div>
+              <div className="relative w-12 h-12 bg-gradient-to-br from-amber-500 to-orange-600 rounded-xl flex items-center justify-center shadow-lg">
+                <span className="text-2xl">📤</span>
+              </div>
             </div>
-            <h2 className="text-xl font-bold text-slate-800 dark:text-slate-200">
-              Upload Questions File
-            </h2>
+            <div>
+              <h2 className="text-2xl font-black text-white">
+                Upload Questions
+              </h2>
+              <p className="text-sm text-slate-400">Import questions from CSV file</p>
+            </div>
           </div>
-          <div className="mb-4 p-4 bg-blue-50 dark:bg-slate-700 border border-blue-200 dark:border-slate-600 rounded-xl">
-            <h3 className="font-semibold text-blue-800 dark:text-blue-200 mb-2">
-              File Format Requirements:
+          <div className="mb-4 p-4 bg-slate-900/50 border border-slate-700/50 rounded-xl">
+            <h3 className="font-bold text-amber-400 mb-2 flex items-center gap-2">
+              <span>📋</span> File Format Requirements:
             </h3>
-            <ul className="text-sm text-blue-700 dark:text-blue-300 space-y-1">
+            <ul className="text-sm text-slate-300 space-y-1">
               <li>• Upload a CSV file with questions data</li>
               <li>• First row should be headers</li>
               <li>
                 • Required columns:{" "}
-                <code className="bg-blue-100 dark:bg-blue-900 px-1 rounded">
+                <code className="bg-slate-800 text-amber-300 px-1.5 py-0.5 rounded font-mono">
                   question_text
                 </code>{" "}
                 or{" "}
-                <code className="bg-blue-100 dark:bg-blue-900 px-1 rounded">
+                <code className="bg-slate-800 text-amber-300 px-1.5 py-0.5 rounded font-mono">
                   Code
                 </code>
                 , and{" "}

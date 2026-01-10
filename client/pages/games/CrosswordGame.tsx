@@ -58,7 +58,30 @@ export default function CrosswordGame() {
   ]);
   const [solvedClues, setSolvedClues] = useState<number[]>([]);
   const [currentClueIndex, setCurrentClueIndex] = useState(0);
-  const [clueAnswer, setClueAnswer] = useState("");
+  const [status, setStatus] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
+
+  // Determine grid size
+  const gridSize = 12;
+
+  // Generate grid state
+  const grid = Array(gridSize).fill(null).map(() => Array(gridSize).fill(null));
+
+  // Helper to place words on the grid
+  clues.forEach(clue => {
+    const { startRow, startCol, direction, answer, id } = clue;
+    for (let i = 0; i < answer.length; i++) {
+      const r = direction === 'across' ? startRow : startRow + i;
+      const c = direction === 'across' ? startCol + i : startCol;
+      if (r < gridSize && c < gridSize) {
+        grid[r][c] = {
+          char: answer[i],
+          clueId: id,
+          isStart: i === 0,
+          active: solvedClues.includes(id)
+        };
+      }
+    }
+  });
 
   useEffect(() => {
     if (!team || !room) {
@@ -89,31 +112,23 @@ export default function CrosswordGame() {
     }
   };
 
-  const handleClueSubmit = () => {
-    const currentClue = clues[currentClueIndex];
-    if (!currentClue) return;
-
-    if (clueAnswer.toUpperCase().trim() === currentClue.answer) {
-      setSolvedClues(prev => [...prev, currentClue.id]);
-      setScore(prev => prev + 15);
-      toast({
-        title: "✅ Correct!",
-        description: `Word: ${currentClue.answer}`,
-        className: "bg-green-50 border-green-200 text-green-800"
-      });
-
-      if (currentClueIndex < clues.length - 1) {
-        setCurrentClueIndex(prev => prev + 1);
-        setClueAnswer("");
+  const handleCellClick = (r: number, c: number) => {
+    // Find clue associated with this cell
+    const foundClue = clues.find(clue => {
+      const { startRow, startCol, direction, answer } = clue;
+      if (direction === 'across') {
+        return r === startRow && c >= startCol && c < startCol + answer.length;
       } else {
-        toast({
-          title: "🎉 Crossword Complete!",
-          description: `Final score: ${score + 15} points!`,
-          className: "bg-purple-50 border-purple-200 text-purple-800"
-        });
+        return c === startCol && r >= startRow && r < startRow + answer.length;
       }
-    } else {
-      toast({ title: "❌ Incorrect", description: "Try again!", variant: "destructive" });
+    });
+
+    if (foundClue) {
+      const index = clues.indexOf(foundClue);
+      setCurrentClueIndex(index);
+      setCurrentQuestionIndex(index); // Assuming 1-to-1 mapping logic for now
+      setAnswer("");
+      setStatus(null);
     }
   };
 
@@ -147,19 +162,22 @@ export default function CrosswordGame() {
       const result = await res.json();
 
       if (result.correct) {
-        setScore(prev => prev + 10);
-        toast({
-          title: "✅ Correct!",
-          description: "Bonus points earned!",
-          className: "bg-green-50 border-green-200 text-green-800"
-        });
-
-        if (currentQuestionIndex < questions.length - 1) {
-          setCurrentQuestionIndex(prev => prev + 1);
-          setAnswer("");
+        // Mark clue as solved
+        const currentClue = clues[currentClueIndex];
+        if (currentClue && !solvedClues.includes(currentClue.id)) {
+          setSolvedClues(prev => [...prev, currentClue.id]);
+          setScore(prev => prev + 15);
+          toast({
+            title: "🎉 Clue Solved!",
+            description: `You unlocked: ${currentClue.answer}`,
+            className: "bg-green-50 border-green-200 text-green-800"
+          });
+          // Auto advance or just let them stay? Let them stay for now.
         }
+        setStatus({ type: 'success', text: 'Correct!' });
       } else {
         toast({ title: "❌ Incorrect", description: "Try again!", variant: "destructive" });
+        setStatus({ type: 'error', text: 'Incorrect Answer' });
       }
     } catch (error) {
       console.error("Failed to submit answer:", error);
@@ -171,191 +189,158 @@ export default function CrosswordGame() {
 
   const currentClue = clues[currentClueIndex];
   const currentQuestion = questions[currentQuestionIndex];
+  const isSolved = currentClue && solvedClues.includes(currentClue.id);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-50 to-yellow-50 dark:from-slate-950 dark:via-amber-950/30 dark:to-yellow-950/30">
+    <div className="min-h-screen bg-[#0f172a] text-slate-100 font-sans">
       <GameHeader
         gameTitle="Code Crossword"
-        gameIcon="📝"
+        gameIcon="🧩"
         team={team}
         room={room}
         showAchievements={false}
         showLeaderboard={true}
       />
 
-      <div className="container mx-auto px-4 py-8 max-w-5xl">
-        {/* Stats Bar */}
-        <div className="grid grid-cols-2 gap-4 mb-6">
-          <Card className="p-4 text-center bg-white/80 dark:bg-slate-900/80 backdrop-blur shadow-lg border-amber-200 dark:border-amber-800">
-            <div className="text-sm font-semibold text-amber-700 dark:text-amber-400 uppercase tracking-wider">Score</div>
-            <div className="text-3xl font-bold text-slate-800 dark:text-white mt-1">{score}</div>
-          </Card>
-          <Card className="p-4 text-center bg-white/80 dark:bg-slate-900/80 backdrop-blur shadow-lg border-green-200 dark:border-green-800">
-            <div className="text-sm font-semibold text-green-700 dark:text-green-400 uppercase tracking-wider">Solved</div>
-            <div className="text-3xl font-bold text-slate-800 dark:text-white mt-1">{solvedClues.length}/{clues.length}</div>
-          </Card>
-        </div>
+      <div className="container mx-auto px-6 py-8 h-[calc(100vh-80px)]">
+        <div className="grid grid-cols-1 xl:grid-cols-[1.5fr_1fr] gap-8 h-full">
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left Column: Game Interaction */}
-          <div className="lg:col-span-2 space-y-6">
-            {/* Current Clue Card */}
-            {currentClue ? (
-              <Card className="p-6 bg-white dark:bg-slate-900 shadow-xl border-slate-200 dark:border-slate-800 relative overflow-hidden">
-                <div className="absolute top-0 right-0 p-4 opacity-10">
-                  <span className="text-9xl">✏️</span>
-                </div>
+          {/* Left Column: The Crossword Grid (Canvas-like) */}
+          <Card className="bg-[#1e293b]/50 border-slate-800 p-8 flex items-center justify-center overflow-auto shadow-2xl relative">
+            <div className="relative bg-[#0f172a] p-4 rounded-xl border border-slate-700 shadow-inner">
+              {/* Grid Rendering */}
+              <div
+                className="grid gap-1"
+                style={{ gridTemplateColumns: `repeat(${gridSize}, minmax(40px, 1fr))` }}
+              >
+                {grid.map((row, r) => (
+                  row.map((cell: any, c: number) => {
+                    const isActiveClue = currentClue && cell?.clueId === currentClue.id;
+                    const isCellSolved = cell && solvedClues.includes(cell.clueId);
 
-                <div className="relative z-10">
-                  <div className="flex items-center justify-between mb-6">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center text-amber-600 dark:text-amber-400 font-bold">
-                        {currentClue.id}
-                      </div>
-                      <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Current Clue</h2>
-                    </div>
-                    <Badge variant={currentClue.direction === 'across' ? 'default' : 'secondary'} className="text-sm px-3 py-1">
-                      {currentClue.direction.toUpperCase()}
-                    </Badge>
-                  </div>
-
-                  <div className="bg-slate-50 dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 mb-6">
-                    <p className="text-xl text-slate-700 dark:text-slate-300 font-medium leading-relaxed">
-                      "{currentClue.clue}"
-                    </p>
-                    <p className="text-sm text-slate-500 dark:text-slate-400 mt-3 flex items-center gap-2">
-                      <span>📏</span> Answer length: <span className="font-bold">{currentClue.answer.length} letters</span>
-                    </p>
-                  </div>
-
-                  <div className="flex gap-3">
-                    <Input
-                      value={clueAnswer}
-                      onChange={(e) => setClueAnswer(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && handleClueSubmit()}
-                      placeholder="Type the word..."
-                      className="flex-1 text-lg uppercase tracking-widest font-mono bg-slate-50 dark:bg-slate-950 border-2 focus:border-amber-500 transition-all"
-                      maxLength={currentClue.answer.length}
-                    />
-                    <Button
-                      onClick={handleClueSubmit}
-                      className="bg-amber-500 hover:bg-amber-600 text-white font-bold px-6 shadow-md"
-                    >
-                      Submit
-                    </Button>
-                  </div>
-                </div>
-              </Card>
-            ) : (
-              <Card className="p-8 text-center bg-white dark:bg-slate-900 shadow-xl">
-                <div className="text-5xl mb-4">🎉</div>
-                <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">Crossword Completed!</h2>
-                <p className="text-slate-600 dark:text-slate-400">You've solved all the clues. Great job!</p>
-              </Card>
-            )}
-
-            {/* Visual Grid Preview */}
-            <Card className="p-6 bg-white dark:bg-slate-900 shadow-xl border-slate-200 dark:border-slate-800">
-              <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
-                <span>🧩</span> Puzzle Progress
-              </h3>
-              <div className="flex flex-wrap gap-2">
-                {clues.map(clue => (
-                  <div
-                    key={clue.id}
-                    className={`h-12 px-4 rounded-lg flex items-center justify-center text-sm font-bold border-2 transition-all duration-300 ${solvedClues.includes(clue.id)
-                        ? 'bg-green-50 dark:bg-green-900/20 border-green-500 text-green-700 dark:text-green-300 shadow-sm'
-                        : clue.id === currentClue?.id
-                          ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-500 text-amber-700 dark:text-amber-300 ring-2 ring-amber-200 dark:ring-amber-800'
-                          : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-400'
-                      }`}
-                  >
-                    <span className="mr-2 opacity-50">#{clue.id}</span>
-                    {solvedClues.includes(clue.id) ? clue.answer : "???"}
-                  </div>
-                ))}
-              </div>
-            </Card>
-          </div>
-
-          {/* Right Column: Bonus & List */}
-          <div className="space-y-6">
-            {/* Bonus Question */}
-            {currentQuestion && (
-              <Card className="p-6 bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-950/40 dark:to-purple-950/40 border-indigo-200 dark:border-indigo-800 shadow-lg">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="font-bold text-indigo-900 dark:text-indigo-200 flex items-center gap-2">
-                    <span>⭐</span> Bonus Question
-                  </h2>
-                  <Badge className="bg-indigo-500 hover:bg-indigo-600">+10 Pts</Badge>
-                </div>
-
-                <p className="text-sm text-indigo-800 dark:text-indigo-300 mb-4 leading-relaxed font-medium">
-                  {currentQuestion.question_text}
-                </p>
-
-                <div className="space-y-2">
-                  <Input
-                    value={answer}
-                    onChange={(e) => setAnswer(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleSubmitAnswer()}
-                    placeholder="Bonus answer..."
-                    disabled={submitting}
-                    className="bg-white/80 dark:bg-slate-900/80 border-indigo-200 dark:border-indigo-700"
-                  />
-                  <Button
-                    onClick={handleSubmitAnswer}
-                    disabled={submitting}
-                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm"
-                    size="sm"
-                  >
-                    {submitting ? "Checking..." : "Submit Bonus"}
-                  </Button>
-                </div>
-              </Card>
-            )}
-
-            {/* Clue List */}
-            <Card className="p-6 bg-white dark:bg-slate-900 shadow-xl border-slate-200 dark:border-slate-800 max-h-[400px] overflow-y-auto custom-scrollbar">
-              <h3 className="font-bold text-slate-900 dark:text-white mb-4 sticky top-0 bg-white dark:bg-slate-900 pb-2 border-b border-slate-100 dark:border-slate-800">
-                All Clues
-              </h3>
-              <div className="space-y-3">
-                {clues.map(clue => (
-                  <div
-                    key={clue.id}
-                    className={`p-3 rounded-lg border transition-all ${solvedClues.includes(clue.id)
-                        ? 'bg-green-50 dark:bg-green-900/10 border-green-200 dark:border-green-800/50'
-                        : clue.id === currentClue?.id
-                          ? 'bg-amber-50 dark:bg-amber-900/10 border-amber-300 dark:border-amber-700 shadow-sm'
-                          : 'bg-slate-50 dark:bg-slate-800/50 border-slate-100 dark:border-slate-700'
-                      }`}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${clue.direction === 'across'
-                              ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
-                              : 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300'
-                            }`}>
-                            {clue.id} {clue.direction === 'across' ? '→' : '↓'}
+                    return (
+                      <div
+                        key={`${r}-${c}`}
+                        onClick={() => cell && handleCellClick(r, c)}
+                        className={`
+                                        w-10 h-10 flex items-center justify-center text-lg font-bold rounded-md border-2 transition-all cursor-pointer relative
+                                        ${cell
+                            ? isCellSolved
+                              ? 'bg-green-500/20 border-green-500/50 text-green-400'
+                              : isActiveClue
+                                ? 'bg-blue-500/20 border-blue-400 text-white shadow-[0_0_15px_rgba(59,130,246,0.5)] z-10 scale-110'
+                                : 'bg-slate-800 border-slate-600 text-transparent hover:border-slate-400'
+                            : 'border-transparent opacity-0 pointer-events-none'
+                          }
+                                    `}
+                      >
+                        {cell?.isStart && (
+                          <span className="absolute top-0.5 left-1 text-[8px] font-normal opacity-70">
+                            {cell.clueId}
                           </span>
-                          {solvedClues.includes(clue.id) && (
-                            <span className="text-xs font-mono font-bold text-green-600 dark:text-green-400">
-                              {clue.answer}
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-xs text-slate-600 dark:text-slate-400 line-clamp-2">{clue.clue}</p>
+                        )}
+                        {isCellSolved ? cell.char : ''}
                       </div>
-                      {solvedClues.includes(clue.id) && (
-                        <span className="text-green-500 text-lg">✓</span>
-                      )}
-                    </div>
-                  </div>
+                    );
+                  })
                 ))}
               </div>
+            </div>
+
+            {/* Legend / Instructions */}
+            <div className="absolute bottom-6 left-6 text-sm text-slate-400 bg-slate-900/80 px-4 py-2 rounded-full border border-slate-800 backdrop-blur">
+              Click a word box to solve its coding challenge
+            </div>
+          </Card>
+
+
+          {/* Right Column: Interaction Panel */}
+          <div className="flex flex-col gap-6 h-full overflow-hidden">
+
+            {/* Stats */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-slate-800 p-4 rounded-xl border border-slate-700">
+                <div className="text-slate-400 text-xs uppercase font-bold tracking-wider">Score</div>
+                <div className="text-3xl font-bold text-white">{score}</div>
+              </div>
+              <div className="bg-slate-800 p-4 rounded-xl border border-slate-700">
+                <div className="text-slate-400 text-xs uppercase font-bold tracking-wider">Progress</div>
+                <div className="text-3xl font-bold text-white">{solvedClues.length}/{clues.length}</div>
+              </div>
+            </div>
+
+            {/* Active Challenge Panel */}
+            <Card className="flex-1 bg-[#1e293b] border-slate-800 p-0 overflow-hidden flex flex-col shadow-xl">
+              {currentClue ? (
+                <>
+                  <div className="p-6 bg-gradient-to-r from-blue-600/20 to-purple-600/20 border-b border-slate-700">
+                    <div className="flex items-center justify-between mb-3">
+                      <Badge variant="outline" className="bg-blue-500/10 text-blue-400 border-blue-500/30">
+                        {currentClue.direction.toUpperCase()}
+                      </Badge>
+                      {isSolved && <Badge className="bg-green-500 text-white">SOLVED</Badge>}
+                    </div>
+                    <h2 className="text-xl font-bold text-white leading-tight">
+                      {currentClue.clue}
+                    </h2>
+                    <div className="mt-4 flex gap-1">
+                      {Array.from({ length: currentClue.answer.length }).map((_, i) => (
+                        <div key={i} className={`w-8 h-8 rounded border-b-2 flex items-center justify-center font-bold ${isSolved ? 'border-green-500 text-green-400 bg-green-500/10' : 'border-slate-600 bg-slate-800 q-mark'}`}>
+                          {isSolved ? currentClue.answer[i] : '?'}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="p-6 flex-1 overflow-y-auto custom-scrollbar">
+                    <h3 className="text-slate-400 text-sm font-bold uppercase tracking-wider mb-4 flex items-center gap-2">
+                      <span>⚡</span> Coding Challenge
+                    </h3>
+
+                    {isSolved ? (
+                      <div className="text-center py-10">
+                        <div className="text-5xl mb-4">✅</div>
+                        <p className="text-slate-300 font-medium">You've solved this word!</p>
+                        <p className="text-slate-500 text-sm mt-2">Select another word on the grid to continue.</p>
+                      </div>
+                    ) : (
+                      currentQuestion && (
+                        <div className="space-y-6">
+                          <div className="bg-slate-950 p-4 rounded-lg border border-slate-800 font-mono text-sm text-blue-300 leading-relaxed overflow-x-auto">
+                            {currentQuestion.question_text}
+                          </div>
+
+                          <div className="space-y-3">
+                            <label className="text-sm text-slate-400">Enter output:</label>
+                            <Input
+                              value={answer}
+                              onChange={(e) => setAnswer(e.target.value)}
+                              onKeyDown={(e) => e.key === 'Enter' && !submitting && handleSubmitAnswer()}
+                              placeholder="Code output..."
+                              className="bg-slate-900 border-slate-700 h-11 font-mono"
+                              autoFocus
+                            />
+                            <Button
+                              onClick={handleSubmitAnswer}
+                              disabled={submitting || !answer.trim()}
+                              className="w-full bg-blue-600 hover:bg-blue-700 h-11"
+                            >
+                              {submitting ? "Verifying..." : "Unlock Word"}
+                            </Button>
+                          </div>
+                        </div>
+                      )
+                    )}
+                  </div>
+                </>
+              ) : (
+                <div className="flex-1 flex flex-col items-center justify-center text-center p-8 text-slate-500">
+                  <span className="text-4xl mb-4 opacity-50">👈</span>
+                  <p>Select a word on the grid to start solving</p>
+                </div>
+              )}
             </Card>
+
           </div>
         </div>
       </div>
