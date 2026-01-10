@@ -232,3 +232,6 @@ export const createServer = () => {
 
   return app;
 };
+
+// Export for Vercel serverless
+export default setupServer();
