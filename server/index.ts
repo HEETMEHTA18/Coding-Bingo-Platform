@@ -233,5 +233,8 @@ export const createServer = () => {
   return app;
 };
 
+// Initialize app
+const app = createServer();
+
 // Export for Vercel serverless
-export default setupServer();
+export default app;
