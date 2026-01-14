@@ -148,7 +148,7 @@ For production deployment to platforms like Railway, Vercel, or VPS, ensure:
 - Set all environment variables in your hosting platform
 - Use a production PostgreSQL database
 - Set `NODE_ENV=production`
+- Build the project using `pnpm run build` or `npm run build`
+- Serve the built files with a suitable server
 
 ---
-
-*Built with ❤️ for the developer community.*
