@@ -760,7 +760,7 @@ export default function AdminPage() {
               ) : (
                 <span className="text-lg">🌱</span>
               )}
-              {loading.seedQuestions ? "Seeding..." : "Seed 30 Default C Questions (Quick Setup)"}
+              {loading.seedQuestions ? "Seeding..." : "Seed 30 Default Coding Questions (Quick Setup)"}
             </button>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">

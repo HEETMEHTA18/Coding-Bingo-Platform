@@ -751,12 +751,29 @@ export default function TicTacToeGame() {
   const teamIdStr = String(team?.team_id || team?.id || '');
   const solvedArr = (tttBoardState as any)?.solvedByTeam?.[teamIdStr] || [];
 
+  // Map DB questions to the TTT compiler format.
+  // DB questions have: question_id, question_text, correct_answer, is_real
+  // TTT needs: id, text, type='code', language='c', template, expected, is_real, isSolved
+  const C_TEMPLATE = `#include <stdio.h>\n\nint main() {\n  // Write your solution here\n\n  return 0;\n}`;
+
   const displayQuestions = (state?.questions && state.questions.length > 0)
-    ? state.questions
+    ? state.questions.map((q: any) => {
+        const qid = String(q.question_id || q.id || '');
+        return {
+          id: qid,
+          text: q.question_text || q.text || 'Solve the mission.',
+          type: 'code' as const,
+          language: 'c' as const,
+          template: C_TEMPLATE,
+          expected: (q.correct_answer || q.correctAnswer || '').trim().toLowerCase(),
+          is_real: q.is_real !== false,
+          isSolved: solvedArr.includes(qid),
+        };
+      })
     : fallbackQuestions.map(q => ({
-      ...q,
-      isSolved: solvedArr.includes(q.id)
-    }));
+        ...q,
+        isSolved: solvedArr.includes(q.id)
+      }));
   const currentQuestion = displayQuestions[currentQuestionIndex % displayQuestions.length];
 
   // Reset code when question changes

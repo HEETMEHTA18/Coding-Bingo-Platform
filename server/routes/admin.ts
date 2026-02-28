@@ -24,7 +24,8 @@ import { eq, inArray, sql } from "drizzle-orm";
 
 const upload = multer();
 
-// ── Default seed questions (25 real + 5 bonus) for instant room setup ────────
+// ── Default seed questions for Bingo: "what does this code print?" ─────────
+// Players READ the code and type the output — pure output-prediction challenges.
 const DEFAULT_SEED_QUESTIONS: Array<{ text: string; answer: string; isReal: boolean }> = [
   { text: `#include<stdio.h>\nint main(){\n  printf("%d", 5+3);\n  return 0;\n}`, answer: "8", isReal: true },
   { text: `#include<stdio.h>\nint main(){\n  int a=10, b=3;\n  printf("%d", a%b);\n  return 0;\n}`, answer: "1", isReal: true },
@@ -59,11 +60,50 @@ const DEFAULT_SEED_QUESTIONS: Array<{ text: string; answer: string; isReal: bool
   { text: `#include<stdio.h>\nint main(){\n  printf("%d", 3*3);\n  return 0;\n}`, answer: "9", isReal: false },
 ];
 
-async function seedDefaultQuestionsForRoom(code: string): Promise<number> {
+// ── Default seed questions for TTT (Combat Mode): ────────────────────────────
+// Players WRITE C code to produce the expected output — full compiler challenges.
+const DEFAULT_TTT_QUESTIONS: Array<{ text: string; answer: string; isReal: boolean }> = [
+  // Real missions → earn a MOVE CREDIT
+  { text: "Print the word BATTLE using printf.", answer: "BATTLE", isReal: true },
+  { text: "Print the sum of 7 and 8.", answer: "15", isReal: true },
+  { text: "Print 1 2 3 separated by spaces.", answer: "1 2 3", isReal: true },
+  { text: "Print the result of 100 minus 37.", answer: "63", isReal: true },
+  { text: "Print the factorial of 5.", answer: "120", isReal: true },
+  { text: "Print the character C three times in a row (no spaces).", answer: "CCC", isReal: true },
+  { text: "Print the square of 12.", answer: "144", isReal: true },
+  { text: "Print Hello World", answer: "Hello World", isReal: true },
+  { text: "Print the result of 2 raised to 8.", answer: "256", isReal: true },
+  { text: "Print even numbers from 2 to 10 separated by spaces.", answer: "2 4 6 8 10", isReal: true },
+  { text: "Print CODE WINS", answer: "CODE WINS", isReal: true },
+  { text: "Print the sum of the first 10 natural numbers.", answer: "55", isReal: true },
+  { text: "Print the ASCII value of the character A.", answer: "65", isReal: true },
+  { text: "Print BINGO BINGO BINGO separated by spaces.", answer: "BINGO BINGO BINGO", isReal: true },
+  { text: "Print numbers 10 down to 1 separated by spaces.", answer: "10 9 8 7 6 5 4 3 2 1", isReal: true },
+  { text: "Print the word compile in lowercase.", answer: "compile", isReal: true },
+  { text: "Print the result of 5 + 5 + 5 + 5 + 5.", answer: "25", isReal: true },
+  { text: "Print the cube of 5.", answer: "125", isReal: true },
+  { text: "Print the string WINNER", answer: "WINNER", isReal: true },
+  { text: "Print the largest prime below 20.", answer: "19", isReal: true },
+  { text: "Print the result of 42 * 2.", answer: "84", isReal: true },
+  { text: "Print numbers 1 to 5, space separated.", answer: "1 2 3 4 5", isReal: true },
+  { text: "Print the word HACKATHON", answer: "HACKATHON", isReal: true },
+  { text: "Print the remainder of 17 divided by 5.", answer: "2", isReal: true },
+  { text: "Print the result of (3 + 4) * 6.", answer: "42", isReal: true },
+  // Stealth missions → earn a KNIFE CREDIT
+  { text: "STEALTH: Print the word STEALTH", answer: "STEALTH", isReal: false },
+  { text: "STEALTH: Print the cube of 3.", answer: "27", isReal: false },
+  { text: "STEALTH: Print the word KNIFE", answer: "KNIFE", isReal: false },
+  { text: "STEALTH: Print the result of 7 * 7.", answer: "49", isReal: false },
+  { text: "STEALTH: Print the word invisible in lowercase.", answer: "invisible", isReal: false },
+];
+
+async function seedDefaultQuestionsForRoom(code: string, gameType = 'bingo'): Promise<number> {
   const existing = await db.select({ questionId: questionsTable.questionId })
     .from(questionsTable).where(eq(questionsTable.roomCode, code));
   if (existing.length >= 25) return 0; // Already seeded
-  const toInsert = DEFAULT_SEED_QUESTIONS.map(q => ({
+  // Pick question set based on game type
+  const questionSet = gameType === 'tictactoe' ? DEFAULT_TTT_QUESTIONS : DEFAULT_SEED_QUESTIONS;
+  const toInsert = questionSet.map(q => ({
     roomCode: code,
     questionText: q.text,
     isReal: q.isReal,
@@ -230,13 +270,19 @@ export const handleCreateRoom: RequestHandler = async (req, res) => {
         ? new Date(Date.now() + body.durationMinutes * 60 * 1000)
         : null,
     });
-    // Auto-seed 30 default C questions so the room is playable immediately
-    try {
-      await seedDefaultQuestionsForRoom(code);
-    } catch (seedErr) {
-      console.error("Auto-seed failed (room still created):", seedErr);
+    const gameType = body.gameType || 'bingo';
+    // Auto-seed questions for Bingo only. TTT rooms need the admin to add
+    // coding-challenge questions manually (or click Seed in Question Management).
+    let autoSeeded = false;
+    if (gameType === 'bingo') {
+      try {
+        const count = await seedDefaultQuestionsForRoom(code, 'bingo');
+        autoSeeded = count > 0;
+      } catch (seedErr) {
+        console.error("Auto-seed failed (room still created):", seedErr);
+      }
     }
-    res.json({ success: true, autoSeeded: true });
+    res.json({ success: true, autoSeeded });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Internal server error" });
@@ -1074,7 +1120,8 @@ export const handleSeedQuestions: RequestHandler = async (req, res) => {
       return res.json({ success: true, seeded: 0, message: `Room already has ${existing.length} questions. Skipped seeding.` });
     }
 
-    const seeded = await seedDefaultQuestionsForRoom(code);
+    // Seed the right questions for the room's game type
+    const seeded = await seedDefaultQuestionsForRoom(code, roomResult[0].gameType || 'bingo');
 
     // Clear stale mappings for existing teams so they get fresh mappings
     const teamsInRoom = await db.select({ teamId: teams.teamId }).from(teams).where(eq(teams.roomCode, code));
