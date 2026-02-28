@@ -120,93 +120,7 @@ async function compileWithPiston(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 2. JUDGE0 API  (online, requires JUDGE0_API_KEY, ~3-6s)
-// ─────────────────────────────────────────────────────────────────────────────
-const JUDGE0_LANGUAGES: Record<string, number> = {
-  c: 50,   // C (GCC 9.2.0)
-  cpp: 54, // C++ (GCC 9.2.0)
-};
-
-async function compileWithJudge0(
-  language: "c" | "cpp",
-  source: string,
-  stdin?: string
-): Promise<CompileResult> {
-  const apiKey = process.env.JUDGE0_API_KEY;
-  const apiUrl =
-    process.env.JUDGE0_API_URL || "https://judge0-ce.p.rapidapi.com";
-
-  if (!apiKey) {
-    return {
-      success: false,
-      error: "JUDGE0_API_KEY not set in .env",
-    };
-  }
-
-  console.log(`[Judge0] Compiling ${language.toUpperCase()}...`);
-
-  try {
-    const sourceBase64 = Buffer.from(source).toString("base64");
-    const stdinBase64 = stdin ? Buffer.from(stdin).toString("base64") : "";
-
-    const response = await fetch(
-      `${apiUrl}/submissions?base64_encoded=true&wait=true`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-RapidAPI-Key": apiKey,
-          "X-RapidAPI-Host": "judge0-ce.p.rapidapi.com",
-        },
-        body: JSON.stringify({
-          language_id: JUDGE0_LANGUAGES[language],
-          source_code: sourceBase64,
-          stdin: stdinBase64,
-        }),
-      }
-    );
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      return {
-        success: false,
-        error: `Judge0 API error: ${response.status}`,
-        stderr: errorText,
-      };
-    }
-
-    const result = await response.json();
-    const decode = (str: string | null) =>
-      str ? Buffer.from(str, "base64").toString("utf-8") : "";
-
-    const stdout = decode(result.stdout);
-    const stderr = decode(result.stderr);
-    const compileOutput = decode(result.compile_output);
-
-    if (result.status.id === 3) {
-      return { success: true, stdout, stderr };
-    } else if (result.status.id === 6) {
-      return {
-        success: false,
-        compileOutput: compileOutput || stderr || "Compilation failed",
-        error: "Compilation error",
-      };
-    } else if (result.status.id === 5) {
-      return { success: false, error: "Time limit exceeded", stderr };
-    } else {
-      return {
-        success: false,
-        error: result.status.description || "Execution failed",
-        stderr,
-      };
-    }
-  } catch (err: any) {
-    return { success: false, error: `Judge0 request failed: ${err.message}` };
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 3. DOCKER  (local, no internet needed, ~10-60s cold, ~3-5s warm)
+// 2. DOCKER  (local, no internet needed, ~10-60s cold, ~3-5s warm)
 // ─────────────────────────────────────────────────────────────────────────────
 async function checkDockerAvailable(): Promise<boolean> {
   return new Promise((resolve) => {
@@ -381,7 +295,6 @@ router.get("/api/compile/health", async (_req, res) => {
   res.json({
     status: pistonOk ? "healthy" : dockerAvailable ? "docker-only" : "degraded",
     piston: pistonOk ? "available" : "unavailable",
-    judge0: process.env.JUDGE0_API_KEY ? "configured" : "no key",
     docker: dockerAvailable ? "available" : "unavailable",
   });
 });
