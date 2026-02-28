@@ -588,9 +588,20 @@ export default function GamePage() {
                   </div>
                   <h2 className="font-bold text-2xl text-white">Coding Challenge</h2>
                 </div>
-                <span className="px-4 py-2 rounded-full text-sm font-medium bg-slate-800 text-slate-300 border border-slate-700">
-                  {questions.length} questions available
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className={`px-3 py-1.5 rounded-full text-xs font-bold ${
+                    questions.length === 0
+                      ? 'bg-red-900/50 text-red-300 border border-red-700'
+                      : 'bg-emerald-900/40 text-emerald-300 border border-emerald-700/50'
+                  }`}>
+                    {questions.length === 0 ? '⚠️ No Questions' : `✓ ${questions.length} Questions`}
+                  </span>
+                  {questions.length > 0 && (
+                    <span className="px-3 py-1.5 rounded-full text-xs font-bold bg-slate-800 text-slate-400 border border-slate-700">
+                      {solvedCount} Solved
+                    </span>
+                  )}
+                </div>
               </div>
 
               {selectedQuestion ? (
@@ -604,6 +615,14 @@ export default function GamePage() {
                         <h3 className="text-lg font-bold text-white">
                           Question {currentQuestionIndex + 1}
                         </h3>
+                        {selectedQuestion?.is_real === false ? (
+                          <span className="px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 text-xs font-bold border border-purple-500/40">BONUS</span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 text-xs font-bold border border-blue-500/40">REAL</span>
+                        )}
+                        {selectedQuestion?.grid_position && (
+                          <span className="px-2 py-0.5 rounded-md bg-slate-700 text-slate-400 text-xs font-mono border border-slate-600">Grid: {selectedQuestion.grid_position}</span>
+                        )}
                       </div>
                       <div className="flex items-center gap-3">
                         <span className="px-2.5 py-1 rounded-md bg-slate-700 text-xs font-mono font-semibold text-slate-300 border border-slate-600">
@@ -764,20 +783,37 @@ export default function GamePage() {
                   <div className="w-28 h-28 rounded-2xl bg-gradient-to-br from-purple-500 via-blue-500 to-cyan-500 flex items-center justify-center mb-6 shadow-2xl">
                     <span className="text-6xl">🎯</span>
                   </div>
-                  <h3 className="text-3xl font-bold text-white mb-3">Ready to Code?</h3>
-                  <p className="text-slate-400 mb-6 max-w-md text-lg">
-                    Select a question from the bingo grid or use navigation to start solving challenges!
-                  </p>
-                  <div className="flex gap-3">
-                    <button
-                      onClick={() => {
-                        if (questions.length > 0) onSelectQuestion(questions[0].question_id);
-                      }}
-                      className="px-6 py-3 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold transition-all shadow-lg"
-                    >
-                      Start First Question
-                    </button>
-                  </div>
+                  {questions.length === 0 ? (
+                    <>
+                      <h3 className="text-2xl font-bold text-white mb-3">No Questions Yet!</h3>
+                      <p className="text-slate-400 mb-4 max-w-md">
+                        This room has no questions. Ask your admin to add questions or seed the default set.
+                      </p>
+                      <div className="px-4 py-3 rounded-lg bg-amber-900/30 border border-amber-700/50 text-amber-300 text-sm max-w-sm">
+                        <span className="font-bold">Room Code: </span>{room?.code}<br/>
+                        <span className="text-xs text-amber-400/80">Share this with your admin to set up questions.</span>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <h3 className="text-3xl font-bold text-white mb-3">Ready to Code?</h3>
+                      <p className="text-slate-400 mb-6 max-w-md text-lg">
+                        Select a question from the bingo grid or use navigation to start solving challenges!
+                      </p>
+                      <div className="flex gap-3">
+                        <button
+                          onClick={() => {
+                            const first = questions.find(q => !solved.includes(q.grid_position || ''));
+                            if (first) onSelectQuestion(first.question_id);
+                            else if (questions.length > 0) onSelectQuestion(questions[0].question_id);
+                          }}
+                          className="px-6 py-3 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold transition-all shadow-lg"
+                        >
+                          Start First Question
+                        </button>
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
             </div>
@@ -888,20 +924,30 @@ export default function GamePage() {
               </div>
             </div>
             <div className="mb-5 flex items-center justify-between px-2">
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded bg-emerald-500"></div>
-                <span className="text-xs text-slate-400">Solved: {solvedCount}</span>
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-3 rounded bg-emerald-500"></div>
+                  <span className="text-xs text-slate-400">Solved: {solvedCount}</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-3 rounded bg-blue-500"></div>
+                  <span className="text-xs text-slate-400">Active</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-3 rounded bg-slate-700"></div>
+                  <span className="text-xs text-slate-400">Remaining: {25 - solvedCount}</span>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded bg-slate-700"></div>
-                <span className="text-xs text-slate-400">Remaining: {25 - solvedCount}</span>
-              </div>
+              <span className="text-xs text-emerald-400 font-bold">
+                {questions.length > 0 ? `${Math.round((solvedCount / 25) * 100)}%` : '--'}
+              </span>
             </div>
             <BingoGrid
               solved={solved}
               onSelectQuestion={onSelectQuestion}
               questions={questions}
               highlightedPositions={highlightedPositions}
+              selectedQid={selectedQid}
             />
             <WinCelebration show={showCelebration} linesCompleted={lines} onComplete={() => setShowCelebration(false)} />
             <BingoWinnerModal show={showWinnerModal} onContinue={() => { setShowWinnerModal(false); }} />
@@ -917,11 +963,12 @@ export default function GamePage() {
   );
 }
 
-function BingoGrid({ solved, onSelectQuestion, questions, highlightedPositions }: {
+function BingoGrid({ solved, onSelectQuestion, questions, highlightedPositions, selectedQid }: {
   solved: string[];
   onSelectQuestion: (qid: number) => void;
   questions: GameStateResponse["questions"];
   highlightedPositions?: string[];
+  selectedQid?: number | null;
 }) {
   const bingoLetters = ["B", "I", "N", "G", "O"];
   const gridRows = ["A", "B", "C", "D", "E"];
@@ -953,20 +1000,43 @@ function BingoGrid({ solved, onSelectQuestion, questions, highlightedPositions }
             const position = `${row}${colIndex + 1}`;
             const isSolved = solved.includes(position);
             const isHighlighted = highlightedPositions?.includes(position) ?? false;
+            // Find the question mapped to this position
+            const mappedQ = questions.find((q) => q.grid_position === position);
+            const qIndex = mappedQ ? questions.findIndex((q) => q.question_id === mappedQ.question_id) : -1;
+            const isSelected = mappedQ ? mappedQ.question_id === selectedQid : false;
+            const isFake = mappedQ?.is_real === false;
+            const qid = mappedQ ? mappedQ.question_id : (questions[0]?.question_id ?? 0);
 
             return (
               <button
                 key={position}
-                onClick={() => onSelectQuestion(getQuestionIdForPosition(questions, position))}
-                className={`aspect-square rounded-xl flex items-center justify-center text-lg font-bold border-2 transition-all duration-200 ${isSolved
-                  ? `bg-gradient-to-br from-emerald-500 to-green-600 border-emerald-400 text-white shadow-lg shadow-emerald-500/30 ${isHighlighted ? 'animate-pulse scale-105' : ''}`
-                  : "bg-slate-800/70 border-slate-600 text-slate-300 cursor-default"
+                onClick={() => onSelectQuestion(qid)}
+                title={mappedQ ? `Q${qIndex + 1}${isFake ? ' (Bonus)' : ''}` : position}
+                className={`aspect-square rounded-xl flex flex-col items-center justify-center text-sm font-bold border-2 transition-all duration-200 cursor-pointer relative overflow-hidden
+                  ${isSolved
+                    ? `bg-gradient-to-br from-emerald-500 to-green-600 border-emerald-400 text-white shadow-lg shadow-emerald-500/30 ${isHighlighted ? 'animate-pulse scale-105' : ''}`
+                    : isSelected
+                      ? 'bg-gradient-to-br from-blue-600 to-indigo-600 border-blue-400 text-white shadow-lg shadow-blue-500/40 scale-105 ring-2 ring-blue-400/60'
+                      : mappedQ
+                        ? 'bg-slate-800/70 border-slate-600 text-slate-200 hover:bg-slate-700/80 hover:border-slate-500 hover:scale-105 hover:shadow-lg'
+                        : 'bg-slate-900/50 border-slate-700 text-slate-500'
                   }`}
               >
                 {isSolved ? (
                   <span className="text-2xl">✓</span>
+                ) : mappedQ ? (
+                  <>
+                    <span className="text-xs font-mono opacity-60 leading-none">{position}</span>
+                    <span className="text-base font-black leading-none">Q{qIndex + 1}</span>
+                    {isFake && (
+                      <span className="text-[8px] text-purple-300 leading-none mt-0.5">BONUS</span>
+                    )}
+                    {isSelected && (
+                      <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-blue-300 animate-pulse"></span>
+                    )}
+                  </>
                 ) : (
-                  <span className="font-mono">{position}</span>
+                  <span className="font-mono text-xs">{position}</span>
                 )}
               </button>
             );

@@ -510,7 +510,7 @@ export const handleGameState: RequestHandler = async (req, res) => {
       // omit correctAnswer from game-state response to reduce payload and avoid leaking answers
       points: 10,
       is_real: q.isReal, // Include whether this is a real or fake question
-      grid_position: null, // Remove mapping - positions assigned randomly on solve
+      grid_position: mappingByQid[q.questionId] || null, // ✅ FIX: include actual grid position from team mapping
     }));
 
     // Get solved positions for this team
@@ -789,23 +789,35 @@ export const handleSubmit: RequestHandler = async (req, res) => {
 
         const solvedPositions = solvedPositionsResult.map(row => row.position);
 
-        // Generate all possible grid positions (A1-E5)
-        const allPositions: string[] = [];
-        const rows = ['A', 'B', 'C', 'D', 'E'];
-        for (const row of rows) {
-          for (let col = 1; col <= 5; col++) {
-            allPositions.push(`${row}${col}`);
+        // ✅ FIX: Use the team's mapped grid position for this question (deterministic, not random)
+        const mappingResult = await tx
+          .select({ gridPosition: teamQuestionMapping.gridPosition })
+          .from(teamQuestionMapping)
+          .where(and(
+            eq(teamQuestionMapping.teamId, body.teamId),
+            eq(teamQuestionMapping.questionId, questionIdNum)
+          ));
+
+        if (mappingResult.length > 0 && !solvedPositions.includes(mappingResult[0].gridPosition)) {
+          // Use the pre-assigned position for this question
+          assignedPosition = mappingResult[0].gridPosition;
+        } else {
+          // Fallback: find any unfilled position
+          const allPositions: string[] = [];
+          const rows = ['A', 'B', 'C', 'D', 'E'];
+          for (const row of rows) {
+            for (let col = 1; col <= 5; col++) {
+              allPositions.push(`${row}${col}`);
+            }
+          }
+          const unfilledPositions = allPositions.filter(pos => !solvedPositions.includes(pos));
+          if (unfilledPositions.length > 0) {
+            const randomIndex = Math.floor(Math.random() * unfilledPositions.length);
+            assignedPosition = unfilledPositions[randomIndex];
           }
         }
 
-        // Find unfilled positions
-        const unfilledPositions = allPositions.filter(pos => !solvedPositions.includes(pos));
-
-        // If there are unfilled positions, randomly select one
-        if (unfilledPositions.length > 0) {
-          const randomIndex = Math.floor(Math.random() * unfilledPositions.length);
-          assignedPosition = unfilledPositions[randomIndex];
-
+        if (assignedPosition) {
           // Mark this position as solved
           await tx.insert(teamSolvedPositions).values({
             teamId: body.teamId,

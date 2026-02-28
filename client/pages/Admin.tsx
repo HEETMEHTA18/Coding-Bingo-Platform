@@ -84,12 +84,16 @@ export default function AdminPage() {
         gameType: selectedGameType as any,
         durationMinutes: null,
       };
-      await apiFetch("/api/admin/create-room", {
+      const res = await apiFetch("/api/admin/create-room", {
         method: "POST",
         body: JSON.stringify(body),
       });
+      const data = await res.json();
       await load(body.code);
       await loadRooms();
+      if (data.autoSeeded) {
+        alert(`✅ Room ${body.code} created with 30 default C questions auto-seeded! Start adding your own or use the Seed button to reload defaults.`);
+      }
     } finally {
       setLoading((prev) => ({ ...prev, createRoom: false }));
     }
@@ -726,6 +730,38 @@ export default function AdminPage() {
             <p className="text-sm text-amber-400/80 mb-4">
               Manage questions for this room. Delete individual questions or clear all questions to start fresh.
             </p>
+
+            {/* ✅ Seed Questions Button — instant one-click setup for new rooms */}
+            <button
+              onClick={async () => {
+                if (!roomCode) { alert("Select a room first."); return; }
+                setLoading((prev) => ({ ...prev, seedQuestions: true }));
+                try {
+                  const res = await apiFetch("/api/admin/seed-questions", {
+                    method: "POST",
+                    body: JSON.stringify({ room: roomCode.toUpperCase() }),
+                  });
+                  const data = await res.json();
+                  if (data.success) {
+                    alert(`✅ ${data.message}`);
+                    await load(roomCode);
+                  } else {
+                    alert(`Error: ${data.error}`);
+                  }
+                } finally {
+                  setLoading((prev) => ({ ...prev, seedQuestions: false }));
+                }
+              }}
+              disabled={loading.seedQuestions}
+              className="w-full mb-4 px-4 py-3.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-bold hover:from-emerald-500 hover:to-teal-500 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg hover:shadow-xl transition-all transform hover:scale-[1.02] text-sm"
+            >
+              {loading.seedQuestions ? (
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+              ) : (
+                <span className="text-lg">🌱</span>
+              )}
+              {loading.seedQuestions ? "Seeding..." : "Seed 30 Default C Questions (Quick Setup)"}
+            </button>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
               <button

@@ -26,6 +26,7 @@ import {
   handleListRooms,
   handleDeleteRoom,
   handleDeleteAllRooms,
+  handleSeedQuestions,
 } from "./routes/admin.js";
 import { handleLeaderboard, handleLeaderboardAll } from "./routes/leaderboard.js";
 import { handleLogin, handleGameState, handleSubmit, handleRecentSubmissions, handleTicTacToeAction, handleTicTacToeStream, handleAdminPushBonus, handleTTTBonusSubmit, handleAdminTTTState, handleSpectate, handleGameStream } from './routes/game.js';
@@ -181,6 +182,7 @@ export const createServer = () => {
   app.post("/api/admin/delete-room", handleDeleteRoom);
   app.post("/api/admin/delete-all-rooms", handleDeleteAllRooms);
   app.post("/api/admin/wipe", handleWipeUserData);
+  app.post("/api/admin/seed-questions", handleSeedQuestions);
 
   // Leaderboard routes
   app.get("/api/leaderboard", handleLeaderboard);

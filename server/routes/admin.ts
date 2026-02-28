@@ -24,6 +24,55 @@ import { eq, inArray, sql } from "drizzle-orm";
 
 const upload = multer();
 
+// ── Default seed questions (25 real + 5 bonus) for instant room setup ────────
+const DEFAULT_SEED_QUESTIONS: Array<{ text: string; answer: string; isReal: boolean }> = [
+  { text: `#include<stdio.h>\nint main(){\n  printf("%d", 5+3);\n  return 0;\n}`, answer: "8", isReal: true },
+  { text: `#include<stdio.h>\nint main(){\n  int a=10, b=3;\n  printf("%d", a%b);\n  return 0;\n}`, answer: "1", isReal: true },
+  { text: `#include<stdio.h>\nint main(){\n  int i;\n  for(i=0;i<3;i++) printf("%d",i);\n  return 0;\n}`, answer: "012", isReal: true },
+  { text: `#include<stdio.h>\nint main(){\n  int x=2;\n  printf("%d", x*x*x);\n  return 0;\n}`, answer: "8", isReal: true },
+  { text: `#include<stdio.h>\nint main(){\n  printf("%d", 10/3);\n  return 0;\n}`, answer: "3", isReal: true },
+  { text: `#include<stdio.h>\nint main(){\n  int a=5;\n  a++;\n  printf("%d",a);\n  return 0;\n}`, answer: "6", isReal: true },
+  { text: `#include<stdio.h>\nint main(){\n  int n=4;\n  printf("%d", n*(n+1)/2);\n  return 0;\n}`, answer: "10", isReal: true },
+  { text: `#include<stdio.h>\nint main(){\n  int i=1,s=0;\n  while(i<=5){s+=i;i++;}\n  printf("%d",s);\n  return 0;\n}`, answer: "15", isReal: true },
+  { text: `#include<stdio.h>\nint main(){\n  char c='A';\n  printf("%c",c+1);\n  return 0;\n}`, answer: "B", isReal: true },
+  { text: `#include<stdio.h>\nint main(){\n  printf("%d", sizeof(int));\n  return 0;\n}`, answer: "4", isReal: true },
+  { text: `#include<stdio.h>\nint main(){\n  int a=0;\n  printf("%d", !a);\n  return 0;\n}`, answer: "1", isReal: true },
+  { text: `#include<stdio.h>\nint main(){\n  int x=7, y=3;\n  printf("%d", x>y ? x : y);\n  return 0;\n}`, answer: "7", isReal: true },
+  { text: `#include<stdio.h>\nint main(){\n  int a=6;\n  printf("%d", a>>1);\n  return 0;\n}`, answer: "3", isReal: true },
+  { text: `#include<stdio.h>\nint main(){\n  int a=3;\n  printf("%d", a<<1);\n  return 0;\n}`, answer: "6", isReal: true },
+  { text: `#include<stdio.h>\nint main(){\n  printf("Hello");\n  return 0;\n}`, answer: "Hello", isReal: true },
+  { text: `#include<stdio.h>\nint main(){\n  int a=10,b=20;\n  printf("%d",a+b);\n  return 0;\n}`, answer: "30", isReal: true },
+  { text: `#include<stdio.h>\nint main(){\n  int i;\n  for(i=2;i<=10;i+=2) printf("%d ",i);\n  return 0;\n}`, answer: "2 4 6 8 10 ", isReal: true },
+  { text: `#include<stdio.h>\nint fib(int n){return n<=1?n:fib(n-1)+fib(n-2);}\nint main(){\n  printf("%d",fib(6));\n  return 0;\n}`, answer: "8", isReal: true },
+  { text: `#include<stdio.h>\nint main(){\n  int arr[]={1,2,3,4,5};\n  printf("%d",arr[2]);\n  return 0;\n}`, answer: "3", isReal: true },
+  { text: `#include<stdio.h>\nint main(){\n  int a=15,b=10;\n  printf("%d",a-b);\n  return 0;\n}`, answer: "5", isReal: true },
+  { text: `#include<stdio.h>\nint main(){\n  float f=5.0/2;\n  printf("%.1f",f);\n  return 0;\n}`, answer: "2.5", isReal: true },
+  { text: `#include<stdio.h>\nint main(){\n  int a=5,b=5;\n  printf("%d",a==b);\n  return 0;\n}`, answer: "1", isReal: true },
+  { text: `#include<stdio.h>\nint main(){\n  int a=5,b=3;\n  printf("%d",a&b);\n  return 0;\n}`, answer: "1", isReal: true },
+  { text: `#include<stdio.h>\nint main(){\n  int a=5,b=3;\n  printf("%d",a|b);\n  return 0;\n}`, answer: "7", isReal: true },
+  { text: `#include<stdio.h>\nint main(){\n  int n=5,f=1,i;\n  for(i=1;i<=n;i++) f*=i;\n  printf("%d",f);\n  return 0;\n}`, answer: "120", isReal: true },
+  // Bonus (fake) questions
+  { text: `#include<stdio.h>\nint main(){\n  printf("%d", 100-1);\n  return 0;\n}`, answer: "99", isReal: false },
+  { text: `#include<stdio.h>\nint main(){\n  printf("%d", 2+2);\n  return 0;\n}`, answer: "4", isReal: false },
+  { text: `#include<stdio.h>\nint main(){\n  printf("bingo");\n  return 0;\n}`, answer: "bingo", isReal: false },
+  { text: `#include<stdio.h>\nint main(){\n  printf("%d", 50*2);\n  return 0;\n}`, answer: "100", isReal: false },
+  { text: `#include<stdio.h>\nint main(){\n  printf("%d", 3*3);\n  return 0;\n}`, answer: "9", isReal: false },
+];
+
+async function seedDefaultQuestionsForRoom(code: string): Promise<number> {
+  const existing = await db.select({ questionId: questionsTable.questionId })
+    .from(questionsTable).where(eq(questionsTable.roomCode, code));
+  if (existing.length >= 25) return 0; // Already seeded
+  const toInsert = DEFAULT_SEED_QUESTIONS.map(q => ({
+    roomCode: code,
+    questionText: q.text,
+    isReal: q.isReal,
+    correctAnswer: q.answer,
+  }));
+  await db.insert(questionsTable).values(toInsert);
+  return toInsert.length;
+}
+
 function parseCSVLine(line: string): string[] {
   const out: string[] = [];
   let cur = "";
@@ -181,7 +230,13 @@ export const handleCreateRoom: RequestHandler = async (req, res) => {
         ? new Date(Date.now() + body.durationMinutes * 60 * 1000)
         : null,
     });
-    res.json({ success: true });
+    // Auto-seed 30 default C questions so the room is playable immediately
+    try {
+      await seedDefaultQuestionsForRoom(code);
+    } catch (seedErr) {
+      console.error("Auto-seed failed (room still created):", seedErr);
+    }
+    res.json({ success: true, autoSeeded: true });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Internal server error" });
@@ -1001,6 +1056,35 @@ export const handleDeleteAllRooms: RequestHandler = async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     console.error("Error deleting all rooms:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+export const handleSeedQuestions: RequestHandler = async (req, res) => {
+  const roomCode = (req.body?.room as string) || (req.query.room as string);
+  if (!roomCode) return res.status(400).json({ error: "Room code required" });
+  try {
+    const code = roomCode.toUpperCase();
+    const roomResult = await db.select().from(rooms).where(eq(rooms.code, code));
+    if (roomResult.length === 0) return res.status(404).json({ error: "Room not found" });
+
+    const existing = await db.select({ questionId: questionsTable.questionId })
+      .from(questionsTable).where(eq(questionsTable.roomCode, code));
+    if (existing.length >= 25) {
+      return res.json({ success: true, seeded: 0, message: `Room already has ${existing.length} questions. Skipped seeding.` });
+    }
+
+    const seeded = await seedDefaultQuestionsForRoom(code);
+
+    // Clear stale mappings for existing teams so they get fresh mappings
+    const teamsInRoom = await db.select({ teamId: teams.teamId }).from(teams).where(eq(teams.roomCode, code));
+    if (teamsInRoom.length > 0) {
+      await db.delete(teamQuestionMapping).where(inArray(teamQuestionMapping.teamId, teamsInRoom.map(t => t.teamId)));
+    }
+
+    res.json({ success: true, seeded, message: `Successfully seeded ${seeded} questions into room ${code}` });
+  } catch (err) {
+    console.error("handleSeedQuestions error:", err);
     res.status(500).json({ error: "Internal server error" });
   }
 };
