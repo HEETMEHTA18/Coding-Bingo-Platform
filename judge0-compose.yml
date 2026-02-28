@@ -1,0 +1,74 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Judge0 CE — Local Compiler (runs on http://localhost:2358)
+#
+# HOW TO START:
+#   docker compose -f judge0-compose.yml up -d
+#
+# HOW TO STOP:
+#   docker compose -f judge0-compose.yml down
+#
+# CHECK HEALTH:
+#   http://localhost:2358/health_check
+#
+# First boot takes ~2 min to pull images + seed the DB.
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+  judge0-server:
+    image: judge0/judge0:1.13.1
+    container_name: judge0-server
+    ports:
+      - "2358:3000"
+    environment:
+      REDIS_URL: redis://judge0-redis:6379
+      DATABASE_URL: postgresql://judge0:judge0pass@judge0-db:5432/judge0
+      SECRET_KEY: your-secret-key-change-this
+      MAINTENANCE_MODE: "false"
+    depends_on:
+      - judge0-db
+      - judge0-redis
+    restart: unless-stopped
+    networks:
+      - judge0-net
+
+  judge0-worker:
+    image: judge0/judge0:1.13.1
+    container_name: judge0-worker
+    command: ["./scripts/worker"]
+    environment:
+      REDIS_URL: redis://judge0-redis:6379
+      DATABASE_URL: postgresql://judge0:judge0pass@judge0-db:5432/judge0
+      SECRET_KEY: your-secret-key-change-this
+    depends_on:
+      - judge0-server
+    privileged: true
+    restart: unless-stopped
+    networks:
+      - judge0-net
+
+  judge0-db:
+    image: postgres:14-alpine
+    container_name: judge0-db
+    environment:
+      POSTGRES_USER: judge0
+      POSTGRES_PASSWORD: judge0pass
+      POSTGRES_DB: judge0
+    volumes:
+      - judge0-db-data:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+      - judge0-net
+
+  judge0-redis:
+    image: redis:7-alpine
+    container_name: judge0-redis
+    restart: unless-stopped
+    networks:
+      - judge0-net
+
+volumes:
+  judge0-db-data:
+
+networks:
+  judge0-net:
+    driver: bridge

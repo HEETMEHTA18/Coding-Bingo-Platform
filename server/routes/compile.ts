@@ -31,7 +31,84 @@ interface CompileResult {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 1. PISTON API  (free, no key, fastest: ~1-3s)
+// 1. LOCAL JUDGE0  (your own Judge0 running via judge0-compose.yml)
+//    Start:  docker compose -f judge0-compose.yml up -d
+//    URL:    http://localhost:2358
+//    Docs:   https://github.com/judge0/judge0
+// ─────────────────────────────────────────────────────────────────────────────
+const JUDGE0_LANGUAGE_IDS: Record<string, number> = {
+  c: 50,   // C (GCC 9.2.0)
+  cpp: 54, // C++ (GCC 9.2.0)
+};
+
+async function isLocalJudge0Running(): Promise<boolean> {
+  const url = process.env.JUDGE0_URL || "http://localhost:2358";
+  try {
+    const res = await fetch(`${url}/health_check`, {
+      signal: AbortSignal.timeout(1500),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+async function compileWithLocalJudge0(
+  language: "c" | "cpp",
+  source: string,
+  stdin?: string
+): Promise<CompileResult> {
+  const url = process.env.JUDGE0_URL || "http://localhost:2358";
+  const langId = JUDGE0_LANGUAGE_IDS[language];
+
+  console.log(`[Judge0-Local] Compiling ${language.toUpperCase()} via ${url}...`);
+
+  try {
+    const response = await fetch(`${url}/submissions?wait=true`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        language_id: langId,
+        source_code: source,
+        stdin: stdin || "",
+        cpu_time_limit: 5,
+        wall_time_limit: 10,
+        memory_limit: 256000,
+      }),
+      signal: AbortSignal.timeout(12000),
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      return { success: false, error: `Judge0 error: ${response.status} ${text}` };
+    }
+
+    const result = await response.json();
+    const stdout = (result.stdout || "").trim();
+    const stderr = (result.stderr || "").trim();
+    const compileOutput = (result.compile_output || "").trim();
+
+    // status.id: 3=Accepted, 5=TLE, 6=CompilationError, >=7=RuntimeError
+    if (result.status?.id === 6) {
+      return { success: false, error: "Compilation error", compileOutput: compileOutput || stderr };
+    }
+    if (result.status?.id === 5) {
+      return { success: false, error: "Time limit exceeded" };
+    }
+    if (result.status?.id === 3 || stdout) {
+      return { success: true, stdout, stderr };
+    }
+    return { success: false, error: result.status?.description || "Execution failed", stderr };
+  } catch (err: any) {
+    if (err.name === "TimeoutError" || err.name === "AbortError") {
+      return { success: false, error: "Local Judge0 timeout" };
+    }
+    return { success: false, error: `Local Judge0 request failed: ${err.message}` };
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 2. PISTON API  (free, no key, ~1-3s external fallback)
 //    https://github.com/engineer-man/piston
 // ─────────────────────────────────────────────────────────────────────────────
 const PISTON_LANGUAGES: Record<string, { language: string; version: string }> = {
@@ -120,7 +197,7 @@ async function compileWithPiston(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 2. DOCKER  (local, no internet needed, ~10-60s cold, ~3-5s warm)
+// 3. DOCKER  (local, no internet needed, ~10-60s cold, ~3-5s warm)
 // ─────────────────────────────────────────────────────────────────────────────
 async function checkDockerAvailable(): Promise<boolean> {
   return new Promise((resolve) => {
@@ -213,7 +290,7 @@ async function compileWithDocker(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// POST /api/compile  — tries Piston → Judge0 → Docker in order
+// POST /api/compile — chain: Local Judge0 → Piston API → Docker gcc
 // ─────────────────────────────────────────────────────────────────────────────
 router.post("/api/compile", async (req, res) => {
   const startTime = Date.now();
@@ -232,36 +309,39 @@ router.post("/api/compile", async (req, res) => {
   }
 
   const forceDocker = process.env.FORCE_DOCKER === "true";
-  const forceJudge0 = process.env.FORCE_JUDGE0 === "true";
+  const forcePiston = process.env.FORCE_PISTON === "true";
 
-  // 1️⃣ Try Piston first (fastest, always available)
-  if (!forceDocker && !forceJudge0) {
+  // 1️⃣ Local Judge0 (fastest, fully private — run: docker compose -f judge0-compose.yml up -d)
+  if (!forceDocker && !forcePiston) {
+    const j0Running = await isLocalJudge0Running();
+    if (j0Running) {
+      const j0Result = await compileWithLocalJudge0(language, source, stdin);
+      if (j0Result.success || j0Result.compileOutput) {
+        j0Result.executionTime = Date.now() - startTime;
+        return res.json(j0Result);
+      }
+      console.warn("[Judge0-Local] Failed, trying Piston fallback...", j0Result.error);
+    } else {
+      console.warn("[Judge0-Local] Not running — start with: docker compose -f judge0-compose.yml up -d");
+    }
+  }
+
+  // 2️⃣ Piston API (free external fallback, no key needed)
+  if (!forceDocker) {
     const pistonResult = await compileWithPiston(language, source, stdin);
     if (pistonResult.success || pistonResult.compileOutput) {
-      // compileOutput means compile ERROR — still a definitive result
       pistonResult.executionTime = Date.now() - startTime;
       return res.json(pistonResult);
     }
-    console.warn("[Piston] Failed, trying Judge0 fallback...", pistonResult.error);
+    console.warn("[Piston] Failed, trying Docker fallback...", pistonResult.error);
   }
 
-  // 2️⃣ Try Judge0 if Piston failed or forced
-  if (!forceDocker && process.env.JUDGE0_API_KEY) {
-    const j0Result = await compileWithJudge0(language, source, stdin);
-    if (j0Result.success || j0Result.compileOutput) {
-      j0Result.executionTime = Date.now() - startTime;
-      return res.json(j0Result);
-    }
-    console.warn("[Judge0] Failed, trying Docker fallback...", j0Result.error);
-  }
-
-  // 3️⃣ Try Docker (local, slowest)
+  // 3️⃣ Docker gcc (local last resort)
   const dockerAvailable = await checkDockerAvailable();
   if (!dockerAvailable) {
     return res.status(503).json({
       success: false,
-      error:
-        "All compilers unavailable. Piston unreachable, no JUDGE0_API_KEY, Docker not running.",
+      error: "All compilers unavailable. Start Judge0: docker compose -f judge0-compose.yml up -d",
     });
   }
 
@@ -284,18 +364,25 @@ router.post("/api/compile", async (req, res) => {
   }
 });
 
-// GET /api/compile/health
+// GET /api/compile/health — reports which compilers are available
 router.get("/api/compile/health", async (_req, res) => {
-  const pistonOk = await compileWithPiston("c", '#include <stdio.h>\nint main(){printf("ok");return 0;}')
-    .then((r) => r.success)
-    .catch(() => false);
+  const [j0Running, pistonOk, dockerAvailable] = await Promise.all([
+    isLocalJudge0Running(),
+    compileWithPiston("c", '#include <stdio.h>\nint main(){printf("ok");return 0;}')
+      .then((r) => r.success).catch(() => false),
+    checkDockerAvailable(),
+  ]);
 
-  const dockerAvailable = await checkDockerAvailable();
+  const active = j0Running ? "judge0-local" : pistonOk ? "piston" : dockerAvailable ? "docker" : "none";
 
   res.json({
-    status: pistonOk ? "healthy" : dockerAvailable ? "docker-only" : "degraded",
-    piston: pistonOk ? "available" : "unavailable",
-    docker: dockerAvailable ? "available" : "unavailable",
+    status: j0Running || pistonOk || dockerAvailable ? "healthy" : "degraded",
+    active_compiler: active,
+    judge0_local: j0Running
+      ? "✅ running (http://localhost:2358)"
+      : "❌ not running — start: docker compose -f judge0-compose.yml up -d",
+    piston: pistonOk ? "✅ available" : "❌ unavailable",
+    docker_gcc: dockerAvailable ? "✅ available" : "❌ not running",
   });
 });
 
