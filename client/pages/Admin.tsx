@@ -265,6 +265,13 @@ export default function AdminPage() {
   const [uploadedRealCount, setUploadedRealCount] = useState(0);
   const [numRandomFakeQuestions, setNumRandomFakeQuestions] = useState("");
 
+  // TTT Bonus Question state
+  const [bonusQuestion, setBonusQuestion] = useState("");
+  const [bonusAnswer, setBonusAnswer] = useState("");
+  const [bonusIsReal, setBonusIsReal] = useState(true);
+  const [bonusPushed, setBonusPushed] = useState<{ id: string; question: string; isReal: boolean } | null>(null);
+  const [tttState, setTttState] = useState<{ exists: boolean; bonusQuestion: any; teamX: string | null; teamO: string | null } | null>(null);
+
   const uploadQuestions = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoading((prev) => ({ ...prev, uploadQuestions: true }));
@@ -334,6 +341,51 @@ export default function AdminPage() {
     }
   };
 
+  const pushTTTBonus = async () => {
+    if (!bonusQuestion.trim() || !bonusAnswer.trim()) {
+      alert("Please fill in both question and answer");
+      return;
+    }
+    if (!roomCode) {
+      alert("Please select a room first");
+      return;
+    }
+    setLoading((prev) => ({ ...prev, tttBonus: true }));
+    try {
+      const res = await apiFetch("/api/admin/ttt-bonus", {
+        method: "POST",
+        body: JSON.stringify({
+          room: roomCode.toUpperCase(),
+          question: bonusQuestion.trim(),
+          answer: bonusAnswer.trim(),
+          isReal: bonusIsReal,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setBonusPushed({ id: data.bonusId, question: bonusQuestion, isReal: bonusIsReal });
+        setBonusQuestion("");
+        setBonusAnswer("");
+        alert("✅ Bonus question pushed to all players!");
+      } else {
+        alert(`Failed: ${data.error}`);
+      }
+    } finally {
+      setLoading((prev) => ({ ...prev, tttBonus: false }));
+    }
+  };
+
+  const loadTTTState = async () => {
+    if (!roomCode) return;
+    try {
+      const res = await apiFetch(`/api/admin/ttt-state?room=${encodeURIComponent(roomCode.toUpperCase())}`);
+      if (res.ok) {
+        const data = await res.json();
+        setTttState(data);
+      }
+    } catch { }
+  };
+
   // Wipe user data
   const [wipeOptions, setWipeOptions] = useState({
     softDelete: false,
@@ -392,12 +444,12 @@ export default function AdminPage() {
       {/* Animated background elements */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute -top-40 -right-40 w-80 h-80 bg-purple-500/10 rounded-full blur-3xl animate-pulse"></div>
-        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-blue-500/10 rounded-full blur-3xl animate-pulse" style={{animationDelay: '1s'}}></div>
+        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-blue-500/10 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }}></div>
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-indigo-500/5 rounded-full blur-3xl"></div>
         {/* Grid overlay */}
         <div className="absolute inset-0 bg-[linear-gradient(rgba(139,92,246,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(139,92,246,0.03)_1px,transparent_1px)] bg-[size:50px_50px]"></div>
       </div>
-      
+
       <header className="sticky top-0 z-50 bg-slate-900/70 backdrop-blur-2xl border-b border-purple-500/20 shadow-[0_4px_30px_rgba(139,92,246,0.15)]">
         <div className="container py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
@@ -423,22 +475,24 @@ export default function AdminPage() {
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2 bg-slate-800/40 backdrop-blur-xl rounded-2xl p-2 border border-purple-500/20 shadow-[0_0_30px_rgba(139,92,246,0.1)] hover:shadow-[0_0_40px_rgba(139,92,246,0.15)] transition-all duration-300">
               <a
-                href={`/leaderboard?room=${encodeURIComponent(roomCode.toUpperCase())}`}
-                className="group relative flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 text-white font-bold hover:from-cyan-500 hover:to-blue-500 transition-all duration-300 shadow-lg hover:shadow-cyan-500/25 hover:shadow-xl transform hover:-translate-y-1 hover:scale-105 border border-cyan-400/30"
-                title="View Room Leaderboard"
-              >
-                <span className="text-lg group-hover:animate-bounce">🏆</span>
-                <span className="hidden sm:inline">Leaderboard</span>
-              </a>
-
-              <a
                 href="/leaderboard-all"
-                className="group relative flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-bold hover:from-emerald-500 hover:to-teal-500 transition-all duration-300 shadow-lg hover:shadow-emerald-500/25 hover:shadow-xl transform hover:-translate-y-1 hover:scale-105 border border-emerald-400/30"
-                title="View All Rooms"
+                className="group relative flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 text-white font-bold hover:from-cyan-500 hover:to-blue-500 transition-all duration-300 shadow-lg hover:shadow-cyan-500/25 hover:shadow-xl transform hover:-translate-y-1 hover:scale-105 border border-cyan-400/30"
+                title="View All Rooms Leaderboard"
               >
-                <span className="text-lg group-hover:animate-spin">🌍</span>
+                <span className="text-lg group-hover:animate-bounce">🌍</span>
                 <span className="hidden sm:inline">All Rooms</span>
               </a>
+
+              {roomCode && (
+                <a
+                  href={`/leaderboard?room=${encodeURIComponent(roomCode.toUpperCase())}`}
+                  className="group relative flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white font-bold hover:from-purple-500 hover:to-violet-500 transition-all duration-300 shadow-lg hover:shadow-purple-500/25 hover:shadow-xl transform hover:-translate-y-1 hover:scale-105 border border-purple-400/30"
+                  title="View Current Room Leaderboard"
+                >
+                  <span className="text-lg group-hover:animate-bounce">🏆</span>
+                  <span className="hidden sm:inline">Room LB</span>
+                </a>
+              )}
 
               <div className="w-px h-8 bg-gradient-to-b from-transparent via-purple-500/50 to-transparent mx-1"></div>
 
@@ -500,7 +554,7 @@ export default function AdminPage() {
         <section className="relative bg-slate-800/30 backdrop-blur-xl rounded-3xl p-6 border border-purple-500/20 shadow-[0_0_50px_rgba(139,92,246,0.1)] overflow-hidden">
           {/* Decorative corner accent */}
           <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-purple-600/20 to-transparent rounded-bl-full"></div>
-          
+
           <div className="flex items-center gap-3 mb-6">
             <div className="relative">
               <div className="absolute inset-0 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-xl blur-lg opacity-50"></div>
@@ -543,7 +597,7 @@ export default function AdminPage() {
                 >
                   {/* Hover glow effect */}
                   <div className="absolute inset-0 bg-gradient-to-r from-purple-600/0 via-purple-600/5 to-purple-600/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700"></div>
-                  
+
                   <div className="relative flex items-center justify-between">
                     <div>
                       <div className="flex items-center gap-2">
@@ -560,16 +614,16 @@ export default function AdminPage() {
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                      deleteRoom(r.code);
-                    }}
-                    disabled={loading[`deleteRoom_${r.code}`]}
-                    className="p-2 text-slate-500 hover:text-red-400 hover:bg-red-500/20 rounded-lg transition-all opacity-0 group-hover:opacity-100 hover:scale-110"
-                    title="Delete Room"
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
-                  </button>
+                        deleteRoom(r.code);
+                      }}
+                      disabled={loading[`deleteRoom_${r.code}`]}
+                      className="p-2 text-slate-500 hover:text-red-400 hover:bg-red-500/20 rounded-lg transition-all opacity-0 group-hover:opacity-100 hover:scale-110"
+                      title="Delete Room"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
                   </div>
                 </div>
               ))}
@@ -615,60 +669,61 @@ export default function AdminPage() {
                 <option value="race">🏁 Code Race</option>
                 <option value="crossword">📝 Crossword</option>
                 <option value="codecanvas">🎨 Canvas</option>
+                <option value="tictactoe">⭕ Combat TTT</option>
               </select>
             </div>
             <div className="md:col-span-2 flex flex-wrap gap-3">
-            <button
-              disabled={loading.createRoom || !roomCode.trim()}
-              className="group relative px-6 py-3.5 rounded-xl bg-gradient-to-r from-purple-600 via-fuchsia-600 to-pink-600 text-white font-bold hover:from-purple-500 hover:via-fuchsia-500 hover:to-pink-500 disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2 shadow-lg hover:shadow-purple-500/25 hover:shadow-xl transition-all transform hover:scale-105 overflow-hidden"
-            >
-              {loading.createRoom && (
-                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-              )}
-              <span className="group-hover:scale-110 transition-transform">🚀</span>
-              Create/Load
-            </button>
+              <button
+                disabled={loading.createRoom || !roomCode.trim()}
+                className="group relative px-6 py-3.5 rounded-xl bg-gradient-to-r from-purple-600 via-fuchsia-600 to-pink-600 text-white font-bold hover:from-purple-500 hover:via-fuchsia-500 hover:to-pink-500 disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2 shadow-lg hover:shadow-purple-500/25 hover:shadow-xl transition-all transform hover:scale-105 overflow-hidden"
+              >
+                {loading.createRoom && (
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                )}
+                <span className="group-hover:scale-110 transition-transform">🚀</span>
+                Create/Load
+              </button>
 
-            <button
-              type="button"
-              onClick={() => setShowStartTimer(true)}
-              className="group relative px-5 py-3.5 rounded-xl bg-gradient-to-r from-emerald-600 to-green-600 text-white font-bold hover:from-emerald-500 hover:to-green-500 flex items-center gap-2 shadow-lg hover:shadow-emerald-500/25 hover:shadow-xl transition-all transform hover:scale-105"
-            >
-              <span className="group-hover:animate-pulse">▶️</span>
-              Start
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowExtendTimer(true)}
-              disabled={!room}
-              className="group relative px-5 py-3.5 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 text-white font-bold hover:from-cyan-500 hover:to-blue-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-lg hover:shadow-cyan-500/25 hover:shadow-xl transition-all transform hover:scale-105"
-            >
-              <span className="group-hover:rotate-45 transition-transform">⏱️</span>
-              Extend
-            </button>
-            <button
-              type="button"
-              onClick={forceEnd}
-              disabled={loading.forceEnd}
-              className="group relative px-5 py-3.5 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 text-white font-bold hover:from-red-500 hover:to-rose-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-lg hover:shadow-red-500/25 hover:shadow-xl transition-all transform hover:scale-105"
-            >
-              {loading.forceEnd ? (
-                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-              ) : (
-                <span className="group-hover:scale-125 transition-transform">⏹️</span>
-              )}
-              End Game
-            </button>
+              <button
+                type="button"
+                onClick={() => setShowStartTimer(true)}
+                className="group relative px-5 py-3.5 rounded-xl bg-gradient-to-r from-emerald-600 to-green-600 text-white font-bold hover:from-emerald-500 hover:to-green-500 flex items-center gap-2 shadow-lg hover:shadow-emerald-500/25 hover:shadow-xl transition-all transform hover:scale-105"
+              >
+                <span className="group-hover:animate-pulse">▶️</span>
+                Start
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowExtendTimer(true)}
+                disabled={!room}
+                className="group relative px-5 py-3.5 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 text-white font-bold hover:from-cyan-500 hover:to-blue-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-lg hover:shadow-cyan-500/25 hover:shadow-xl transition-all transform hover:scale-105"
+              >
+                <span className="group-hover:rotate-45 transition-transform">⏱️</span>
+                Extend
+              </button>
+              <button
+                type="button"
+                onClick={forceEnd}
+                disabled={loading.forceEnd}
+                className="group relative px-5 py-3.5 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 text-white font-bold hover:from-red-500 hover:to-rose-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-lg hover:shadow-red-500/25 hover:shadow-xl transition-all transform hover:scale-105"
+              >
+                {loading.forceEnd ? (
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                ) : (
+                  <span className="group-hover:scale-125 transition-transform">⏹️</span>
+                )}
+                End Game
+              </button>
             </div>
           </form>
-          <div className="mt-6 p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl backdrop-blur-sm">
-            <h3 className="font-semibold text-amber-900 dark:text-amber-200 mb-2 flex items-center gap-2">
+          <div className="mt-6 p-4 rounded-xl" style={{ background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.25)" }}>
+            <h3 className="font-semibold text-amber-300 mb-2 flex items-center gap-2">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4v.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
               Question Management & Cleanup
             </h3>
-            <p className="text-sm text-amber-800 dark:text-amber-300 mb-4">
+            <p className="text-sm text-amber-400/80 mb-4">
               Manage questions for this room. Delete individual questions or clear all questions to start fresh.
             </p>
 
@@ -749,21 +804,19 @@ export default function AdminPage() {
               </button>
             </div>
 
-            <div className="p-3 bg-white/30 dark:bg-slate-900/30 rounded-lg border border-amber-200/50 dark:border-amber-800/50">
-              <p className="text-xs text-amber-900 dark:text-amber-200 font-medium">
+            <div className="p-3 rounded-lg" style={{ background: "rgba(0,0,0,0.3)", border: "1px solid rgba(245,158,11,0.2)" }}>
+              <p className="text-xs text-amber-400 font-medium">
                 💡 Tip: Upload a CSV with real questions, then generate random fake questions to mix in. This keeps players on their toes!
               </p>
             </div>
           </div>
           {room && (
-            <div className="bg-white/60 dark:bg-slate-700/60 backdrop-blur-sm rounded-xl p-4 border border-white/20 dark:border-slate-600/50">
+            <div className="rounded-xl p-4" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(139,92,246,0.2)" }}>
               <div className="flex items-center gap-4 text-sm">
                 <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                  <span className="font-medium text-slate-700 dark:text-slate-300">
-                    Room:
-                  </span>
-                  <span className="font-semibold text-slate-800 dark:text-slate-200">
+                  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                  <span className="font-medium text-slate-400 text-xs font-mono">ROOM:</span>
+                  <span className="font-bold text-purple-300 font-mono text-xs">
                     {room.code}
                   </span>
                 </div>
@@ -781,10 +834,8 @@ export default function AdminPage() {
                       d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"
                     />
                   </svg>
-                  <span className="font-medium text-slate-700 dark:text-slate-300">
-                    Title:
-                  </span>
-                  <span className="font-semibold text-slate-800 dark:text-slate-200">
+                  <span className="font-medium text-slate-500 text-xs font-mono">TITLE:</span>
+                  <span className="font-bold text-cyan-300 text-xs font-mono">
                     {room.title}
                   </span>
                 </div>
@@ -802,13 +853,9 @@ export default function AdminPage() {
                       d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
                     />
                   </svg>
-                  <span className="font-medium text-slate-700 dark:text-slate-300">
-                    Ends:
-                  </span>
-                  <span className="font-semibold text-slate-800 dark:text-slate-200">
-                    {room.roundEndAt
-                      ? new Date(room.roundEndAt).toLocaleTimeString()
-                      : "Not started"}
+                  <span className="font-medium text-slate-500 text-xs font-mono">ENDS:</span>
+                  <span className="font-bold text-green-300 text-xs font-mono">
+                    {room.roundEndAt ? new Date(room.roundEndAt).toLocaleTimeString() : "Not started"}
                   </span>
                 </div>
               </div>
@@ -819,7 +866,7 @@ export default function AdminPage() {
         <section className="relative bg-slate-800/30 backdrop-blur-xl rounded-3xl p-6 border border-cyan-500/20 shadow-[0_0_50px_rgba(6,182,212,0.08)] overflow-hidden">
           {/* Decorative corner accent */}
           <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-cyan-600/20 to-transparent rounded-bl-full"></div>
-          
+
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
               <div className="relative">
@@ -852,7 +899,7 @@ export default function AdminPage() {
                 <div className="absolute -top-1 -right-1 w-8 h-8 bg-gradient-to-br from-amber-500 to-orange-600 rounded-bl-xl flex items-center justify-center text-white text-xs font-black shadow-lg">
                   #{index + 1}
                 </div>
-                
+
                 <div className="flex items-center justify-between">
                   <div>
                     <div className="font-bold text-lg text-white flex items-center gap-2">
@@ -864,16 +911,16 @@ export default function AdminPage() {
                       <span className="text-xs text-cyan-400 bg-cyan-900/30 px-2 py-0.5 rounded-full font-bold">🎯 {team.lines_completed || 0} pts</span>
                     </div>
                   </div>
-                <button
-                  onClick={() => deleteTeam(team.id)}
-                  disabled={loading[`deleteTeam_${team.id}`]}
-                  className="p-2 text-slate-500 hover:text-red-400 hover:bg-red-500/20 rounded-lg transition-all opacity-0 group-hover:opacity-100 focus:opacity-100 hover:scale-110"
-                  title="Delete Team"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                  </svg>
-                </button>
+                  <button
+                    onClick={() => deleteTeam(team.id)}
+                    disabled={loading[`deleteTeam_${team.id}`]}
+                    className="p-2 text-slate-500 hover:text-red-400 hover:bg-red-500/20 rounded-lg transition-all opacity-0 group-hover:opacity-100 focus:opacity-100 hover:scale-110"
+                    title="Delete Team"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
                 </div>
               </div>
             ))}
@@ -890,7 +937,7 @@ export default function AdminPage() {
         <section className="relative bg-slate-800/30 backdrop-blur-xl rounded-3xl p-6 border border-amber-500/20 shadow-[0_0_50px_rgba(245,158,11,0.08)] overflow-hidden">
           {/* Decorative corner accent */}
           <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-amber-600/20 to-transparent rounded-bl-full"></div>
-          
+
           <div className="flex items-center gap-3 mb-6">
             <div className="relative">
               <div className="absolute inset-0 bg-gradient-to-r from-amber-500 to-orange-600 rounded-xl blur-lg opacity-50"></div>
@@ -1096,6 +1143,166 @@ export default function AdminPage() {
           </form>
         </section>
 
+        {/* ───── TTT BONUS QUESTION SECTION ─────────────────────────────────── */}
+        {true ? (
+          <section className="relative bg-slate-800/30 backdrop-blur-xl rounded-3xl p-6 border border-yellow-500/30 shadow-[0_0_50px_rgba(234,179,8,0.12)] overflow-hidden">
+            {/* Decorative glow */}
+            <div className="absolute top-0 right-0 w-40 h-40 bg-gradient-to-bl from-yellow-500/20 to-transparent rounded-bl-full pointer-events-none" />
+            <div className="absolute -bottom-10 -left-10 w-40 h-40 bg-orange-500/10 rounded-full blur-3xl pointer-events-none" />
+
+            <div className="flex items-center gap-3 mb-6 relative z-10">
+              <div className="relative">
+                <div className="absolute inset-0 bg-gradient-to-r from-yellow-500 to-orange-500 rounded-xl blur-lg opacity-60" />
+                <div className="relative w-12 h-12 bg-gradient-to-br from-yellow-500 to-orange-600 rounded-xl flex items-center justify-center shadow-lg">
+                  <span className="text-2xl">⚡</span>
+                </div>
+              </div>
+              <div>
+                <h2 className="text-2xl font-black text-white">TTT Live Bonus Question</h2>
+                <p className="text-sm text-yellow-400/80">Push a bonus challenge mid-game — teams earn 2× credits!</p>
+              </div>
+              {roomCode && (
+                <button
+                  type="button"
+                  onClick={loadTTTState}
+                  className="ml-auto px-3 py-1.5 text-xs rounded-lg bg-slate-700/60 border border-slate-600/50 text-slate-400 hover:text-white hover:border-yellow-500/50 transition-all"
+                >
+                  🔄 Refresh Status
+                </button>
+              )}
+            </div>
+
+            {/* Current bonus status */}
+            {tttState?.bonusQuestion && (
+              <div className="mb-6 p-4 rounded-2xl bg-yellow-500/10 border border-yellow-500/30 relative z-10">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
+                  <span className="text-xs font-bold text-yellow-400 uppercase tracking-widest">Active Bonus Question</span>
+                </div>
+                <p className="text-sm text-white font-mono bg-black/30 p-3 rounded-lg border border-yellow-500/20">
+                  {tttState.bonusQuestion.text}
+                </p>
+                <div className="flex gap-3 mt-2 text-xs text-slate-400">
+                  <span>Solved by: <strong className="text-yellow-400">{(tttState.bonusQuestion.solvedBy || []).length} team(s)</strong></span>
+                  <span>Type: <strong className={tttState.bonusQuestion.isReal ? 'text-blue-400' : 'text-red-400'}>{tttState.bonusQuestion.isReal ? '⚔️ Move (+2)' : '🔪 Knife (+2)'}</strong></span>
+                </div>
+              </div>
+            )}
+
+            {/* How it works */}
+            <div className="mb-5 p-4 rounded-xl bg-black/20 border border-yellow-500/20 relative z-10">
+              <p className="text-xs text-yellow-300 font-bold uppercase tracking-widest mb-2">⚡ How Bonus Works</p>
+              <div className="grid grid-cols-2 gap-3 text-xs text-slate-300">
+                <div className="flex items-start gap-2">
+                  <span className="text-blue-400 text-base">⚔️</span>
+                  <div><strong className="text-white">Real bonus</strong> → Solve correctly → <strong className="text-blue-400">+2 Move Credits + 1 Knife</strong></div>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="text-red-400 text-base">🔪</span>
+                  <div><strong className="text-white">Fake bonus</strong> → Solve correctly → <strong className="text-red-400">+2 Knife Credits</strong></div>
+                </div>
+                <div className="flex items-start gap-2 col-span-2">
+                  <span className="text-yellow-400 text-base">📡</span>
+                  <div>Question appears <strong className="text-yellow-300">instantly</strong> on both teams' screens as a flashing bonus alert via SSE</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Form */}
+            <div className="space-y-4 relative z-10">
+              <div>
+                <label className="block text-sm font-bold text-slate-300 mb-2">
+                  Bonus Question / Challenge
+                </label>
+                <textarea
+                  value={bonusQuestion}
+                  onChange={(e) => setBonusQuestion(e.target.value)}
+                  placeholder="e.g. Print output of: int x=5; printf('%d', x*x);"
+                  rows={3}
+                  className="w-full rounded-xl border border-yellow-500/30 bg-slate-900/60 px-4 py-3 text-white font-mono text-sm placeholder-slate-600 focus:border-yellow-500/60 focus:outline-none focus:ring-1 focus:ring-yellow-500/40 transition-all resize-none"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-bold text-slate-300 mb-2">Correct Answer</label>
+                  <input
+                    value={bonusAnswer}
+                    onChange={(e) => setBonusAnswer(e.target.value)}
+                    placeholder="Expected output / answer"
+                    className="w-full rounded-xl border border-yellow-500/30 bg-slate-900/60 px-4 py-3 text-white font-mono text-sm placeholder-slate-600 focus:border-yellow-500/60 focus:outline-none focus:ring-1 focus:ring-yellow-500/40 transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-300 mb-2">Credit Type</label>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setBonusIsReal(true)}
+                      className={`flex-1 py-3 rounded-xl border-2 text-xs font-bold transition-all ${bonusIsReal
+                        ? 'bg-blue-600/20 border-blue-500 text-blue-400 shadow-[0_0_15px_rgba(59,130,246,0.3)]'
+                        : 'bg-slate-800/50 border-slate-700 text-slate-500 hover:border-blue-500/50'
+                        }`}
+                    >
+                      ⚔️ MOVE<br /><span className="font-normal">+2 Credits</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setBonusIsReal(false)}
+                      className={`flex-1 py-3 rounded-xl border-2 text-xs font-bold transition-all ${!bonusIsReal
+                        ? 'bg-red-600/20 border-red-500 text-red-400 shadow-[0_0_15px_rgba(239,68,68,0.3)]'
+                        : 'bg-slate-800/50 border-slate-700 text-slate-500 hover:border-red-500/50'
+                        }`}
+                    >
+                      🔪 KNIFE<br /><span className="font-normal">+2 Credits</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Room required warning */}
+              {!roomCode && (
+                <div className="flex items-center gap-3 p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-sm text-red-400">
+                  <span className="text-lg">⚠️</span>
+                  <span><strong>No room selected!</strong> Type a room code above in the "Room Command" section and click <strong>Create/Load</strong> first.</span>
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={pushTTTBonus}
+                disabled={loading.tttBonus || !bonusQuestion.trim() || !bonusAnswer.trim()}
+                className="group relative w-full py-4 rounded-2xl font-black text-lg tracking-wide overflow-hidden disabled:opacity-50 disabled:cursor-not-allowed transition-all transform hover:scale-[1.02] active:scale-[0.98]"
+                style={{
+                  background: 'linear-gradient(135deg, #f59e0b, #ea580c, #dc2626)',
+                  boxShadow: (loading.tttBonus || !bonusQuestion.trim() || !bonusAnswer.trim()) ? 'none' : '0 0 30px rgba(245,158,11,0.4), 0 0 60px rgba(245,158,11,0.2)',
+                }}
+              >
+                <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                  style={{ background: 'linear-gradient(135deg, #fbbf24, #f97316, #ef4444)' }} />
+                <span className="relative flex items-center justify-center gap-3">
+                  {loading.tttBonus ? (
+                    <><div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" /> Pushing...</>
+                  ) : !bonusQuestion.trim() ? (
+                    <>✏️ Enter a question first</>
+                  ) : !bonusAnswer.trim() ? (
+                    <>✏️ Enter the correct answer</>
+                  ) : !roomCode ? (
+                    <>⚠️ Select a room first (scroll up)</>
+                  ) : (
+                    <>⚡ PUSH BONUS QUESTION TO ARENA ⚡</>
+                  )}
+                </span>
+              </button>
+
+              {bonusPushed && (
+                <div className="p-3 rounded-xl bg-green-500/10 border border-green-500/30 text-sm text-green-400 flex items-center gap-2">
+                  <span>✅</span>
+                  <span>Last bonus pushed: <strong>{bonusPushed.question.slice(0, 50)}{bonusPushed.question.length > 50 ? '…' : ''}</strong></span>
+                </div>
+              )}
+            </div>
+          </section>
+        ) : null}
         <section className="bg-gradient-to-br from-violet-50 via-purple-50 to-fuchsia-50 dark:from-slate-800 dark:via-slate-700 dark:to-slate-800 border border-white/20 dark:border-slate-600/50 rounded-2xl p-6 shadow-xl backdrop-blur-sm">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">

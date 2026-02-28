@@ -1,6 +1,6 @@
-w// Shared types used by both client & server
+// Shared types used by both client & server
 
-export type GameType = 'bingo' | 'sudoku' | 'connect4' | 'memory' | 'race' | 'crossword' | 'quiz' | 'puzzlehunt' | 'codecanvas';
+export type GameType = 'bingo' | 'sudoku' | 'connect4' | 'memory' | 'race' | 'crossword' | 'quiz' | 'puzzlehunt' | 'codecanvas' | 'tictactoe';
 
 export interface DemoResponse {
   message: string;
@@ -42,6 +42,7 @@ export interface Question {
   question_text?: string;
   correct_answer?: string;
   is_real?: boolean;
+  isSolved?: boolean;
 }
 
 // Game state
@@ -54,6 +55,22 @@ export interface GameStateResponse {
   gameStarted: boolean;
   gameEnded: boolean;
   timeRemaining: number;
+  tictactoe?: {
+    board: (string | null)[];
+    teamX: string | null;
+    teamO: string | null;
+    teamXName: string | null;
+    teamOName: string | null;
+    turn: string | null;
+    knivesCredits: Record<string, number>;
+    movesCredits: Record<string, number>;
+    winner: string | null;
+    winByMajority?: boolean;
+    yourSymbol: 'X' | 'O' | null;
+    canMove: boolean;
+    canKnife: boolean;
+    bothConnected: boolean;
+  };
 }
 
 // Leaderboard

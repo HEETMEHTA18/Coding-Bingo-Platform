@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { createServer as createHttpServer } from "http";
 import express from "express";
 import cors from "cors";
 import multer from "multer";
@@ -27,9 +28,9 @@ import {
   handleDeleteAllRooms,
 } from "./routes/admin.js";
 import { handleLeaderboard, handleLeaderboardAll } from "./routes/leaderboard.js";
-import { handleLogin, handleGameState, handleSubmit, handleRecentSubmissions } from "./routes/game.js";
-import { 
-  handleAuthLogin, 
+import { handleLogin, handleGameState, handleSubmit, handleRecentSubmissions, handleTicTacToeAction, handleTicTacToeStream, handleAdminPushBonus, handleTTTBonusSubmit, handleAdminTTTState, handleSpectate, handleGameStream } from './routes/game.js';
+import {
+  handleAuthLogin,
   handleAuthLogout,
   handleGetCurrentUser,
   handleListAdmins,
@@ -42,9 +43,10 @@ import {
   handleGetWebsiteStats,
   handleGetAllTeams,
   handleGetAllQuestions,
-  ensureDefaultAdmin 
+  ensureDefaultAdmin
 } from "./routes/auth.js";
 import compileRouter from "./routes/compile.js";
+import { handleMasterState } from "./routes/master.js";
 import {
   requestTimingMiddleware,
   getRequestTimings,
@@ -52,6 +54,10 @@ import {
 
 export const createServer = () => {
   const app = express();
+
+  // Trust the Nginx reverse-proxy so req.ip reflects the real client IP
+  // (required for accurate rate limiting when behind a proxy)
+  app.set('trust proxy', 1);
 
   // Ensure default admin exists
   ensureDefaultAdmin().catch(err => console.error("Failed to seed admin:", err));
@@ -93,7 +99,11 @@ export const createServer = () => {
       originAgentCluster: false, // Disable Origin-Agent-Cluster in development
     }),
   );
-  app.use(compression());
+  app.use(compression({ level: 6, threshold: 1024 })); // gzip level 6, skip tiny responses
+
+  // Global JSON body parser – all routes share one instance (avoids per-route overhead).
+  // The compiler route overrides this with a higher 50 MB limit below.
+  app.use(express.json({ limit: "10mb" }));
 
   // Rate limiting for API endpoints
   const limiter = rateLimit({
@@ -154,56 +164,65 @@ export const createServer = () => {
   app.get("/api/demo", handleDemo);
 
   // Admin routes
-  app.get("/api/admin/state", express.json({ limit: "10mb" }), handleAdminState);
-  app.post("/api/admin/create-room", express.json({ limit: "10mb" }), handleCreateRoom);
-  app.post("/api/admin/start", express.json({ limit: "10mb" }), handleStartGame);
-  app.post("/api/admin/extend-timer", express.json({ limit: "10mb" }), handleExtendTimer);
-  app.post("/api/admin/force-end", express.json({ limit: "10mb" }), handleForceEnd);
-  app.post("/api/admin/add-question", express.json({ limit: "10mb" }), handleAddQuestion);
-  app.post("/api/admin/delete-question", express.json({ limit: "10mb" }), handleDeleteQuestion);
+  app.get("/api/admin/state", handleAdminState);
+  app.post("/api/admin/create-room", handleCreateRoom);
+  app.post("/api/admin/start", handleStartGame);
+  app.post("/api/admin/extend-timer", handleExtendTimer);
+  app.post("/api/admin/force-end", handleForceEnd);
+  app.post("/api/admin/add-question", handleAddQuestion);
+  app.post("/api/admin/delete-question", handleDeleteQuestion);
   app.post("/api/admin/upload-questions", handleUploadQuestions); // No JSON parsing for file uploads
-  app.post("/api/admin/generate-fake-questions", express.json({ limit: "10mb" }), handleGenerateFakeQuestions);
-  app.post("/api/admin/delete-questions-by-type", express.json({ limit: "10mb" }), handleDeleteQuestionsByType);
-  app.post("/api/admin/delete-all-questions", express.json({ limit: "10mb" }), handleDeleteAllQuestions);
-  app.post("/api/admin/delete-team", express.json({ limit: "10mb" }), handleDeleteTeam);
-  app.post("/api/admin/delete-all-teams", express.json({ limit: "10mb" }), handleDeleteAllTeams);
-  app.get("/api/admin/rooms", express.json({ limit: "10mb" }), handleListRooms);
-  app.post("/api/admin/delete-room", express.json({ limit: "10mb" }), handleDeleteRoom);
-  app.post("/api/admin/delete-all-rooms", express.json({ limit: "10mb" }), handleDeleteAllRooms);
-  app.post("/api/admin/wipe", express.json({ limit: "10mb" }), handleWipeUserData);
+  app.post("/api/admin/generate-fake-questions", handleGenerateFakeQuestions);
+  app.post("/api/admin/delete-questions-by-type", handleDeleteQuestionsByType);
+  app.post("/api/admin/delete-all-questions", handleDeleteAllQuestions);
+  app.post("/api/admin/delete-team", handleDeleteTeam);
+  app.post("/api/admin/delete-all-teams", handleDeleteAllTeams);
+  app.get("/api/admin/rooms", handleListRooms);
+  app.post("/api/admin/delete-room", handleDeleteRoom);
+  app.post("/api/admin/delete-all-rooms", handleDeleteAllRooms);
+  app.post("/api/admin/wipe", handleWipeUserData);
 
   // Leaderboard routes
-  app.get("/api/leaderboard", express.json({ limit: "10mb" }), handleLeaderboard);
-  app.get("/api/leaderboard/all", express.json({ limit: "10mb" }), handleLeaderboardAll);
+  app.get("/api/leaderboard", handleLeaderboard);
+  app.get("/api/leaderboard/all", handleLeaderboardAll);
 
   // Game routes
-  app.post("/api/login", express.json({ limit: "10mb" }), handleLogin);
-  app.post("/api/auth/login", express.json({ limit: "10mb" }), handleAuthLogin);
-  app.post("/api/auth/logout", express.json({ limit: "10mb" }), handleAuthLogout);
+  app.post("/api/login", handleLogin);
+  app.post("/api/auth/login", handleAuthLogin);
+  app.post("/api/auth/logout", handleAuthLogout);
   app.get("/api/auth/me", handleGetCurrentUser);
-  app.get("/api/game", express.json({ limit: "10mb" }), handleGameState);
-  app.post("/api/submit", express.json({ limit: "10mb" }), handleSubmit);
-  app.get("/api/recent-submissions", express.json({ limit: "10mb" }), handleRecentSubmissions);
+  app.get("/api/game", handleGameState);
+  app.get("/api/game/stream", handleGameStream); // SSE: instant board push on correct submissions
+  app.post("/api/submit", handleSubmit);
+  app.get("/api/recent-submissions", handleRecentSubmissions);
+  app.post("/api/tictactoe/action", handleTicTacToeAction);
+  app.get("/api/tictactoe/stream", handleTicTacToeStream); // SSE: real-time board updates
+  app.post("/api/admin/ttt-bonus", handleAdminPushBonus); // Admin pushes live bonus
+  app.post("/api/tictactoe/bonus-submit", handleTTTBonusSubmit); // Team submits bonus answer
+  app.get("/api/admin/ttt-state", handleAdminTTTState); // Admin reads TTT board state
+  app.get("/api/spectate", handleSpectate); // Spectator: full live board state
 
   // Super Admin routes
   app.get("/api/superadmin/admins", handleListAdmins);
-  app.post("/api/superadmin/admins", express.json({ limit: "10mb" }), handleCreateAdmin);
-  app.put("/api/superadmin/admins", express.json({ limit: "10mb" }), handleUpdateAdmin);
-  app.delete("/api/superadmin/admins", express.json({ limit: "10mb" }), handleDeleteAdmin);
+  app.post("/api/superadmin/admins", handleCreateAdmin);
+  app.put("/api/superadmin/admins", handleUpdateAdmin);
+  app.delete("/api/superadmin/admins", handleDeleteAdmin);
   app.get("/api/superadmin/activity-logs", handleGetActivityLogs);
   app.get("/api/superadmin/sessions", handleGetActiveSessions);
-  app.post("/api/superadmin/terminate-session", express.json({ limit: "10mb" }), handleTerminateSession);
+  app.post("/api/superadmin/terminate-session", handleTerminateSession);
   app.get("/api/superadmin/stats", handleGetWebsiteStats);
   app.get("/api/superadmin/teams", handleGetAllTeams);
   app.get("/api/superadmin/questions", handleGetAllQuestions);
 
-  // C/C++ Compiler routes (needs JSON parsing)
+  // C/C++ Compiler routes (50 MB limit overrides the global 10 MB parser)
   app.use(express.json({ limit: "50mb" }), compileRouter);
 
   // Admin/debug: recent request timings
   app.get("/api/admin/request-timings", (req, res) => {
     res.json({ timings: getRequestTimings() });
   });
+
+  app.get("/api/master/state", handleMasterState);
 
   // Health check endpoint
   app.get("/api/health", async (req, res) => {
@@ -238,3 +257,19 @@ const app = createServer();
 
 // Export for Vercel serverless
 export default app;
+
+// Start HTTP server when run directly (e.g. Docker / node dist/server/index.mjs)
+// In Vercel, this module is imported, not run directly, so this block is skipped.
+const PORT = parseInt(process.env.PORT || "8080", 10);
+
+const httpServer = createHttpServer(app);
+
+// Keep-alive tuning: allows connection reuse from Nginx keepalive pool.
+// headersTimeout must be > keepAliveTimeout to avoid race-condition 503s.
+httpServer.keepAliveTimeout = 65_000;   // match Nginx keepalive_timeout 65
+httpServer.headersTimeout   = 70_000;   // 5 s grace above keepAliveTimeout
+
+httpServer.listen(PORT, "0.0.0.0", () => {
+  console.log(`✓ Server running on http://0.0.0.0:${PORT}`);
+  console.log(`  Health: http://localhost:${PORT}/api/health`);
+});

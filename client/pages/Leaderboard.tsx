@@ -1,745 +1,432 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import type {
-  LeaderboardResponse,
-  Room,
-  GameStateResponse,
-  Team,
-} from "@shared/api";
+import type { LeaderboardResponse, Room, Team } from "@shared/api";
 import { apiFetch } from "../lib/api";
+
+function formatTime(ms: number) {
+  if (!ms || ms === 0) return "0:00";
+  const t = Math.floor(ms / 1000);
+  const h = Math.floor(t / 3600);
+  const m = Math.floor((t % 3600) / 60);
+  const s = t % 60;
+  if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
 
 export default function LeaderboardPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const isAdmin =
-    typeof window !== "undefined" &&
-    localStorage.getItem("bingo.admin") === "true";
-  const fromCongratulations = location.state?.fromCongratulations || false;
-  const [team, setTeam] = useState<Team | null>(() => {
-    const raw = localStorage.getItem("bingo.team");
-    try {
-      return raw && raw !== "undefined" && raw !== "null"
-        ? (JSON.parse(raw) as Team)
-        : null;
-    } catch {
-      return null;
-    }
-  });
+  const isAdmin = typeof window !== "undefined" && localStorage.getItem("bingo.admin") === "true";
+
+  /* ── room state: URL ?room= wins, then localStorage ── */
   const [room, setRoom] = useState<Room | null>(() => {
-    const fromQuery = new URLSearchParams(window.location.search).get("room");
-    if (fromQuery)
-      return {
-        code: fromQuery.toUpperCase(),
-        title: fromQuery.toUpperCase(),
-        roundEndAt: null,
-      } as Room;
-    const raw = localStorage.getItem("bingo.room");
+    const q = new URLSearchParams(window.location.search).get("room")?.trim();
+    if (q) return { code: q.toUpperCase(), title: q.toUpperCase(), roundEndAt: null } as Room;
     try {
-      return raw && raw !== "undefined" && raw !== "null"
-        ? (JSON.parse(raw) as Room)
-        : null;
-    } catch {
-      return null;
-    }
+      const r = localStorage.getItem("bingo.room");
+      if (r && r !== "undefined" && r !== "null") return JSON.parse(r) as Room;
+    } catch { }
+    return null;
   });
+
+  /* team for "YOU" highlight */
+  const [team] = useState<Team | null>(() => {
+    try {
+      const r = localStorage.getItem("bingo.team");
+      if (r && r !== "undefined" && r !== "null") return JSON.parse(r) as Team;
+    } catch { }
+    return null;
+  });
+
   const [rows, setRows] = useState<LeaderboardResponse["rows"]>([]);
   const [search, setSearch] = useState("");
-  const [loading, setLoading] = useState<{ [key: string]: boolean }>({});
-  const [gameCompleted, setGameCompleted] = useState<boolean>(false);
+  const [roomInput, setRoomInput] = useState(room?.code ?? "");
 
-  const load = async () => {
-    if (!room) return;
-    const res = await apiFetch(
-      `/api/leaderboard?room=${encodeURIComponent(room.code)}`,
-    );
-    const data = (await res.json()) as LeaderboardResponse;
-    setRows(data.rows);
+  /* ── use a ref so setInterval always sees the latest room ── */
+  const roomRef = useRef(room);
+  useEffect(() => { roomRef.current = room; }, [room]);
 
-    // Check game completion if from congratulations and team exists
-    if (fromCongratulations && team) {
-      const stateRes = await apiFetch(
-        `/api/game-state?teamId=${encodeURIComponent(team.id)}`,
-      );
-      const state = (await stateRes.json()) as GameStateResponse;
-      setGameCompleted(state.team.lines_completed >= 5);
+  /* ── load function always reads from ref → no stale closure ── */
+  const load = useCallback(async () => {
+    const cur = roomRef.current;
+    if (!cur?.code) return;
+    try {
+      const res = await apiFetch(`/api/leaderboard?room=${encodeURIComponent(cur.code)}`);
+      if (!res.ok) return;
+      const data = (await res.json()) as LeaderboardResponse;
+      setRows(data.rows ?? []);
+    } catch (err) {
+      console.error("Leaderboard load error:", err);
     }
-  };
+  }, []);   // stable — reads from ref
 
+  /* trigger load whenever room.code changes or on first mount */
+  useEffect(() => {
+    roomRef.current = room;
+    setRows([]);
+    load();
+    const id = setInterval(load, 4000);
+    return () => clearInterval(id);
+  }, [room?.code, load]);
+
+  /* redirect non-admin with no room */
   useEffect(() => {
     if (!room && !isAdmin) navigate("/");
   }, [room, isAdmin, navigate]);
 
-  useEffect(() => {
-    load();
-    const id = setInterval(load, 4000);
-    return () => clearInterval(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [room?.code]);
-
-  // Find the maximum lines completed among all teams
-  const maxLinesCompleted = Math.max(
-    ...rows.map((r) => r.team.lines_completed ?? 0),
+  const filteredRows = rows.filter(r =>
+    r.team.team_name.toLowerCase().includes(search.toLowerCase())
   );
+  // Detect if this room is TTT (any row has ttt_role set)
+  const isTTTRoom = rows.some(r => (r.team as any).ttt_role !== undefined && (r.team as any).ttt_role !== null);
+  const hasWinner = isTTTRoom
+    ? rows.some(r => (r.team as any).ttt_winner === true)
+    : rows.some(r => (r.team.lines_completed ?? 0) >= 5);
+  const activePlayers = isTTTRoom ? rows.filter(r => (r.team as any).ttt_role !== 'spectator') : rows;
 
-  // A team is a winner only if they have completed bingo (>= 5 lines)
-  const hasWinner = rows.some((r) => (r.team.lines_completed ?? 0) >= 5);
+  const CARD = "rgba(15,15,30,0.85)";
+  const rankColors = [
+    { bg: "linear-gradient(135deg,#f59e0b,#d97706)", shadow: "0 0 20px rgba(245,158,11,0.5)", label: "🥇" },
+    { bg: "linear-gradient(135deg,#94a3b8,#64748b)", shadow: "0 0 16px rgba(148,163,184,0.4)", label: "🥈" },
+    { bg: "linear-gradient(135deg,#d97706,#92400e)", shadow: "0 0 14px rgba(217,119,6,0.4)", label: "🥉" },
+  ];
 
-  const filteredRows = rows.filter((r) =>
-    r.team.team_name.toLowerCase().includes(search.toLowerCase()),
-  );
+  /* ── ADMIN room-select handler ── */
+  const handleLoadRoom = (e: React.FormEvent) => {
+    e.preventDefault();
+    const code = roomInput.trim().toUpperCase();
+    if (!code) return;
+    setRoom({ code, title: code, roundEndAt: null } as Room);
+  };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
-      <header className="sticky top-0 z-10 bg-white/90 dark:bg-slate-900/90 backdrop-blur-lg border-b border-white/20 dark:border-slate-700/50 shadow-sm">
-        <div className="container py-4 flex items-center justify-between">
+    <div className="min-h-screen relative overflow-hidden"
+      style={{ background: "radial-gradient(ellipse 80% 50% at 50% -15%,rgba(109,40,217,0.2) 0%,transparent 60%),radial-gradient(ellipse 60% 40% at 90% 100%,rgba(6,182,212,0.08) 0%,transparent 50%),hsl(224,20%,5%)" }}>
+
+      {/* Grid */}
+      <div className="absolute inset-0 pointer-events-none" style={{ backgroundImage: "linear-gradient(rgba(99,102,241,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(99,102,241,0.03) 1px,transparent 1px)", backgroundSize: "60px 60px" }} />
+
+      {/* ── Header ── */}
+      <header className="sticky top-0 z-50" style={{ background: "rgba(7,8,18,0.92)", borderBottom: "1px solid rgba(139,92,246,0.2)", backdropFilter: "blur(24px)" }}>
+        <div className="h-px" style={{ background: "linear-gradient(90deg,transparent,rgba(139,92,246,0.6),rgba(6,182,212,0.4),transparent)" }} />
+        <div className="container py-3 flex items-center justify-between gap-4 flex-wrap">
+
+          {/* Left */}
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-yellow-400 to-orange-500 flex items-center justify-center shadow-lg">
-              <span className="text-2xl">🏆</span>
+            <div className="relative">
+              <div className="absolute inset-0 rounded-xl blur-md opacity-70 animate-pulse" style={{ background: "rgba(245,158,11,0.6)" }} />
+              <div className="relative w-12 h-12 rounded-xl flex items-center justify-center text-2xl" style={{ background: "linear-gradient(135deg,#d97706,#f59e0b)" }}>🏆</div>
             </div>
             <div>
-              <h1 className="font-bold text-2xl text-slate-800 dark:text-slate-200">
-                Live Leaderboard
+              <h1 className="font-black text-xl tracking-wider" style={{ fontFamily: "'Orbitron',sans-serif", background: "linear-gradient(90deg,#fbbf24,#fde68a,#f59e0b)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
+                ARENA STANDINGS
               </h1>
-              <p className="text-sm text-slate-600 dark:text-slate-400">
-                Room:{" "}
-                <span className="font-semibold text-blue-600 dark:text-blue-400">
-                  {room?.code ?? "—"}
-                </span>
+              <p className="text-xs font-mono" style={{ color: room?.code ? "#a78bfa" : "#ef4444" }}>
+                Room: <span className="font-bold">{room?.code || "NO ROOM — ENTER CODE BELOW"}</span>
               </p>
             </div>
+
+            {/* Admin room-load form (always visible for admin) */}
             {isAdmin && (
-              <form
-                onSubmit={async (e) => {
-                  e.preventDefault();
-                  const form = e.currentTarget as HTMLFormElement;
-                  const input = form.elements.namedItem(
-                    "code",
-                  ) as HTMLInputElement;
-                  const code = input.value.trim().toUpperCase();
-                  if (!code) return;
-                  setLoading((prev) => ({ ...prev, loadRoom: true }));
-                  try {
-                    setRoom({ code, title: code, roundEndAt: null } as Room);
-                    setRows([]);
-                  } finally {
-                    setLoading((prev) => ({ ...prev, loadRoom: false }));
-                  }
-                }}
-                className="flex items-center gap-2 ml-4"
-              >
+              <form onSubmit={handleLoadRoom} className="flex gap-2 ml-2">
                 <input
-                  name="code"
-                  defaultValue={room?.code ?? ""}
-                  placeholder="Room Code"
-                  className="rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm"
+                  value={roomInput}
+                  onChange={e => setRoomInput(e.target.value.toUpperCase())}
+                  placeholder="ROOM CODE"
+                  className="rounded-lg px-3 py-1.5 text-xs font-mono font-bold tracking-wider w-28"
+                  style={{ background: "rgba(139,92,246,0.12)", border: "1px solid rgba(139,92,246,0.4)", color: "white" }}
                 />
-                <button
-                  disabled={loading.loadRoom}
-                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-blue-500 to-purple-600 text-white font-semibold hover:from-blue-600 hover:to-purple-700 disabled:opacity-60 flex items-center gap-2 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
-                >
-                  {loading.loadRoom && (
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  )}
-                  Load
+                <button type="submit" className="px-3 py-1.5 rounded-lg text-xs font-bold text-purple-300 hover:text-white transition-colors" style={{ background: "rgba(139,92,246,0.25)", border: "1px solid rgba(139,92,246,0.5)" }}>
+                  LOAD
                 </button>
               </form>
             )}
           </div>
-          <div className="flex items-center gap-4">
+
+          {/* Right */}
+          <div className="flex items-center gap-2 flex-wrap">
             <input
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search teams..."
-              className="rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm"
+              onChange={e => setSearch(e.target.value)}
+              placeholder="🔍 Search teams..."
+              className="rounded-lg px-3 py-1.5 text-xs w-36"
+              style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(139,92,246,0.3)", color: "white" }}
             />
             {isAdmin && (
-              <button
-                onClick={() => {
-                  const csvContent = [
-                    [
-                      "Rank",
-                      "Team Name",
-                      "Lines Completed",
-                      "Time Taken (ms)",
-                      "Winner",
-                      "Completion Time",
-                    ].join(","),
-                    ...filteredRows.map((r) =>
-                      [
-                        r.rank,
-                        `"${r.team.team_name}"`,
-                        r.team.lines_completed ?? 0,
-                        r.team.time_taken_ms ?? 0,
-                        (r.team.lines_completed ?? 0) === maxLinesCompleted &&
-                        maxLinesCompleted > 0
-                          ? "Yes"
-                          : "No",
-                        r.team.end_time
-                          ? `"${new Date(r.team.end_time).toISOString()}"`
-                          : "",
-                      ].join(","),
-                    ),
-                  ].join("\n");
-                  const blob = new Blob([csvContent], {
-                    type: "text/csv;charset=utf-8;",
-                  });
-                  const link = document.createElement("a");
-                  const url = URL.createObjectURL(blob);
-                  link.setAttribute("href", url);
-                  link.setAttribute(
-                    "download",
-                    `leaderboard-${room?.code || "room"}.csv`,
-                  );
-                  link.style.visibility = "hidden";
-                  document.body.appendChild(link);
-                  link.click();
-                  document.body.removeChild(link);
-                }}
-                className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-semibold hover:from-emerald-600 hover:to-teal-600 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
-              >
-                📊 Export CSV
-              </button>
-            )}
-            {isAdmin && (
-              <button
-                onClick={() => navigate("/leaderboard-all")}
-                className="px-4 py-2 rounded-xl bg-gradient-to-r from-purple-500 to-pink-500 text-white font-semibold hover:from-purple-600 hover:to-pink-600 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
-              >
-                🌍 All Rooms
-              </button>
+              <>
+                <button
+                  onClick={() => {
+                    const csv = ["Rank,Team,Lines,Time,Winner"]
+                      .concat(filteredRows.map(r =>
+                        `${r.rank},"${r.team.team_name}",${r.team.lines_completed ?? 0},${r.team.time_taken_ms ?? 0},${(r.team.lines_completed ?? 0) >= 5 ? "Yes" : "No"}`
+                      )).join("\n");
+                    const b = new Blob([csv], { type: "text/csv" });
+                    const a = document.createElement("a");
+                    a.href = URL.createObjectURL(b);
+                    a.download = `lb-${room?.code ?? "room"}.csv`;
+                    a.click();
+                  }}
+                  className="px-3 py-1.5 rounded-lg text-xs font-bold text-green-400"
+                  style={{ background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.3)" }}>
+                  📊 CSV
+                </button>
+                <button
+                  onClick={() => navigate("/leaderboard-all")}
+                  className="px-3 py-1.5 rounded-lg text-xs font-bold text-cyan-400"
+                  style={{ background: "rgba(6,182,212,0.1)", border: "1px solid rgba(6,182,212,0.3)" }}>
+                  🌍 All Rooms
+                </button>
+              </>
             )}
             <button
               onClick={() => navigate(isAdmin ? "/admin" : "/game")}
-              className={`px-6 py-2.5 rounded-xl bg-gradient-to-r from-green-500 to-teal-500 text-white font-semibold hover:from-green-600 hover:to-teal-600 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 ${fromCongratulations && gameCompleted ? "hidden" : ""}`}
-            >
-              {isAdmin ? "Back to Dashboard" : "Back to Game"}
+              className="px-4 py-1.5 rounded-lg text-xs font-bold text-white"
+              style={{ background: "linear-gradient(135deg,#7c3aed,#a855f7)", boxShadow: "0 0 16px rgba(139,92,246,0.3)" }}>
+              ← {isAdmin ? "Dashboard" : "Battle"}
             </button>
           </div>
         </div>
       </header>
 
-      <main className="container py-8">
-        <div className="space-y-8">
-          {/* Room Winner Banner */}
-          {hasWinner && rows.length > 0 && (
-            <div className="bg-gradient-to-r from-yellow-100 via-amber-100 to-orange-100 dark:from-yellow-900/30 dark:via-amber-900/30 dark:to-orange-900/30 border-2 border-yellow-300 dark:border-yellow-600 rounded-2xl p-6 shadow-2xl animate-in slide-in-from-top-5">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="w-16 h-16 rounded-full bg-gradient-to-br from-yellow-400 to-orange-500 flex items-center justify-center shadow-xl animate-bounce">
-                    <span className="text-4xl">👑</span>
+      <main className="container py-8 space-y-6 relative z-10">
+
+        {/* No room prompt for admin */}
+        {!room && isAdmin && (
+          <div className="rounded-2xl p-8 text-center" style={{ background: CARD, border: "1px solid rgba(139,92,246,0.3)" }}>
+            <div className="text-4xl mb-4">🔍</div>
+            <h2 className="text-lg font-black text-white mb-2" style={{ fontFamily: "'Orbitron',sans-serif" }}>SELECT A ROOM</h2>
+            <p className="text-sm text-slate-500 mb-6">Enter a room code above to view its leaderboard</p>
+            <form onSubmit={handleLoadRoom} className="flex gap-2 max-w-xs mx-auto">
+              <input
+                value={roomInput}
+                onChange={e => setRoomInput(e.target.value.toUpperCase())}
+                placeholder="e.g. GAME01"
+                className="flex-1 rounded-xl px-4 py-2.5 text-sm font-mono font-bold tracking-wider"
+                style={{ background: "rgba(139,92,246,0.1)", border: "1px solid rgba(139,92,246,0.4)", color: "white" }}
+              />
+              <button type="submit" className="px-5 py-2.5 rounded-xl text-sm font-bold text-white" style={{ background: "linear-gradient(135deg,#7c3aed,#a855f7)" }}>
+                LOAD
+              </button>
+            </form>
+          </div>
+        )}
+
+        {/* Winner banner */}
+        {hasWinner && rows.length > 0 && (() => {
+          const champ = isTTTRoom
+            ? rows.find(r => (r.team as any).ttt_winner)
+            : rows.find(r => (r.team.lines_completed ?? 0) >= 5);
+          return (
+            <div className="rounded-2xl p-6 relative overflow-hidden" style={{ background: "linear-gradient(135deg,rgba(245,158,11,0.15),rgba(251,191,36,0.05))", border: "1px solid rgba(245,158,11,0.4)", boxShadow: "0 0 40px rgba(245,158,11,0.12)" }}>
+              <div className="flex items-center gap-5">
+                <div className="w-14 h-14 rounded-full flex items-center justify-center text-2xl animate-bounce flex-shrink-0" style={{ background: "linear-gradient(135deg,#f59e0b,#d97706)", boxShadow: "0 0 30px rgba(245,158,11,0.6)" }}>👑</div>
+                <div>
+                  <p className="text-xs font-mono text-amber-400 tracking-widest mb-1">🎉 {isTTTRoom ? "TTT CHAMPION" : "ARENA CHAMPION"}</p>
+                  <p className="text-xl font-black text-white" style={{ fontFamily: "'Orbitron',sans-serif" }}>{champ?.team.team_name}</p>
+                  <div className="flex gap-4 mt-1 text-xs text-amber-300 font-mono">
+                    <span>⏱ {formatTime(champ?.team.time_taken_ms || 0)}</span>
+                    {isTTTRoom
+                      ? <span>🎮 Played as {(champ?.team as any).ttt_role} · {champ?.team.solved_questions_count ?? 0} Qs solved</span>
+                      : <span>📏 {champ?.team.lines_completed}/5 lines</span>}
                   </div>
-                  <div>
-                    <div className="text-sm text-yellow-700 dark:text-yellow-300 font-semibold uppercase tracking-wider">
-                      🎉 Room Winner
-                    </div>
-                    <div className="text-2xl font-bold text-slate-800 dark:text-slate-100">
-                      {rows.find(r => (r.team.lines_completed ?? 0) >= 5)?.team.team_name}
-                    </div>
-                    <div className="flex items-center gap-4 mt-1 text-sm text-slate-600 dark:text-slate-400">
-                      <span>⏱️ {formatTime(rows.find(r => (r.team.lines_completed ?? 0) >= 5)?.team.time_taken_ms || 0)}</span>
-                      <span>📏 {rows.find(r => (r.team.lines_completed ?? 0) >= 5)?.team.lines_completed}/5 lines</span>
-                      <span>✅ {rows.find(r => (r.team.lines_completed ?? 0) >= 5)?.team.solved_questions_count || 0} questions solved</span>
-                    </div>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
+        {!hasWinner && rows.length > 0 && (
+          <div className="rounded-xl p-3 flex items-center justify-center gap-3" style={{ background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.25)" }}>
+            <span className="text-lg animate-pulse">⚔️</span>
+            <p className="text-xs font-mono text-indigo-300 tracking-wider">
+              {isTTTRoom ? "TTT MATCH IN PROGRESS — First to get 3 in a row wins!" : "BATTLE IN PROGRESS — First to complete 5 lines wins the arena!"}
+            </p>
+          </div>
+        )}
+
+        {/* Stat cards */}
+        {room && (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {[
+              { icon: "👥", label: isTTTRoom ? "PLAYERS" : "TEAMS", value: String(isTTTRoom ? activePlayers.length : rows.length), color: "rgba(139,92,246,0.35)" },
+              { icon: "🏆", label: "WINNERS", value: String(rows.filter(r => isTTTRoom ? (r.team as any).ttt_winner : (r.team.lines_completed ?? 0) >= 5).length), color: "rgba(34,197,94,0.35)" },
+              {
+                icon: "🎯", label: isTTTRoom ? "QUESTIONS" : "AVG PROGRESS",
+                value: isTTTRoom
+                  ? (activePlayers.reduce((a, r) => a + (r.team.solved_questions_count ?? 0), 0) + " solved")
+                  : (rows.length > 0 ? Math.round((rows.reduce((a, r) => a + (r.team.lines_completed ?? 0), 0) / rows.length) * 20) + "%" : "0%"),
+                color: "rgba(245,158,11,0.35)"
+              },
+              {
+                icon: "⚡", label: "LEADER",
+                value: (isTTTRoom ? rows.find(r => (r.team as any).ttt_winner) ?? activePlayers[0] : rows[0])?.team.team_name || "--",
+                color: "rgba(6,182,212,0.35)"
+              },
+            ].map((s, i) => (
+              <div key={i} className="rounded-xl p-4" style={{ background: CARD, border: `1px solid ${s.color}` }}>
+                <p className="text-xs font-mono text-slate-500 tracking-widest">{s.icon} {s.label}</p>
+                <p className="text-2xl font-black text-white mt-1 truncate" style={{ fontFamily: "'Orbitron',sans-serif" }}>{s.value}</p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Podium — only for non-TTT or TTT with 3+ players (skip spectators) */}
+        {activePlayers.length >= 3 && (
+          <div className="rounded-2xl p-8" style={{ background: CARD, border: "1px solid rgba(139,92,246,0.2)" }}>
+            <div className="text-center mb-6">
+              <p className="text-xs font-mono text-purple-400 tracking-widest mb-1">◆ HALL OF FAME ◆</p>
+              <h2 className="text-2xl font-black text-white" style={{ fontFamily: "'Orbitron',sans-serif" }}>CHAMPIONS PODIUM</h2>
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+              {/* 2nd */}
+              <div className="order-2 lg:order-1 rounded-2xl p-6 text-center hover:scale-105 transition-transform" style={{ background: "rgba(148,163,184,0.08)", border: "1px solid rgba(148,163,184,0.3)" }}>
+                <div className="w-12 h-12 mx-auto mb-3 rounded-full flex items-center justify-center text-2xl" style={{ background: "linear-gradient(135deg,#94a3b8,#64748b)", boxShadow: "0 0 16px rgba(148,163,184,0.4)" }}>🥈</div>
+                <p className="text-[10px] text-slate-500 tracking-widest font-mono mb-1">2ND PLACE</p>
+                <p className="font-black text-white mb-3">{rows[1]?.team.team_name}</p>
+                <div className="space-y-1.5 text-xs">
+                  <div className="flex justify-between px-3 py-2 rounded-lg" style={{ background: "rgba(0,0,0,0.3)" }}><span className="text-slate-500">LINES</span><span className="text-white font-bold">{rows[1]?.team.lines_completed}/5</span></div>
+                  <div className="flex justify-between px-3 py-2 rounded-lg" style={{ background: "rgba(0,0,0,0.3)" }}><span className="text-slate-500">TIME</span><span className="text-white font-bold font-mono">{formatTime(rows[1]?.team.time_taken_ms || 0)}</span></div>
+                </div>
+              </div>
+              {/* 1st */}
+              <div className="order-1 lg:order-2 rounded-2xl p-8 text-center hover:scale-105 transition-transform relative" style={{ background: "linear-gradient(135deg,rgba(245,158,11,0.15),rgba(251,191,36,0.05))", border: "2px solid rgba(245,158,11,0.5)", boxShadow: "0 0 40px rgba(245,158,11,0.15)" }}>
+                <div className="absolute -top-4 left-1/2 -translate-x-1/2 text-3xl animate-bounce">👑</div>
+                <div className="w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center text-3xl" style={{ background: "linear-gradient(135deg,#f59e0b,#d97706)", boxShadow: "0 0 30px rgba(245,158,11,0.5)" }}>🥇</div>
+                {(rows[0]?.team.lines_completed ?? 0) >= 5 && (
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold text-amber-300 mb-3" style={{ background: "rgba(245,158,11,0.2)" }}>
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />CHAMPION
                   </div>
-                </div>
-                <div className="hidden md:block">
-                  <div className="text-6xl animate-pulse">🏆</div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* No Winner Yet Banner */}
-          {!hasWinner && rows.length > 0 && (
-            <div className="bg-gradient-to-r from-blue-100 via-indigo-100 to-purple-100 dark:from-blue-900/30 dark:via-indigo-900/30 dark:to-purple-900/30 border border-blue-300 dark:border-blue-600 rounded-2xl p-4 shadow-lg">
-              <div className="flex items-center justify-center gap-3">
-                <span className="text-2xl animate-pulse">⏳</span>
-                <span className="text-slate-700 dark:text-slate-300 font-medium">
-                  No winner yet! First team to complete 5 lines wins 🎯
-                </span>
-              </div>
-            </div>
-          )}
-
-          {/* Dashboard Header with Key Metrics */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-            <div className="bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm border border-white/20 dark:border-slate-700/50 rounded-2xl p-6 shadow-xl">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg">
-                  <span className="text-2xl">👥</span>
-                </div>
-                <div>
-                  <p className="text-sm text-slate-600 dark:text-slate-400">
-                    Total Teams
-                  </p>
-                  <p className="text-2xl font-bold text-slate-800 dark:text-slate-200">
-                    {rows.length}
-                  </p>
+                )}
+                <p className="text-xl font-black text-white mb-4" style={{ fontFamily: "'Orbitron',sans-serif" }}>{rows[0]?.team.team_name}</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="rounded-xl p-3" style={{ background: "rgba(0,0,0,0.4)" }}><p className="text-amber-400 font-black text-xl">{rows[0]?.team.lines_completed}</p><p className="text-xs text-slate-500">LINES</p></div>
+                  <div className="rounded-xl p-3" style={{ background: "rgba(0,0,0,0.4)" }}><p className="text-green-400 font-black text-sm font-mono">{formatTime(rows[0]?.team.time_taken_ms || 0)}</p><p className="text-xs text-slate-500">TIME</p></div>
                 </div>
               </div>
-            </div>
-
-            <div className="bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm border border-white/20 dark:border-slate-700/50 rounded-2xl p-6 shadow-xl">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-green-500 to-teal-600 flex items-center justify-center shadow-lg">
-                  <span className="text-2xl">🏆</span>
-                </div>
-                <div>
-                  <p className="text-sm text-slate-600 dark:text-slate-400">
-                    Winners
-                  </p>
-                  <p className="text-2xl font-bold text-slate-800 dark:text-slate-200">
-                    {
-                      rows.filter(
-                        (r) =>
-                          (r.team.lines_completed ?? 0) >= 5 &&
-                          !!r.team.end_time,
-                      ).length
-                    }
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm border border-white/20 dark:border-slate-700/50 rounded-2xl p-6 shadow-xl">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-orange-500 to-red-600 flex items-center justify-center shadow-lg">
-                  <span className="text-2xl">🎯</span>
-                </div>
-                <div>
-                  <p className="text-sm text-slate-600 dark:text-slate-400">
-                    Avg Progress
-                  </p>
-                  <p className="text-2xl font-bold text-slate-800 dark:text-slate-200">
-                    {rows.length > 0
-                      ? Math.round(
-                          (rows.reduce(
-                            (acc, r) => acc + (r.team.lines_completed ?? 0),
-                            0,
-                          ) /
-                            rows.length) *
-                            20,
-                        )
-                      : 0}
-                    %
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm border border-white/20 dark:border-slate-700/50 rounded-2xl p-6 shadow-xl">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center shadow-lg">
-                  <span className="text-2xl">🏆</span>
-                </div>
-                <div>
-                  <p className="text-sm text-slate-600 dark:text-slate-400">
-                    Current Leader
-                  </p>
-                  <p className="text-2xl font-bold text-slate-800 dark:text-slate-200">
-                    {rows.length > 0 ? rows[0]?.team.team_name : "--"}
-                  </p>
-                  <p className="text-sm text-slate-500 dark:text-slate-400">
-                    {rows.length > 0 ? `${rows[0]?.team.lines_completed} lines` : ""}
-                  </p>
+              {/* 3rd */}
+              <div className="order-3 rounded-2xl p-6 text-center hover:scale-105 transition-transform" style={{ background: "rgba(217,119,6,0.08)", border: "1px solid rgba(217,119,6,0.3)" }}>
+                <div className="w-12 h-12 mx-auto mb-3 rounded-full flex items-center justify-center text-2xl" style={{ background: "linear-gradient(135deg,#d97706,#92400e)", boxShadow: "0 0 14px rgba(217,119,6,0.4)" }}>🥉</div>
+                <p className="text-[10px] text-slate-500 tracking-widest font-mono mb-1">3RD PLACE</p>
+                <p className="font-black text-white mb-3">{rows[2]?.team.team_name}</p>
+                <div className="space-y-1.5 text-xs">
+                  <div className="flex justify-between px-3 py-2 rounded-lg" style={{ background: "rgba(0,0,0,0.3)" }}><span className="text-slate-500">LINES</span><span className="text-white font-bold">{rows[2]?.team.lines_completed}/5</span></div>
+                  <div className="flex justify-between px-3 py-2 rounded-lg" style={{ background: "rgba(0,0,0,0.3)" }}><span className="text-slate-500">TIME</span><span className="text-white font-bold font-mono">{formatTime(rows[2]?.team.time_taken_ms || 0)}</span></div>
                 </div>
               </div>
             </div>
           </div>
+        )}
 
-          {/* Top 3 Champions Dashboard */}
-          {rows.length >= 3 && (
-            <div className="bg-gradient-to-br from-slate-50 via-white to-slate-50 dark:from-slate-800/50 dark:via-slate-800 dark:to-slate-800/50 backdrop-blur-sm border border-white/20 dark:border-slate-700/50 rounded-3xl p-8 shadow-2xl">
-              <div className="text-center mb-8">
-                <div className="inline-flex items-center gap-3 px-6 py-3 rounded-full bg-gradient-to-r from-yellow-400 to-orange-500 text-white font-semibold shadow-lg mb-4">
-                  <span className="text-2xl">🏆</span>
-                  <span>Champions Dashboard</span>
-                </div>
-                <h2 className="text-3xl font-bold text-slate-800 dark:text-slate-200 mb-2">
-                  Top Performers
-                </h2>
-                <p className="text-slate-600 dark:text-slate-400 text-lg">
-                  Celebrating excellence and achievement
-                </p>
-              </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                {/* 2nd Place */}
-                <div className="order-2 lg:order-1 transform hover:scale-105 transition-all duration-500">
-                  <div className="bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-700 dark:to-slate-600 rounded-3xl p-8 shadow-xl border border-slate-200 dark:border-slate-600 relative overflow-hidden">
-                    <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-bl from-slate-300/20 to-transparent rounded-bl-full"></div>
-                    <div className="text-center relative z-10">
-                      <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gradient-to-br from-slate-400 to-slate-500 flex items-center justify-center shadow-lg">
-                        <span className="text-2xl">🥈</span>
-                      </div>
-                      <div className="text-sm text-slate-500 dark:text-slate-400 mb-1 font-semibold">
-                        2ND PLACE
-                      </div>
-                      <div className="font-bold text-xl text-slate-800 dark:text-slate-200 mb-4">
-                        {rows[1]?.team.team_name}
-                      </div>
-
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between bg-white/50 dark:bg-slate-800/50 rounded-xl p-3">
-                          <span className="text-sm text-slate-600 dark:text-slate-400">
-                            Lines Completed
-                          </span>
-                          <span className="font-bold text-slate-800 dark:text-slate-200">
-                            {rows[1]?.team.lines_completed} lines
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between bg-white/50 dark:bg-slate-800/50 rounded-xl p-3">
-                          <span className="text-sm text-slate-600 dark:text-slate-400">
-                            Time Taken
-                          </span>
-                          <span className="font-bold text-slate-800 dark:text-slate-200">
-                            {formatTime(rows[1]?.team.time_taken_ms || 0)}
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between bg-white/50 dark:bg-slate-800/50 rounded-xl p-3">
-                          <span className="text-sm text-slate-600 dark:text-slate-400">
-                            Rank
-                          </span>
-                          <span className="font-bold text-slate-800 dark:text-slate-200">
-                            #{rows[1]?.rank}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* 1st Place - Hero Section */}
-                <div className="order-1 lg:order-2 transform hover:scale-105 transition-all duration-500">
-                  <div className="bg-gradient-to-br from-yellow-100 via-yellow-50 to-amber-100 dark:from-yellow-900/20 dark:via-amber-900/20 dark:to-yellow-900/20 rounded-3xl p-10 shadow-2xl border-2 border-yellow-300 dark:border-yellow-600 relative overflow-hidden">
-                    <div className="absolute -top-6 left-1/2 transform -translate-x-1/2">
-                      <div className="w-16 h-16 rounded-full bg-gradient-to-br from-yellow-400 to-orange-500 flex items-center justify-center shadow-xl animate-bounce">
-                        <span className="text-3xl">👑</span>
-                      </div>
-                    </div>
-
-                    <div className="text-center pt-6 relative z-10">
-                      <div className="w-24 h-24 mx-auto mb-6 rounded-full bg-gradient-to-br from-yellow-400 to-orange-500 flex items-center justify-center shadow-2xl animate-pulse">
-                        <span className="text-4xl">🥇</span>
-                      </div>
-
-                      {(rows[0]?.team.lines_completed ?? 0) >= 5 &&
-                        rows[0]?.team.end_time && (
-                          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-yellow-200 dark:bg-yellow-900/40 text-yellow-800 dark:text-yellow-200 text-sm font-bold mb-4 shadow-lg">
-                            <span className="w-3 h-3 bg-yellow-500 rounded-full animate-pulse"></span>
-                            CHAMPION
-                          </div>
-                        )}
-
-                      <div className="font-bold text-3xl text-slate-800 dark:text-slate-200 mb-6">
-                        {rows[0]?.team.team_name}
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="bg-white/60 dark:bg-slate-800/60 rounded-2xl p-4 shadow-lg">
-                          <div className="text-2xl font-bold text-blue-600 dark:text-blue-400 mb-1">
-                            {rows[0]?.team.lines_completed}
-                          </div>
-                          <div className="text-sm text-slate-600 dark:text-slate-400">
-                            Lines
-                          </div>
-                        </div>
-                        <div className="bg-white/60 dark:bg-slate-800/60 rounded-2xl p-4 shadow-lg">
-                          <div className="text-2xl font-bold text-green-600 dark:text-green-400 mb-1">
-                            {formatTime(rows[0]?.team.time_taken_ms || 0)}
-                          </div>
-                          <div className="text-sm text-slate-600 dark:text-slate-400">
-                            Time
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* 3rd Place */}
-                <div className="order-3 lg:order-3 transform hover:scale-105 transition-all duration-500">
-                  <div className="bg-gradient-to-br from-amber-100 to-orange-100 dark:from-amber-900/20 dark:to-orange-900/20 rounded-3xl p-8 shadow-xl border border-amber-200 dark:border-amber-600 relative overflow-hidden">
-                    <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-bl from-amber-300/20 to-transparent rounded-bl-full"></div>
-                    <div className="text-center relative z-10">
-                      <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shadow-lg">
-                        <span className="text-2xl">🥉</span>
-                      </div>
-                      <div className="text-sm text-slate-500 dark:text-slate-400 mb-1 font-semibold">
-                        3RD PLACE
-                      </div>
-                      <div className="font-bold text-xl text-slate-800 dark:text-slate-200 mb-4">
-                        {rows[2]?.team.team_name}
-                      </div>
-
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between bg-white/50 dark:bg-slate-800/50 rounded-xl p-3">
-                          <span className="text-sm text-slate-600 dark:text-slate-400">
-                            Lines Completed
-                          </span>
-                          <span className="font-bold text-slate-800 dark:text-slate-200">
-                            {rows[2]?.team.lines_completed} lines
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between bg-white/50 dark:bg-slate-800/50 rounded-xl p-3">
-                          <span className="text-sm text-slate-600 dark:text-slate-400">
-                            Time Taken
-                          </span>
-                          <span className="font-bold text-slate-800 dark:text-slate-200">
-                            {formatTime(rows[2]?.team.time_taken_ms || 0)}
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between bg-white/50 dark:bg-slate-800/50 rounded-xl p-3">
-                          <span className="text-sm text-slate-600 dark:text-slate-400">
-                            Rank
-                          </span>
-                          <span className="font-bold text-slate-800 dark:text-slate-200">
-                            #{rows[2]?.rank}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Enhanced Leaderboard */}
-          <div className="bg-white/95 dark:bg-slate-800/95 backdrop-blur-sm border border-white/20 dark:border-slate-700/50 rounded-3xl shadow-2xl overflow-hidden">
-            <div className="bg-gradient-to-r from-blue-600 via-purple-600 to-indigo-600 p-8">
+        {/* Rankings table */}
+        {room && (
+          <div className="rounded-2xl overflow-hidden" style={{ background: CARD, border: "1px solid rgba(139,92,246,0.2)" }}>
+            <div className="px-6 py-4" style={{ background: "linear-gradient(135deg,rgba(109,40,217,0.5),rgba(99,102,241,0.35),rgba(6,182,212,0.2))", borderBottom: "1px solid rgba(139,92,246,0.3)" }}>
               <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-3xl font-bold text-white flex items-center gap-4 mb-2">
-                    <span className="text-4xl">📊</span>
-                    Complete Rankings
-                  </h2>
-                  <p className="text-blue-100 text-lg">
-                    Full leaderboard standings and progress tracking
-                  </p>
-                </div>
-                <div className="text-right">
-                  <div className="text-2xl font-bold text-white">
-                    {filteredRows.length}
-                  </div>
-                  <div className="text-blue-200">Active Teams</div>
+                <h2 className="text-lg font-black text-white" style={{ fontFamily: "'Orbitron',sans-serif" }}>📊 COMPLETE RANKINGS</h2>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs font-mono text-purple-300">{filteredRows.length} TEAMS</span>
+                  {/* Pulsing live indicator */}
+                  <span className="flex items-center gap-1.5 text-xs text-green-400 font-mono">
+                    <span className="w-2 h-2 rounded-full bg-green-500 animate-ping" style={{ animationDuration: "2s" }} />
+                    LIVE
+                  </span>
                 </div>
               </div>
             </div>
 
-            <div className="divide-y divide-slate-200 dark:divide-slate-700">
+            <div>
               {filteredRows.map((r, index) => {
-                const isTopThree = index < 3;
-                // Winner if the team has completed bingo (5 or more lines)
-                const isWinner = (r.team.lines_completed ?? 0) >= 5;
-                const isCurrentUser = team && r.team.id === team.id;
-                const progressPercentage = Math.min(
-                  (r.team.lines_completed / 5) * 100,
-                  100,
-                );
-
+                const tttRole = (r.team as any).ttt_role as 'X' | 'O' | 'spectator' | null;
+                const tttWinner = (r.team as any).ttt_winner as boolean;
+                const tttDraw = (r.team as any).ttt_draw as boolean;
+                const isSpectator = isTTTRoom && tttRole === 'spectator';
+                const isWinner = isTTTRoom ? tttWinner : (r.team.lines_completed ?? 0) >= 5;
+                const isMe = team && r.team.id === team.id;
+                const pct = Math.min(((r.team.lines_completed ?? 0) / 5) * 100, 100);
+                const effectiveIndex = isSpectator ? 99 : index;
+                const rStyle = rankColors[effectiveIndex] ?? { bg: "rgba(99,102,241,0.25)", shadow: "none", label: `#${r.rank}` };
+                const anyWinner = isTTTRoom && rows.some(x => (x.team as any).ttt_winner);
+                const tttStatus = isTTTRoom
+                  ? (isSpectator ? "SPECTATOR" : tttWinner ? "WIN ✓" : tttDraw ? "DRAW" : anyWinner ? "LOSS" : "PLAYING")
+                  : null;
                 return (
-                  <div
-                    key={r.rank}
-                    className={`p-6 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-all duration-300 ${
-                      isTopThree
-                        ? "bg-gradient-to-r from-yellow-50/50 to-transparent dark:from-yellow-900/10"
-                        : ""
-                    } ${
-                      isCurrentUser
-                        ? "ring-2 ring-blue-500 bg-blue-50/50 dark:bg-blue-900/10"
-                        : ""
-                    }`}
-                  >
-                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6 items-start">
-                      {/* Rank Badge */}
-                      <div className="col-span-1 lg:col-span-1 flex justify-center lg:justify-start">
-                        <div
-                          className={`w-14 h-14 rounded-2xl flex items-center justify-center font-bold text-xl shadow-xl ${
-                            index === 0
-                              ? "bg-gradient-to-br from-yellow-400 to-orange-500 text-white"
-                              : index === 1
-                                ? "bg-gradient-to-br from-slate-400 to-slate-500 text-white"
-                                : index === 2
-                                  ? "bg-gradient-to-br from-amber-400 to-orange-500 text-white"
-                                  : "bg-gradient-to-br from-blue-500 to-purple-600 text-white"
-                          }`}
-                        >
-                          {index < 3 ? ["🥇", "🥈", "🥉"][index] : `#${r.rank}`}
-                        </div>
+                  <div key={`${r.rank}-${r.team.id}`}
+                    className="px-5 py-3.5 flex items-center gap-4 transition-colors duration-150"
+                    style={{
+                      borderBottom: "1px solid rgba(139,92,246,0.08)",
+                      background: isMe ? "rgba(139,92,246,0.09)" : isSpectator ? "rgba(0,0,0,0.15)" : "transparent",
+                      borderLeft: isMe ? "3px solid rgba(139,92,246,0.7)" : isSpectator ? "3px solid rgba(100,116,139,0.3)" : "3px solid transparent",
+                      opacity: isSpectator ? 0.5 : 1,
+                    }}
+                    onMouseEnter={(e) => { if (!isMe && !isSpectator) e.currentTarget.style.background = "rgba(255,255,255,0.025)"; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = isMe ? "rgba(139,92,246,0.09)" : isSpectator ? "rgba(0,0,0,0.15)" : "transparent"; }}>
+
+                    {/* Rank badge */}
+                    <div className="w-11 h-11 rounded-xl flex items-center justify-center font-black text-white flex-shrink-0"
+                      style={{ fontSize: isSpectator || effectiveIndex >= 3 ? "11px" : "16px", background: isSpectator ? "rgba(100,116,139,0.25)" : effectiveIndex < 3 ? rStyle.bg : "rgba(99,102,241,0.2)", boxShadow: isSpectator ? "none" : effectiveIndex < 3 ? rStyle.shadow : "none" }}>
+                      {isSpectator ? "👁" : effectiveIndex < 3 ? rStyle.label : `#${r.rank}`}
+                    </div>
+
+                    {/* Name + tags + progress */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold text-white text-sm truncate">{r.team.team_name}</span>
+                        {isMe && <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold text-purple-300" style={{ background: "rgba(139,92,246,0.25)" }}>YOU</span>}
+                        {isTTTRoom && tttRole && tttRole !== 'spectator' && (
+                          <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold" style={{ background: tttRole === 'X' ? "rgba(239,68,68,0.2)" : "rgba(59,130,246,0.2)", color: tttRole === 'X' ? "#fca5a5" : "#93c5fd", border: `1px solid ${tttRole === 'X' ? "rgba(239,68,68,0.3)" : "rgba(59,130,246,0.3)"}` }}>PLAYER {tttRole}</span>
+                        )}
+                        {isSpectator && <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold text-slate-400" style={{ background: "rgba(100,116,139,0.15)", border: "1px solid rgba(100,116,139,0.3)" }}>👁 SPECTATOR</span>}
+                        {isWinner && !isSpectator && <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold text-amber-300" style={{ background: "rgba(245,158,11,0.2)", border: "1px solid rgba(245,158,11,0.3)" }}>🏆 WIN</span>}
                       </div>
-
-                      {/* Team Info */}
-                      <div className="col-span-1 lg:col-span-4">
-                        <div className="flex items-center gap-3 mb-2">
-                          <h3 className="font-bold text-xl text-slate-800 dark:text-slate-200">
-                            {r.team.team_name}
-                          </h3>
-                          {isCurrentUser && (
-                            <div className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-200 text-xs font-semibold shadow-sm">
-                              <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></span>
-                              YOU
-                            </div>
-                          )}
-                          {isWinner && (
-                            <div className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-200 text-xs font-semibold shadow-sm">
-                              <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-                              WINNER
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Progress Bar */}
-                        <div className="space-y-2">
-                          <div className="flex items-center gap-3">
-                            <div className="flex-1 bg-slate-200 dark:bg-slate-600 rounded-full h-3 overflow-hidden shadow-inner">
-                              <div
-                                className={`h-full transition-all duration-1000 ease-out rounded-full shadow-sm ${
-                                  isWinner
-                                    ? "bg-gradient-to-r from-green-400 to-emerald-500"
-                                    : "bg-gradient-to-r from-blue-400 to-purple-500"
-                                }`}
-                                style={{ width: `${progressPercentage}%` }}
-                              />
-                            </div>
-                            <span className="text-sm font-bold text-slate-700 dark:text-slate-300 min-w-[3rem] bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded-lg">
-                              {r.team.lines_completed} lines
-                            </span>
-                          </div>
-                          <div className="text-xs text-slate-500 dark:text-slate-400">
-                            {r.team.lines_completed} lines completed •{" "}
-                            {r.team.solved_questions_count || 0} questions
-                            solved
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Time Metrics - Always visible */}
-                      <div className="col-span-1 lg:col-span-3 order-first lg:order-none">
-                        <div className="bg-slate-50 dark:bg-slate-700/50 rounded-xl p-3 lg:p-4 space-y-1 lg:space-y-2">
-                          <div className="text-center lg:text-left">
-                            <div className="text-xs text-slate-600 dark:text-slate-400 mb-1">
-                              {r.team.start_time ? (r.team.end_time ? "Total" : "Current") : "Status"}
-                            </div>
-                            <div className="font-bold text-lg lg:text-xl text-slate-800 dark:text-slate-200">
-                              {r.team.start_time ? formatTime(r.team.time_taken_ms || 0) : "Not started"}
-                            </div>
-                            {r.team.start_time && (
-                              <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                                Started: {new Date(r.team.start_time).toLocaleTimeString(
-                                  [],
-                                  { hour: "2-digit", minute: "2-digit" },
-                                )}
-                              </div>
-                            )}
-                            {r.team.end_time && (
-                              <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                                Finished: {new Date(r.team.end_time).toLocaleTimeString(
-                                  [],
-                                  { hour: "2-digit", minute: "2-digit" },
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Status & Rank */}
-                      <div className="col-span-1 lg:col-span-4">
-                        <div className="flex items-center justify-between mb-3">
-                          <div
-                            className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-semibold shadow-sm ${
-                              isWinner
-                                ? "bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-200"
-                                : r.team.lines_completed > 0
-                                  ? "bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-200"
-                                  : "bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400"
-                            }`}
-                          >
-                            <span
-                              className={`w-2 h-2 rounded-full ${
-                                isWinner
-                                  ? "bg-green-500"
-                                  : r.team.lines_completed > 0
-                                    ? "bg-blue-500"
-                                    : "bg-slate-400"
-                              }`}
-                            ></span>
-                            {isWinner
-                              ? "🏆 Completed"
-                              : r.team.lines_completed > 0
-                                ? "⚡ In Progress"
-                                : "⏳ Not Started"}
-                          </div>
-                          <div className="text-right">
-                            <div className="text-2xl font-bold text-slate-400 dark:text-slate-500">
-                              #{r.rank}
-                            </div>
-                            <div className="text-xs text-slate-500 dark:text-slate-400">
-                              Position
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Performance Indicator */}
-                        <div className="flex items-center gap-2">
-                          <div className="flex-1 bg-slate-200 dark:bg-slate-600 rounded-full h-1.5">
-                            <div
-                              className={`h-full rounded-full transition-all duration-500 ${
-                                r.rank <= 3
-                                  ? "bg-gradient-to-r from-yellow-400 to-orange-500"
-                                  : r.rank <= 10
-                                    ? "bg-gradient-to-r from-blue-400 to-purple-500"
-                                    : "bg-gradient-to-r from-slate-400 to-slate-500"
-                              }`}
-                              style={{
-                                width: `${Math.max(10, 100 - (r.rank - 1) * 5)}%`,
-                              }}
-                            ></div>
-                          </div>
-                          <span className="text-xs text-slate-500 dark:text-slate-400 min-w-[4rem]">
-                            {r.rank <= 3
-                              ? "Top Tier"
-                              : r.rank <= 10
-                                ? "Strong"
-                                : "Participant"}
+                      <div className="flex items-center gap-2 mt-1.5">
+                        {isTTTRoom ? (
+                          <span className="text-[10px] font-mono" style={{ color: tttStatus === "WIN ✓" ? "#4ade80" : tttStatus === "LOSS" ? "#f87171" : tttStatus === "DRAW" ? "#fbbf24" : tttStatus === "SPECTATOR" ? "#374151" : "#a5b4fc" }}>
+                            {tttStatus}{!isSpectator && ` · ${r.team.solved_questions_count ?? 0} questions solved`}
                           </span>
-                        </div>
+                        ) : (
+                          <>
+                            <div className="flex-1 h-1 rounded-full" style={{ background: "rgba(255,255,255,0.07)" }}>
+                              <div className="h-full rounded-full transition-all duration-700" style={{ width: `${pct}%`, background: isWinner ? "linear-gradient(90deg,#22c55e,#16a34a)" : "linear-gradient(90deg,#7c3aed,#a855f7)" }} />
+                            </div>
+                            <span className="text-[11px] font-mono text-slate-500 flex-shrink-0">{r.team.lines_completed ?? 0}/5</span>
+                          </>
+                        )}
                       </div>
                     </div>
+
+                    {/* Time */}
+                    <div className="text-right hidden sm:block flex-shrink-0">
+                      <p className="font-mono text-sm font-bold" style={{ color: isSpectator ? "#374151" : "white" }}>
+                        {isSpectator ? "—" : r.team.start_time ? formatTime(r.team.time_taken_ms || 0) : "—"}
+                      </p>
+                      <p className="text-[10px] text-slate-600">{isSpectator ? "WATCHING" : r.team.end_time ? "DONE" : r.team.start_time ? "LIVE" : "WAIT"}</p>
+                    </div>
+
+                    {/* Status chip */}
+                    <span className="flex-shrink-0 px-2.5 py-1 rounded-lg text-[10px] font-bold font-mono"
+                      style={{
+                        background: isSpectator ? "rgba(0,0,0,0.1)" : isWinner ? "rgba(34,197,94,0.15)" : tttDraw ? "rgba(251,191,36,0.1)" : "rgba(99,102,241,0.12)",
+                        color: isSpectator ? "#374151" : isWinner ? "#4ade80" : tttDraw ? "#fbbf24" : "#a5b4fc",
+                        border: `1px solid ${isSpectator ? "rgba(0,0,0,0.05)" : isWinner ? "rgba(34,197,94,0.3)" : "rgba(99,102,241,0.25)"}`,
+                      }}>
+                      {isSpectator ? "WATCH" : isTTTRoom ? tttStatus?.replace(" ✓", "") ?? "LIVE" : isWinner ? "DONE" : (r.team.lines_completed ?? 0) > 0 ? "LIVE" : "IDLE"}
+                    </span>
                   </div>
                 );
               })}
-            </div>
 
-            {rows.length === 0 && (
-              <div className="text-center py-16">
-                <div className="text-6xl mb-4 animate-bounce">🏆</div>
-                <h3 className="text-xl font-semibold text-slate-600 dark:text-slate-400 mb-2">
-                  No teams yet
-                </h3>
-                <p className="text-slate-500 dark:text-slate-500">
-                  Teams will appear here as they join the game!
-                </p>
-              </div>
-            )}
+              {rows.length === 0 && room && (
+                <div className="py-16 text-center">
+                  <div className="w-10 h-10 border-2 border-purple-500/30 border-t-purple-500 rounded-full animate-spin mx-auto mb-4" />
+                  <p className="font-mono text-slate-500 tracking-widest text-xs">LOADING BATTLE DATA...</p>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
+        )}
       </main>
     </div>
   );
 }
 
-function formatTime(ms: number) {
-  if (ms === 0) return "0:00";
-
-  const totalSeconds = Math.floor(ms / 1000);
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-
-  if (hours > 0) {
-    return `${hours}:${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
-  }
-  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
-}

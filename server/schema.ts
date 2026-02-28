@@ -121,7 +121,6 @@ export const gameBoards = pgTable("game_boards", {
     .notNull()
     .references(() => rooms.code),
   teamId: text("team_id")
-    .notNull()
     .references(() => teams.teamId),
   gameType: text("game_type").notNull(), // 'sudoku', 'connect4', 'memory', etc.
   boardState: text("board_state").notNull(), // JSON encoded game state
