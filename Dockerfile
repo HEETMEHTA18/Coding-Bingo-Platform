@@ -1,47 +1,67 @@
-# Use Node.js LTS
-FROM node:20-alpine AS builder
-
-# Install Docker CLI for build stage
-RUN apk add --no-cache docker-cli
-
-# Set working directory
+# ─────────────────────────────────────────────
+# Stage 1: deps  – install ALL dependencies
+# ─────────────────────────────────────────────
+FROM node:20-alpine AS deps
 WORKDIR /app
 
-# Copy package files
+# Install pnpm once; leverage Docker layer cache
+RUN npm install -g pnpm@latest --prefer-offline
+
 COPY package*.json pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
 
-# Install pnpm and dependencies
-RUN npm install -g pnpm && pnpm install --frozen-lockfile
+# ─────────────────────────────────────────────
+# Stage 2: builder – compile client + server
+# ─────────────────────────────────────────────
+FROM node:20-alpine AS builder
+WORKDIR /app
 
-# Copy source code
+RUN npm install -g pnpm@latest --prefer-offline
+
+COPY package*.json pnpm-lock.yaml ./
+COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Build the application
+# Build both client (Vite) and server (ESM)
 RUN pnpm run build
 
-# Production stage
-FROM node:20-alpine
+# Prune to production-only modules AFTER build
+RUN pnpm prune --prod
 
-# Install Docker CLI and required tools for GCC compilation support
-RUN apk add --no-cache docker-cli ca-certificates
+# ─────────────────────────────────────────────
+# Stage 3: runner – lean production image
+# ─────────────────────────────────────────────
+FROM node:20-alpine AS runner
+
+# dumb-init: PID-1 signal reaping; docker-cli for code execution sandbox
+RUN apk add --no-cache dumb-init docker-cli ca-certificates tini \
+  && addgroup -S appgroup \
+  && adduser  -S appuser -G appgroup
 
 WORKDIR /app
 
-# Copy built files from builder
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/package*.json ./
-COPY --from=builder /app/node_modules ./node_modules
+# Copy only what is needed at runtime
+COPY --from=builder --chown=appuser:appgroup /app/dist          ./dist
+COPY --from=builder --chown=appuser:appgroup /app/node_modules  ./node_modules
+COPY --from=builder --chown=appuser:appgroup /app/package.json  ./package.json
 
-# Expose port
+# Drop to non-root
+USER appuser
+
+# ── Environment ───────────────────────────────
+ENV NODE_ENV=production \
+  PORT=8080 \
+  # V8 tweaks: expose GC, limit old-space to ~384 MB inside container
+  NODE_OPTIONS="--max-old-space-size=384 --expose-gc" \
+  # Disable colour codes in production logs
+  NO_COLOR=1
+
 EXPOSE 8080
 
-# Set environment to production
-ENV NODE_ENV=production
-ENV PORT=8080
+# ── Health check ──────────────────────────────
+HEALTHCHECK --interval=20s --timeout=8s --start-period=30s --retries=3 \
+  CMD node -e "require('http').get('http://localhost:8080/api/health', (r) => {process.exit(r.statusCode===200?0:1)}).on('error',()=>process.exit(1))"
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:8080/api/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
-
-# Start the application
-CMD ["node", "dist/server/index.mjs"]
+# tini ensures proper signal forwarding and zombie reaping
+ENTRYPOINT ["/sbin/tini", "--"]
+CMD ["node", "dist/server/cluster.mjs"]

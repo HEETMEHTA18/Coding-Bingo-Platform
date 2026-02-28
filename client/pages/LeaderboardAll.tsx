@@ -1,588 +1,286 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import type { LeaderboardAllResponse, Team } from "@shared/api";
+import type { Team } from "@shared/api";
 import { apiFetch } from "../lib/api";
 
-interface RoomLeaderboardData {
-  room: {
-    code: string;
-    title: string;
-    gameType: string;
-    roundEndAt: string | null;
-  };
-  rows: Array<{
-    team: Team;
-    rank: number;
-  }>;
+/* ─── types ─── */
+interface RoomData {
+  room: { code: string; title: string; gameType: string; roundEndAt: string | null };
+  rows: Array<{ team: Team; rank: number }>;
   winner: Team | null;
   teamCount: number;
   hasWinner: boolean;
 }
+type AllData = Record<string, RoomData>;
 
-type ExtendedLeaderboardAllResponse = {
-  [roomCode: string]: RoomLeaderboardData;
-};
+/* ─── helpers ─── */
+function fmt(ms: number) {
+  if (!ms) return "—";
+  const t = Math.floor(ms / 1000);
+  const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = t % 60;
+  if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
 
+const RANK_META = [
+  { bg: "linear-gradient(135deg,#f59e0b,#d97706)", shadow: "0 0 16px rgba(245,158,11,0.5)", label: "🥇" },
+  { bg: "linear-gradient(135deg,#94a3b8,#64748b)", shadow: "0 0 12px rgba(148,163,184,0.4)", label: "🥈" },
+  { bg: "linear-gradient(135deg,#d97706,#92400e)", shadow: "0 0 12px rgba(217,119,6,0.4)", label: "🥉" },
+];
+
+/* ══════════════════════════════════════════════════════ */
 export default function LeaderboardAllPage() {
   const navigate = useNavigate();
-  const [data, setData] = useState<ExtendedLeaderboardAllResponse>({});
-  const [viewMode, setViewMode] = useState<'rooms' | 'global'>('rooms');
-  const [searchRoom, setSearchRoom] = useState('');
+  const [data, setData] = useState<AllData>({});
+  const [openRooms, setOpenRooms] = useState<Set<string>>(new Set());
+  const [search, setSearch] = useState("");
+  const [loading, setLoading] = useState(true);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const load = async () => {
-    const res = await apiFetch("/api/leaderboard/all");
-    if (!res.ok) return;
-    const data = (await res.json()) as ExtendedLeaderboardAllResponse;
-    setData(data);
-  };
+  const load = useCallback(async () => {
+    try {
+      const res = await apiFetch("/api/leaderboard/all");
+      if (!res.ok) return;
+      const d = (await res.json()) as AllData;
+      setData(d);
+    } catch { }
+    setLoading(false);
+  }, []);
 
   useEffect(() => {
     load();
-    const id = setInterval(load, 4000);
-    return () => clearInterval(id);
-  }, []);
+    timerRef.current = setInterval(load, 5000);
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, [load]);
 
-  const rooms = Object.entries(data).filter(([code]) => 
-    code.toLowerCase().includes(searchRoom.toLowerCase())
-  );
-  
-  // Flatten all teams for global view
-  const allTeams = Object.entries(data)
-    .flatMap(([roomCode, roomData]) =>
-      roomData.rows.map((row) => ({
-        ...row,
-        room_code: roomCode,
-        room_title: roomData.room?.title || roomCode,
-      })),
-    )
-    .sort((a, b) => {
-      // Sort by lines completed descending
-      if ((b.team.lines_completed ?? 0) !== (a.team.lines_completed ?? 0)) {
-        return (b.team.lines_completed ?? 0) - (a.team.lines_completed ?? 0);
-      }
-      // Then by time ascending
-      return (a.team.time_taken_ms ?? 0) - (b.team.time_taken_ms ?? 0);
-    })
-    .map((t, i) => ({ ...t, globalRank: i + 1 }));
+  const toggle = (code: string) =>
+    setOpenRooms(prev => {
+      const n = new Set(prev);
+      n.has(code) ? n.delete(code) : n.add(code);
+      return n;
+    });
 
-  // Count total winners
-  const totalWinners = Object.values(data).filter(r => r.hasWinner).length;
-  const totalTeams = allTeams.length;
-  const totalRooms = rooms.length;
+  const rooms = Object.entries(data).filter(([c]) => c.toLowerCase().includes(search.toLowerCase()));
+  const totalTeams = rooms.reduce((a, [, d]) => a + d.teamCount, 0);
+  const totalWinners = rooms.filter(([, d]) => d.hasWinner).length;
+
+  const CARD = "rgba(12,12,25,0.85)";
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
-      <header className="sticky top-0 z-10 bg-white/90 dark:bg-slate-900/90 backdrop-blur-lg border-b border-white/20 dark:border-slate-700/50 shadow-sm">
-        <div className="container py-4 flex items-center justify-between">
+    <div className="min-h-screen relative overflow-hidden"
+      style={{ background: "radial-gradient(ellipse 90% 50% at 50% -10%,rgba(99,40,217,0.22) 0%,transparent 55%),hsl(224,20%,5%)" }}>
+
+      {/* Grid */}
+      <div className="absolute inset-0 pointer-events-none" style={{ backgroundImage: "linear-gradient(rgba(99,102,241,0.025) 1px,transparent 1px),linear-gradient(90deg,rgba(99,102,241,0.025) 1px,transparent 1px)", backgroundSize: "60px 60px" }} />
+
+      {/* ── Header ── */}
+      <header className="sticky top-0 z-50" style={{ background: "rgba(7,8,18,0.93)", borderBottom: "1px solid rgba(139,92,246,0.2)", backdropFilter: "blur(24px)" }}>
+        <div className="h-px" style={{ background: "linear-gradient(90deg,transparent,rgba(139,92,246,0.6),rgba(6,182,212,0.4),transparent)" }} />
+        <div className="container py-3 flex items-center justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center shadow-lg">
-              <span className="text-2xl">🌍</span>
+            <div className="relative">
+              <div className="absolute inset-0 rounded-xl blur-md opacity-70 animate-pulse" style={{ background: "rgba(139,92,246,0.7)" }} />
+              <div className="relative w-12 h-12 rounded-xl flex items-center justify-center text-2xl" style={{ background: "linear-gradient(135deg,#7c3aed,#a855f7)" }}>🌍</div>
             </div>
             <div>
-              <h1 className="font-bold text-2xl text-slate-800 dark:text-slate-200">
-                All Rooms Leaderboard
+              <h1 className="font-black text-xl tracking-wider" style={{ fontFamily: "'Orbitron',sans-serif", background: "linear-gradient(90deg,#c4b5fd,#f0abfc,#67e8f9)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
+                ALL ARENAS
               </h1>
-              <p className="text-sm text-slate-600 dark:text-slate-400">
-                <span className="font-semibold text-purple-600 dark:text-purple-400">
-                  {totalRooms} rooms
-                </span>
-                {" • "}
-                <span className="font-semibold text-blue-600 dark:text-blue-400">
-                  {totalTeams} teams
-                </span>
-                {" • "}
-                <span className="font-semibold text-green-600 dark:text-green-400">
-                  {totalWinners} winners
-                </span>
+              <p className="text-xs font-mono text-slate-500">
+                <span className="text-purple-400">{rooms.length} rooms</span> &nbsp;·&nbsp;
+                <span className="text-cyan-400">{totalTeams} teams</span> &nbsp;·&nbsp;
+                <span className="text-green-400">{totalWinners} winners</span>
               </p>
             </div>
           </div>
           <div className="flex items-center gap-3">
-            {/* View Mode Toggle */}
-            <div className="flex items-center bg-slate-100 dark:bg-slate-800 rounded-xl p-1">
-              <button
-                onClick={() => setViewMode('rooms')}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                  viewMode === 'rooms'
-                    ? 'bg-white dark:bg-slate-700 text-purple-600 dark:text-purple-400 shadow-sm'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
-                }`}
-              >
-                🏠 By Room
-              </button>
-              <button
-                onClick={() => setViewMode('global')}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                  viewMode === 'global'
-                    ? 'bg-white dark:bg-slate-700 text-purple-600 dark:text-purple-400 shadow-sm'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
-                }`}
-              >
-                🌐 Global
-              </button>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-xs">🔍</span>
+              <input value={search} onChange={e => setSearch(e.target.value.toUpperCase())} placeholder="SEARCH ROOM..." className="pl-8 pr-3 py-1.5 rounded-lg text-xs font-mono w-36" style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(139,92,246,0.3)", color: "white" }} />
             </div>
-            <button
-              onClick={() => navigate("/admin")}
-              className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-purple-500 to-pink-500 text-white font-semibold hover:from-purple-600 hover:to-pink-600 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
-            >
-              Back to Dashboard
+            <button onClick={() => navigate("/admin")} className="px-4 py-1.5 rounded-lg text-xs font-bold text-white" style={{ background: "linear-gradient(135deg,#7c3aed,#a855f7)", boxShadow: "0 0 16px rgba(139,92,246,0.3)" }}>
+              ← Dashboard
             </button>
           </div>
         </div>
       </header>
 
-      <main className="container py-8">
-        {viewMode === 'rooms' ? (
-          <div className="space-y-6">
-            {/* Search and Stats */}
-            <div className="flex items-center gap-4">
-              <input
-                type="text"
-                value={searchRoom}
-                onChange={(e) => setSearchRoom(e.target.value)}
-                placeholder="Search rooms..."
-                className="flex-1 max-w-md rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent shadow-sm"
-              />
-            </div>
-
-            {/* Room Cards Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {rooms.map(([roomCode, roomData]) => {
-                const winner = roomData.winner;
-                const topTeams = roomData.rows.slice(0, 3);
-                const hasWinner = roomData.hasWinner;
-
-                return (
-                  <div
-                    key={roomCode}
-                    className={`bg-white/95 dark:bg-slate-800/95 backdrop-blur-sm border rounded-2xl shadow-xl overflow-hidden transition-all duration-300 hover:shadow-2xl hover:-translate-y-1 cursor-pointer ${
-                      hasWinner 
-                        ? 'border-green-300 dark:border-green-600 ring-2 ring-green-200 dark:ring-green-800' 
-                        : 'border-white/20 dark:border-slate-700/50'
-                    }`}
-                    onClick={() => navigate(`/leaderboard?room=${roomCode}`)}
-                  >
-                    {/* Room Header */}
-                    <div className={`p-4 ${
-                      hasWinner 
-                        ? 'bg-gradient-to-r from-green-500 to-emerald-600' 
-                        : 'bg-gradient-to-r from-purple-600 to-pink-600'
-                    }`}>
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <h3 className="font-bold text-lg text-white flex items-center gap-2">
-                            🏠 {roomData.room?.title || roomCode}
-                          </h3>
-                          <p className="text-white/80 text-sm">
-                            Code: {roomCode} • {roomData.teamCount} teams
-                          </p>
-                        </div>
-                        {hasWinner && (
-                          <div className="bg-white/20 backdrop-blur-sm rounded-full px-3 py-1 flex items-center gap-1">
-                            <span className="text-lg">🏆</span>
-                            <span className="text-white text-xs font-semibold">HAS WINNER</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Winner Section */}
-                    {winner && (
-                      <div className="p-4 bg-gradient-to-r from-yellow-50 to-orange-50 dark:from-yellow-900/20 dark:to-orange-900/20 border-b border-yellow-200 dark:border-yellow-800">
-                        <div className="flex items-center gap-3">
-                          <div className="w-12 h-12 rounded-full bg-gradient-to-br from-yellow-400 to-orange-500 flex items-center justify-center shadow-lg">
-                            <span className="text-2xl">👑</span>
-                          </div>
-                          <div className="flex-1">
-                            <div className="text-xs text-yellow-600 dark:text-yellow-400 font-semibold uppercase">
-                              🎉 Room Winner
-                            </div>
-                            <div className="font-bold text-lg text-slate-800 dark:text-slate-200">
-                              {winner.team_name}
-                            </div>
-                            <div className="flex items-center gap-3 text-sm text-slate-600 dark:text-slate-400">
-                              <span>⏱️ {formatTime(winner.time_taken_ms || 0)}</span>
-                              <span>📏 {winner.lines_completed}/5 lines</span>
-                              <span>✅ {winner.solved_questions_count || 0} solved</span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Top 3 Teams */}
-                    <div className="p-4">
-                      <h4 className="text-sm font-semibold text-slate-500 dark:text-slate-400 mb-3">
-                        Top Performers
-                      </h4>
-                      <div className="space-y-2">
-                        {topTeams.length > 0 ? (
-                          topTeams.map((row, idx) => (
-                            <div
-                              key={row.team.id}
-                              className="flex items-center gap-3 p-2 rounded-xl bg-slate-50 dark:bg-slate-700/50"
-                            >
-                              <div
-                                className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold ${
-                                  idx === 0
-                                    ? 'bg-gradient-to-br from-yellow-400 to-orange-500 text-white'
-                                    : idx === 1
-                                    ? 'bg-gradient-to-br from-slate-400 to-slate-500 text-white'
-                                    : 'bg-gradient-to-br from-amber-400 to-orange-500 text-white'
-                                }`}
-                              >
-                                {['🥇', '🥈', '🥉'][idx]}
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="font-medium text-slate-800 dark:text-slate-200 truncate">
-                                  {row.team.team_name}
-                                </div>
-                                <div className="text-xs text-slate-500 dark:text-slate-400">
-                                  {row.team.lines_completed}/5 lines • {formatTime(row.team.time_taken_ms || 0)}
-                                </div>
-                              </div>
-                              {row.team.lines_completed >= 5 && (
-                                <span className="text-green-500 text-lg">✓</span>
-                              )}
-                            </div>
-                          ))
-                        ) : (
-                          <div className="text-center py-4 text-slate-500 dark:text-slate-400">
-                            <span className="text-2xl">👥</span>
-                            <p className="text-sm mt-1">No teams yet</p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* View Full Leaderboard Link */}
-                    <div className="px-4 pb-4">
-                      <button
-                        className="w-full py-2.5 rounded-xl bg-gradient-to-r from-slate-100 to-slate-200 dark:from-slate-700 dark:to-slate-600 text-slate-700 dark:text-slate-200 font-medium text-sm hover:from-purple-100 hover:to-pink-100 dark:hover:from-purple-900/30 dark:hover:to-pink-900/30 transition-all"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          navigate(`/leaderboard?room=${roomCode}`);
-                        }}
-                      >
-                        View Full Leaderboard →
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {rooms.length === 0 && (
-              <div className="text-center py-16 bg-white/90 dark:bg-slate-800/90 rounded-2xl shadow-xl">
-                <div className="text-6xl mb-4 animate-bounce">🏠</div>
-                <h3 className="text-xl font-semibold text-slate-600 dark:text-slate-400 mb-2">
-                  No rooms found
-                </h3>
-                <p className="text-slate-500 dark:text-slate-500">
-                  {searchRoom ? 'Try a different search term' : 'Create a room to get started!'}
-                </p>
-              </div>
-            )}
+      <main className="container py-8 space-y-4 relative z-10">
+        {/* Loading */}
+        {loading && (
+          <div className="text-center py-20">
+            <div className="w-10 h-10 border-2 border-purple-500/30 border-t-purple-500 rounded-full animate-spin mx-auto mb-4" />
+            <p className="font-mono text-slate-500 text-xs tracking-widest">SCANNING ARENAS...</p>
           </div>
-        ) : (
-          /* Global View */
-          <div className="space-y-6">
-            {/* Top 3 Global Champions */}
-            {allTeams.length >= 3 && (
-              <div className="bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm border border-white/20 dark:border-slate-700/50 rounded-2xl p-8 shadow-2xl animate-in slide-in-from-top-5">
-                <div className="text-center mb-8">
-                  <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-200 mb-2">
-                    🌟 Global Champions
-                  </h2>
-                  <p className="text-slate-600 dark:text-slate-400">
-                    The best teams across all rooms!
-                  </p>
+        )}
+
+        {/* Room cards */}
+        {!loading && rooms.map(([roomCode, roomData]) => {
+          const isOpen = openRooms.has(roomCode);
+          const hw = roomData.hasWinner;
+          const borderColor = hw ? "rgba(34,197,94,0.4)" : "rgba(139,92,246,0.25)";
+          const glowColor = hw ? "rgba(34,197,94,0.08)" : "transparent";
+
+          return (
+            <div key={roomCode} className="rounded-2xl overflow-hidden transition-all duration-300"
+              style={{ background: CARD, border: `1px solid ${borderColor}`, boxShadow: hw ? `0 0 30px ${glowColor}` : "none" }}>
+
+              {/* ── Room header row (always visible, click to expand) ── */}
+              <div className="flex items-center justify-between px-5 py-4 cursor-pointer select-none"
+                onClick={() => toggle(roomCode)}
+                style={{ background: isOpen ? "rgba(139,92,246,0.1)" : "transparent" }}>
+                <div className="flex items-center gap-4">
+                  {/* Color dot */}
+                  <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: hw ? "#22c55e" : "#a855f7", boxShadow: `0 0 8px ${hw ? "#22c55e" : "#a855f7"}` }} />
+
+                  {/* Room code */}
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-black text-white text-base" style={{ fontFamily: "'Orbitron',sans-serif" }}>{roomCode}</span>
+                      {roomData.room?.title && roomData.room.title !== roomCode && (
+                        <span className="text-xs text-slate-500 font-mono">— {roomData.room.title}</span>
+                      )}
+                      {hw && <span className="px-2 py-0.5 rounded-full text-[9px] font-bold text-green-300" style={{ background: "rgba(34,197,94,0.2)", border: "1px solid rgba(34,197,94,0.3)" }}>✓ HAS WINNER</span>}
+                      {roomData.room?.roundEndAt && <span className="hidden sm:inline px-2 py-0.5 rounded-full text-[9px] font-mono text-cyan-400" style={{ background: "rgba(6,182,212,0.1)", border: "1px solid rgba(6,182,212,0.2)" }}>
+                        {new Date(roomData.room.roundEndAt) > new Date() ? "⏱ LIVE" : "⏹ ENDED"}
+                      </span>}
+                    </div>
+                    <p className="text-xs font-mono text-slate-600 mt-0.5">{roomData.teamCount} teams competing</p>
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  {/* 2nd Place */}
-                  <div className="order-1 md:order-1 transform hover:scale-105 transition-all duration-300">
-                    <div className="bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-700 dark:to-slate-600 rounded-2xl p-6 shadow-lg border border-slate-200 dark:border-slate-600">
-                      <div className="text-center">
-                        <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gradient-to-br from-slate-400 to-slate-500 flex items-center justify-center shadow-lg">
-                          <span className="text-2xl">🥈</span>
-                        </div>
-                        <div className="text-sm text-slate-500 dark:text-slate-400 mb-1">
-                          2nd Place
-                        </div>
-                        <div className="font-bold text-lg text-slate-800 dark:text-slate-200 mb-1">
-                          {allTeams[1]?.team.team_name}
-                        </div>
-                        <div className="text-sm text-slate-600 dark:text-slate-400 mb-3">
-                          Room: {allTeams[1]?.room_code}
-                        </div>
-                        <div className="flex items-center justify-center gap-4 text-sm">
-                          <div className="flex items-center gap-1">
-                            <span className="text-blue-600 dark:text-blue-400">
-                              📏
-                            </span>
-                            <span className="font-semibold">
-                              {allTeams[1]?.team.lines_completed}/5
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <span className="text-green-600 dark:text-green-400">
-                              ⏱️
-                            </span>
-                            <span className="font-semibold">
-                              {formatTime(allTeams[1]?.team.time_taken_ms || 0)}
-                            </span>
-                          </div>
-                        </div>
+                <div className="flex items-center gap-4">
+                  {/* Mini top-3 avatars */}
+                  <div className="hidden sm:flex items-center -space-x-2">
+                    {roomData.rows.slice(0, 3).map((r, i) => (
+                      <div key={r.team.id} className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold text-white border-2" style={{ background: RANK_META[i]?.bg ?? "rgba(99,102,241,0.5)", borderColor: "rgba(7,8,18,0.8)", zIndex: 3 - i }}>
+                        {r.team.team_name.substring(0, 2).toUpperCase()}
                       </div>
-                    </div>
+                    ))}
                   </div>
 
-                  {/* 1st Place */}
-                  <div className="order-2 md:order-2 transform hover:scale-105 transition-all duration-300">
-                    <div className="bg-gradient-to-br from-yellow-100 via-yellow-50 to-amber-100 dark:from-yellow-900/20 dark:via-amber-900/20 dark:to-yellow-900/20 rounded-2xl p-8 shadow-2xl border-2 border-yellow-300 dark:border-yellow-600 relative">
-                      <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
-                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-yellow-400 to-orange-500 flex items-center justify-center shadow-lg animate-bounce">
-                          <span className="text-2xl">👑</span>
-                        </div>
-                      </div>
-                      <div className="text-center pt-4">
-                        <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-gradient-to-br from-yellow-400 to-orange-500 flex items-center justify-center shadow-xl animate-pulse">
-                          <span className="text-3xl">🥇</span>
-                        </div>
-                        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-yellow-200 dark:bg-yellow-900/40 text-yellow-800 dark:text-yellow-200 text-sm font-semibold mb-2">
-                          <span className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse"></span>
-                          GLOBAL LEADER
-                        </div>
-                        <div className="font-bold text-2xl text-slate-800 dark:text-slate-200 mb-1">
-                          {allTeams[0]?.team.team_name}
-                        </div>
-                        <div className="text-sm text-slate-600 dark:text-slate-400 mb-4">
-                          Room: {allTeams[0]?.room_code}
-                        </div>
-                        <div className="flex items-center justify-center gap-4 text-sm">
-                          <div className="flex items-center gap-1">
-                            <span className="text-blue-600 dark:text-blue-400">
-                              📏
-                            </span>
-                            <span className="font-bold text-lg">
-                              {allTeams[0]?.team.lines_completed}/5
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <span className="text-green-600 dark:text-green-400">
-                              ⏱️
-                            </span>
-                            <span className="font-bold text-lg">
-                              {formatTime(allTeams[0]?.team.time_taken_ms || 0)}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
+                  {/* Winner name */}
+                  {roomData.winner && (
+                    <div className="hidden md:flex items-center gap-1.5 text-xs font-mono">
+                      <span className="text-amber-400">👑</span>
+                      <span className="text-amber-300 font-bold">{roomData.winner.team_name}</span>
                     </div>
-                  </div>
+                  )}
 
-                  {/* 3rd Place */}
-                  <div className="order-3 md:order-3 transform hover:scale-105 transition-all duration-300">
-                    <div className="bg-gradient-to-br from-amber-100 to-orange-100 dark:from-amber-900/20 dark:to-orange-900/20 rounded-2xl p-6 shadow-lg border border-amber-200 dark:border-amber-600">
-                      <div className="text-center">
-                        <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shadow-lg">
-                          <span className="text-2xl">🥉</span>
-                        </div>
-                        <div className="text-sm text-slate-500 dark:text-slate-400 mb-1">
-                          3rd Place
-                        </div>
-                        <div className="font-bold text-lg text-slate-800 dark:text-slate-200 mb-1">
-                          {allTeams[2]?.team.team_name}
-                        </div>
-                        <div className="text-sm text-slate-600 dark:text-slate-400 mb-3">
-                          Room: {allTeams[2]?.room_code}
-                        </div>
-                        <div className="flex items-center justify-center gap-4 text-sm">
-                          <div className="flex items-center gap-1">
-                            <span className="text-blue-600 dark:text-blue-400">
-                              📏
-                            </span>
-                            <span className="font-semibold">
-                              {allTeams[2]?.team.lines_completed}/5
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <span className="text-green-600 dark:text-green-400">
-                              ⏱️
-                            </span>
-                            <span className="font-semibold">
-                              {formatTime(allTeams[2]?.team.time_taken_ms || 0)}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
+                  {/* Chevron */}
+                  <div className="w-7 h-7 rounded-lg flex items-center justify-center transition-all duration-300"
+                    style={{ background: "rgba(139,92,246,0.15)", transform: isOpen ? "rotate(180deg)" : "rotate(0deg)" }}>
+                    <svg className="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
                   </div>
                 </div>
               </div>
-            )}
 
-            {/* Full Global Leaderboard Table */}
-            <div className="bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm border border-white/20 dark:border-slate-700/50 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in-50 duration-700">
-              <div className="bg-gradient-to-r from-purple-600 to-pink-600 p-6">
-                <h2 className="text-2xl font-bold text-white flex items-center gap-3">
-                  <span className="text-3xl">🏆</span>
-                  Global Rankings
-                </h2>
-                <p className="text-purple-100 mt-1">All teams across all rooms</p>
-              </div>
+              {/* ── Expanded room details ── */}
+              {isOpen && (
+                <div style={{ borderTop: "1px solid rgba(139,92,246,0.15)" }}>
 
-              <div className="divide-y divide-slate-200 dark:divide-slate-700">
-                {allTeams.map((r, index) => {
-                  const isTopThree = index < 3;
-                  const isWinner = (r.team.lines_completed ?? 0) >= 5;
-                  const progressPercentage = ((r.team.lines_completed ?? 0) / 5) * 100;
+                  {/* Winner bar */}
+                  {roomData.winner && (
+                    <div className="px-5 py-3 flex items-center gap-4" style={{ background: "linear-gradient(90deg,rgba(245,158,11,0.12),transparent)", borderBottom: "1px solid rgba(245,158,11,0.15)" }}>
+                      <div className="w-9 h-9 rounded-full flex items-center justify-center text-xl flex-shrink-0 animate-bounce" style={{ background: "linear-gradient(135deg,#f59e0b,#d97706)", boxShadow: "0 0 16px rgba(245,158,11,0.5)" }}>👑</div>
+                      <div>
+                        <p className="text-[10px] font-mono text-amber-400 tracking-widest">ROOM CHAMPION</p>
+                        <p className="font-black text-white text-sm" style={{ fontFamily: "'Orbitron',sans-serif" }}>{roomData.winner.team_name}</p>
+                      </div>
+                      <div className="ml-auto flex gap-4 text-xs font-mono text-amber-300">
+                        <span>⏱ {fmt(roomData.winner.time_taken_ms || 0)}</span>
+                        <span>📏 {roomData.winner.lines_completed}/5</span>
+                      </div>
+                    </div>
+                  )}
 
-                  return (
-                    <div
-                      key={`${r.room_code}-${r.team.id}`}
-                      className={`p-6 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-all duration-300 cursor-pointer ${
-                        isTopThree
-                          ? "bg-gradient-to-r from-purple-50/50 to-transparent dark:from-purple-900/10"
-                          : ""
-                      }`}
-                      onClick={() => navigate(`/leaderboard?room=${r.room_code}`)}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-4">
-                          {/* Rank Badge */}
-                          <div
-                            className={`w-12 h-12 rounded-xl flex items-center justify-center font-bold text-lg shadow-lg ${
-                              index === 0
-                                ? "bg-gradient-to-br from-yellow-400 to-orange-500 text-white"
-                                : index === 1
-                                  ? "bg-gradient-to-br from-slate-400 to-slate-500 text-white"
-                                  : index === 2
-                                    ? "bg-gradient-to-br from-amber-400 to-orange-500 text-white"
-                                    : "bg-gradient-to-br from-purple-500 to-pink-600 text-white"
-                            }`}
-                          >
-                            {index < 3 ? ["🥇", "🥈", "🥉"][index] : `#${r.globalRank}`}
+                  {/* Team rows — ALL teams */}
+                  <div>
+                    {roomData.rows.length === 0 && (
+                      <div className="py-8 text-center text-slate-600 text-xs font-mono">NO TEAMS YET</div>
+                    )}
+                    {roomData.rows.map((row, idx) => {
+                      const isWinner = (row.team.lines_completed ?? 0) >= 5;
+                      // Mark as spectator if 0 lines and no start time (never played)
+                      const isSpectator = !row.team.start_time && (row.team.lines_completed ?? 0) === 0;
+                      const pct = Math.min(((row.team.lines_completed ?? 0) / 5) * 100, 100);
+                      const rm = RANK_META[idx] ?? { bg: "rgba(99,102,241,0.2)", shadow: "none", label: `#${row.rank}` };
+
+                      return (
+                        <div key={row.team.id} className="flex items-center gap-4 px-5 py-3 transition-colors"
+                          style={{ borderBottom: "1px solid rgba(139,92,246,0.06)" }}
+                          onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.02)"; }}
+                          onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}>
+
+                          {/* Rank badge */}
+                          <div className="w-9 h-9 rounded-xl flex items-center justify-center text-sm font-black text-white flex-shrink-0"
+                            style={{ background: isSpectator ? "rgba(100,116,139,0.3)" : rm.bg, boxShadow: isSpectator ? "none" : rm.shadow, fontSize: idx < 3 ? "16px" : "11px" }}>
+                            {isSpectator ? "👁" : idx < 3 ? rm.label : `#${row.rank}`}
                           </div>
 
-                          {/* Team Info */}
-                          <div className="flex-1">
-                            <div className="flex items-center gap-3 mb-1">
-                              <h3 className="font-bold text-lg text-slate-800 dark:text-slate-200">
-                                {r.team.team_name}
-                              </h3>
-                              {isWinner && (
-                                <div className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-200 text-xs font-semibold">
-                                  <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>
-                                  WINNER
+                          {/* Name + progress */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-white text-sm truncate">{row.team.team_name}</span>
+                              {isSpectator && <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold text-slate-400" style={{ background: "rgba(100,116,139,0.2)", border: "1px solid rgba(100,116,139,0.3)" }}>SPECTATOR</span>}
+                              {isWinner && <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold text-amber-300" style={{ background: "rgba(245,158,11,0.15)", border: "1px solid rgba(245,158,11,0.3)" }}>✓ WIN</span>}
+                            </div>
+                            {!isSpectator && (
+                              <div className="flex items-center gap-2 mt-1.5">
+                                <div className="flex-1 h-1 rounded-full" style={{ background: "rgba(255,255,255,0.07)" }}>
+                                  <div className="h-full rounded-full transition-all duration-700"
+                                    style={{ width: `${pct}%`, background: isWinner ? "linear-gradient(90deg,#22c55e,#16a34a)" : "linear-gradient(90deg,#7c3aed,#a855f7)" }} />
                                 </div>
-                              )}
-                            </div>
+                                <span className="text-[10px] font-mono text-slate-500">{row.team.lines_completed ?? 0}/5</span>
+                              </div>
+                            )}
+                            {isSpectator && <p className="text-[10px] text-slate-600 font-mono mt-0.5">Joined room — not started</p>}
+                          </div>
 
-                            <div className="flex items-center gap-4 mb-3">
-                              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-200 text-sm font-medium">
-                                <span className="text-lg">🏠</span>
-                                {r.room_title}
-                              </div>
-                              <span className="text-sm text-slate-500 dark:text-slate-400">
-                                ✅ {r.team.solved_questions_count || 0} questions solved
-                              </span>
-                            </div>
-
-                            {/* Progress Bar */}
-                            <div className="flex items-center gap-3 mb-2">
-                              <div className="flex-1 max-w-xs bg-slate-200 dark:bg-slate-600 rounded-full h-2 overflow-hidden">
-                                <div
-                                  className={`h-full transition-all duration-1000 ease-out rounded-full ${
-                                    isWinner
-                                      ? "bg-gradient-to-r from-green-400 to-emerald-500"
-                                      : "bg-gradient-to-r from-purple-400 to-pink-500"
-                                  }`}
-                                  style={{ width: `${progressPercentage}%` }}
-                                />
-                              </div>
-                              <span className="text-sm font-semibold text-slate-600 dark:text-slate-400 min-w-[3rem]">
-                                {r.team.lines_completed}/5
-                              </span>
-                            </div>
-
-                            {/* Status */}
-                            <div className="flex items-center gap-4 text-sm text-slate-500 dark:text-slate-400">
-                              <div className="flex items-center gap-1">
-                                <span>⏱️</span>
-                                <span className="font-medium">
-                                  {formatTime(r.team.time_taken_ms ?? 0)}
-                                </span>
-                              </div>
-                              <div
-                                className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
-                                  isWinner
-                                    ? "bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-200"
-                                    : (r.team.lines_completed ?? 0) > 0
-                                      ? "bg-purple-100 dark:bg-purple-900/40 text-purple-800 dark:text-purple-200"
-                                      : "bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400"
-                                }`}
-                              >
-                                <span
-                                  className={`w-1.5 h-1.5 rounded-full ${
-                                    isWinner
-                                      ? "bg-green-500"
-                                      : (r.team.lines_completed ?? 0) > 0
-                                        ? "bg-purple-500"
-                                        : "bg-slate-400"
-                                  }`}
-                                ></span>
-                                {isWinner
-                                  ? "Completed"
-                                  : (r.team.lines_completed ?? 0) > 0
-                                    ? "In Progress"
-                                    : "Not Started"}
-                              </div>
-                            </div>
+                          {/* Time */}
+                          <div className="text-right flex-shrink-0">
+                            <p className="font-mono text-sm font-bold" style={{ color: isSpectator ? "#374151" : "white" }}>
+                              {isSpectator ? "—" : row.team.start_time ? fmt(row.team.time_taken_ms || 0) : "—"}
+                            </p>
+                            <p className="text-[10px]" style={{ color: isWinner ? "#4ade80" : isSpectator ? "#374151" : (row.team.lines_completed ?? 0) > 0 ? "#a5b4fc" : "#374151" }}>
+                              {isWinner ? "DONE" : isSpectator ? "SPECTATE" : row.team.start_time ? "LIVE" : "IDLE"}
+                            </p>
                           </div>
                         </div>
+                      );
+                    })}
+                  </div>
 
-                        {/* Rank Number */}
-                        <div className="text-right">
-                          <div className="text-3xl font-bold text-slate-400 dark:text-slate-500">
-                            #{r.globalRank}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {allTeams.length === 0 && (
-                <div className="text-center py-16">
-                  <div className="text-6xl mb-4 animate-bounce">🌍</div>
-                  <h3 className="text-xl font-semibold text-slate-600 dark:text-slate-400 mb-2">
-                    No teams yet
-                  </h3>
-                  <p className="text-slate-500 dark:text-slate-500">
-                    Global leaderboard will populate as teams complete games!
-                  </p>
+                  {/* See full leaderboard + Spectate */}
+                  <div className="px-5 py-3 flex gap-2" style={{ borderTop: "1px solid rgba(139,92,246,0.1)" }}>
+                    <button onClick={() => navigate(`/leaderboard?room=${roomCode}`)}
+                      className="flex-1 py-2 rounded-xl text-xs font-bold text-purple-300 transition-all hover:text-white"
+                      style={{ background: "rgba(139,92,246,0.12)", border: "1px solid rgba(139,92,246,0.25)" }}>
+                      🏆 Full Leaderboard →
+                    </button>
+                    <button onClick={() => navigate(`/spectate?room=${roomCode}`)}
+                      className="flex-1 py-2 rounded-xl text-xs font-bold transition-all hover:text-white"
+                      style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", color: "#fca5a5" }}>
+                      👁 Spectate Live →
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
+          );
+        })}
+
+        {/* Empty state */}
+        {!loading && rooms.length === 0 && (
+          <div className="py-24 text-center rounded-2xl" style={{ background: CARD, border: "1px solid rgba(139,92,246,0.2)" }}>
+            <div className="text-5xl mb-4">🌌</div>
+            <p className="font-mono text-slate-500 tracking-widest text-sm">NO ARENAS FOUND</p>
+            <p className="text-xs text-slate-700 mt-2">{search ? `No rooms matching "${search}"` : "Create a room from the admin dashboard to get started"}</p>
           </div>
         )}
       </main>
     </div>
   );
-}
-
-function formatTime(ms: number) {
-  if (ms === 0) return "0:00";
-  const totalSeconds = Math.floor(ms / 1000);
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-  
-  if (hours > 0) {
-    return `${hours}:${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
-  }
-  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }

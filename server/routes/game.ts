@@ -1,4 +1,4 @@
-import { RequestHandler } from "express";
+import { RequestHandler, Request, Response } from "express";
 import type {
   GameStateResponse,
   LoginRequest,
@@ -8,6 +8,90 @@ import type {
   GameType,
 } from "../../shared/api.js";
 import { db, withRetry } from "../db.js";
+
+// ─── SSE: real-time board push ───────────────────────────────────────────────
+// Map of roomCode → Set of SSE response objects
+const sseRooms = new Map<string, Set<Response>>();
+
+/** Push a JSON message to every SSE client listening in a room. */
+function broadcastRoom(roomCode: string, payload: object) {
+  const clients = sseRooms.get(roomCode);
+  if (!clients || clients.size === 0) return;
+  const msg = `data: ${JSON.stringify(payload)}\n\n`;
+  clients.forEach((res) => {
+    try { res.write(msg); } catch { clients.delete(res); }
+  });
+}
+
+/** SSE endpoint: GET /api/tictactoe/stream?room=XXX */
+export const handleTicTacToeStream: RequestHandler = (req, res) => {
+  const roomCode = (req.query.room as string)?.toUpperCase().slice(0, 10);
+  if (!roomCode) return res.status(400).json({ error: "Room code required" });
+
+  // SSE headers
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    "Connection": "keep-alive",
+    "X-Accel-Buffering": "no", // nginx: disable proxy buffering
+  });
+  res.write("data: {\"type\":\"connected\"}\n\n");
+
+  // Keep-alive ping every 25s so proxies don't close the connection
+  const ping = setInterval(() => {
+    try { res.write(": ping\n\n"); } catch { clearInterval(ping); }
+  }, 25000);
+
+  // Register this client
+  if (!sseRooms.has(roomCode)) sseRooms.set(roomCode, new Set());
+  sseRooms.get(roomCode)!.add(res);
+
+  req.on("close", () => {
+    clearInterval(ping);
+    sseRooms.get(roomCode)?.delete(res);
+  });
+};
+
+// ─── SSE: bingo game board push ──────────────────────────────────────────────
+// Separate channel from TicTacToe — only fires on bingo board changes
+const bingoRooms = new Map<string, Set<Response>>();
+
+function broadcastBingoRoom(roomCode: string, payload: object) {
+  const clients = bingoRooms.get(roomCode);
+  if (!clients || clients.size === 0) return;
+  const msg = `data: ${JSON.stringify(payload)}\n\n`;
+  clients.forEach((r) => {
+    try { r.write(msg); } catch { clients.delete(r); }
+  });
+}
+
+/** SSE endpoint: GET /api/game/stream?room=XXX — streams board_update events */
+export const handleGameStream: RequestHandler = (req, res) => {
+  const roomCode = (req.query.room as string)?.toUpperCase().slice(0, 10);
+  if (!roomCode) return res.status(400).json({ error: "Room code required" });
+
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    "Connection": "keep-alive",
+    "X-Accel-Buffering": "no", // nginx: disable proxy buffering
+  });
+  res.write("data: {\"type\":\"connected\"}\n\n");
+
+  // Keep-alive ping every 25s so proxies don't close idle connections
+  const ping = setInterval(() => {
+    try { res.write(": ping\n\n"); } catch { clearInterval(ping); }
+  }, 25000);
+
+  if (!bingoRooms.has(roomCode)) bingoRooms.set(roomCode, new Set());
+  bingoRooms.get(roomCode)!.add(res);
+
+  req.on("close", () => {
+    clearInterval(ping);
+    bingoRooms.get(roomCode)?.delete(res);
+  });
+};
+// ─────────────────────────────────────────────────────────────────────────────
 import {
   rooms,
   questions as questionsTable,
@@ -16,8 +100,10 @@ import {
   teamQuestionMapping,
   teamSolvedPositions,
   submissionAttempts,
+  gameBoards,
 } from "../schema.js";
 import { eq, and, sql } from "drizzle-orm";
+import { cache, TTL } from "../cache.js";
 
 // Seeded random shuffle function for consistent randomization
 function seededShuffle<T>(array: T[], seed: string): T[] {
@@ -434,12 +520,99 @@ export const handleGameState: RequestHandler = async (req, res) => {
       .where(eq(teamSolvedPositions.teamId, teamId));
     const solvedPositions = solvedPositionsResult.map((sp) => sp.position);
 
+    // Get solved questions IDs for this team
+    const solvedQuestionsResult = await db
+      .select({ questionId: teamSolvedQuestions.questionId })
+      .from(teamSolvedQuestions)
+      .where(eq(teamSolvedQuestions.teamId, teamId));
+    const solvedQuestionsSet = new Set(solvedQuestionsResult.map(sq => sq.questionId));
+
     // Show all questions (both mapped and unmapped)
-    const questionsToShow = roomQuestions;
+    const questionsToShow = roomQuestions.map(q => ({
+      ...q,
+      isSolved: solvedQuestionsSet.has(q.question_id)
+    }));
 
     const timeRemaining = room.roundEndAt
       ? Math.max(0, Math.floor((room.roundEndAt.getTime() - Date.now()) / 1000))
       : 0;
+
+    let tictactoe = undefined;
+    if (room.gameType === 'tictactoe') {
+      let { state, board } = await getOrCreateTTTBoard(code, teamId);
+
+      // Auto-assign teams if not assigned
+      let updated = false;
+      let secondPlayerJoined = false;
+      if (!state.teamX) {
+        state.teamX = teamId;
+        updated = true;
+      } else if (!state.teamO && state.teamX !== teamId) {
+        state.teamO = teamId;
+        updated = true;
+        secondPlayerJoined = true;
+      }
+
+      if (updated) {
+        await db.update(gameBoards).set({
+          boardState: JSON.stringify(state),
+          updatedAt: new Date()
+        }).where(eq(gameBoards.id, board.id));
+      }
+
+      // Update isSolved for questions based on TTT state (which includes fallback ones if solved)
+      const tttSolved = new Set(state.solvedByTeam?.[teamId] || []);
+      questionsToShow.forEach(q => {
+        if (tttSolved.has(String(q.question_id))) {
+          q.isSolved = true;
+        }
+      });
+
+      const isTeamX = state.teamX === teamId;
+      const isTeamO = state.teamO === teamId;
+      const symbol = isTeamX ? 'X' : isTeamO ? 'O' : null;
+
+      // Fetch team names for display
+      const teamIds = [state.teamX, state.teamO].filter(Boolean) as string[];
+      const teamRows = teamIds.length > 0
+        ? await db.select({ teamId: teams.teamId, teamName: teams.teamName }).from(teams).where(
+          teamIds.length === 1
+            ? eq(teams.teamId, teamIds[0])
+            : sql`${teams.teamId} IN (${sql.join(teamIds.map(id => sql`${id}`), sql`, `)})`
+        )
+        : [];
+      const teamNameMap: Record<string, string> = {};
+      for (const row of teamRows) teamNameMap[row.teamId] = row.teamName;
+
+      tictactoe = {
+        board: state.cells,
+        teamX: state.teamX,
+        teamO: state.teamO,
+        teamXName: state.teamX ? (teamNameMap[state.teamX] || 'Team X') : null,
+        teamOName: state.teamO ? (teamNameMap[state.teamO] || 'Team O') : null,
+        turn: state.turn,
+        knivesCredits: state.knivesCredits || {},
+        movesCredits: state.movesCredits || {},
+        winner: state.winner,
+        winByMajority: state.winByMajority ?? false,
+        yourSymbol: symbol,
+        canMove: symbol === state.turn && (state.movesCredits?.[teamId] || 0) > 0,
+        canKnife: (state.knivesCredits?.[teamId] || 0) > 0,
+        bothConnected: !!(state.teamX && state.teamO),
+        bonusQuestion: state.bonusQuestion || null,  // ← include active bonus
+      };
+
+      // Broadcast battle-start when second player joins so clients show the VS animation
+      if (secondPlayerJoined) {
+        broadcastRoom(code, {
+          type: 'battle_start',
+          teamXName: tictactoe.teamXName,
+          teamOName: tictactoe.teamOName,
+          teamX: state.teamX,
+          teamO: state.teamO,
+        });
+      }
+    }
 
     const response: GameStateResponse = {
       room: {
@@ -454,10 +627,11 @@ export const handleGameState: RequestHandler = async (req, res) => {
       team,
       questions: questionsToShow,
       solved_positions: solvedPositions,
-      currentQuestionIndex: 0, // TODO
-      gameStarted: true, // TODO
+      currentQuestionIndex: 0,
+      gameStarted: true,
       gameEnded: room.roundEndAt ? room.roundEndAt < new Date() : false,
       timeRemaining,
+      tictactoe,
     };
 
     res.json(response);
@@ -486,6 +660,48 @@ export const handleSubmit: RequestHandler = async (req, res) => {
     const overallStart = Date.now();
     // Enforce max length 10 for room code
     const code = body.room.toUpperCase().slice(0, 10);
+
+    // Handle fallback question IDs (f1, f2, etc.) for hackathon robustness
+    if (typeof rawQuestionId === 'string' && rawQuestionId.startsWith('f')) {
+      const fallbacks: Record<string, { ans: string, real: boolean }> = {
+        'f1': { ans: '20', real: true },    // Print sum of 10+10 in C → expected: "20"
+        'f2': { ans: 'bingo', real: true },  // JS function returns 'bingo' → expected: "bingo"
+        'f3': { ans: '99', real: false },    // Stealth: Print '99' in C++ → expected: "99"
+        'f4': { ans: 'code', real: true },   // Print 'CODE' using C → expected: "CODE" (lowercased for compare)
+        'f5': { ans: 'true', real: false }   // Stealth: Return true in JS → expected: "true"
+      };
+      const f = fallbacks[rawQuestionId];
+      if (!f) return res.status(404).json({ error: "Fallback question not found" });
+
+      const correct = f.ans === body.answer.trim().toLowerCase();
+      const isRealQuestion = f.real;
+
+      if (correct) {
+        // Find shared board
+        const roomRes = await db.select().from(rooms).where(eq(rooms.code, code));
+        if (roomRes[0]?.gameType === 'tictactoe') {
+          const { board, state } = await getOrCreateTTTBoard(code, body.teamId);
+
+          state.solvedByTeam = state.solvedByTeam || {};
+          const solvedArr = state.solvedByTeam[body.teamId] || [];
+
+          if (!solvedArr.includes(rawQuestionId)) {
+            if (isRealQuestion) {
+              state.movesCredits = state.movesCredits || {};
+              state.movesCredits[body.teamId] = (state.movesCredits[body.teamId] || 0) + 1;
+            } else {
+              state.knivesCredits = state.knivesCredits || {};
+              state.knivesCredits[body.teamId] = Math.min((state.knivesCredits[body.teamId] || 0) + 1, 3);
+            }
+            solvedArr.push(rawQuestionId);
+            state.solvedByTeam[body.teamId] = solvedArr;
+            await db.update(gameBoards).set({ boardState: JSON.stringify(state), updatedAt: new Date() }).where(eq(gameBoards.id, board.id));
+          }
+        }
+      }
+
+      return res.json({ correct, isFake: !isRealQuestion, points: correct ? 10 : 0 });
+    }
 
     // Normalize question id (accept either questionId or question_id)
     const questionIdNum = parseInt(String(rawQuestionId));
@@ -643,6 +859,44 @@ export const handleSubmit: RequestHandler = async (req, res) => {
       updatedTeamRow = teamRes[0] || null;
     }
 
+    // Add Tic Tac Toe credits if it's correct
+    if (correct) {
+      const roomRes = await db.select().from(rooms).where(eq(rooms.code, code));
+      if (roomRes[0]?.gameType === 'tictactoe') {
+        const { board, state } = await getOrCreateTTTBoard(code, (body.teamId as string));
+
+        state.solvedByTeam = state.solvedByTeam || {};
+        const solvedArr = state.solvedByTeam[body.teamId] || [];
+        const qidStr = String(questionIdNum);
+
+        if (!solvedArr.includes(qidStr)) {
+          if (isRealQuestion) {
+            state.movesCredits = state.movesCredits || {};
+            state.movesCredits[body.teamId] = (state.movesCredits[body.teamId] || 0) + 1;
+          } else {
+            state.knivesCredits = state.knivesCredits || {};
+            state.knivesCredits[body.teamId] = Math.min((state.knivesCredits[body.teamId] || 0) + 1, 3);
+          }
+          solvedArr.push(qidStr);
+          state.solvedByTeam[body.teamId] = solvedArr;
+
+          await db.update(gameBoards).set({
+            boardState: JSON.stringify(state),
+            updatedAt: new Date()
+          }).where(eq(gameBoards.id, board.id));
+
+          // ⚡ Push credit update instantly to all clients in this room
+          broadcastRoom(code, {
+            type: "credits_update",
+            movesCredits: state.movesCredits,
+            knivesCredits: state.knivesCredits,
+          });
+        } else {
+          // Already solved - maybe log it or just silently skip credits
+        }
+      }
+    }
+
     if (!updatedTeamRow) {
       // Fallback: select the team row if returning did not produce a row
       const teamRes = await db
@@ -675,6 +929,11 @@ export const handleSubmit: RequestHandler = async (req, res) => {
           }
           : undefined,
     } as any;
+
+    // 🚀 Push instant board_update to all SSE subscribers in this room on correct submissions
+    if (correct) {
+      broadcastBingoRoom(code, { type: "board_update", teamId: body.teamId });
+    }
 
     res.json(result);
   } catch (error) {
@@ -732,5 +991,309 @@ export const handleRecentSubmissions: RequestHandler = async (req, res) => {
     // Return empty array instead of error to prevent UI from breaking
     // This is a non-critical feature (recent activity display)
     res.json({ rows: [] });
+  }
+};
+
+// Tic Tac Toe Helpers
+async function getOrCreateTTTBoard(roomCode: string, creatorTeamId: string) {
+  const cacheKey = `ttt:${roomCode}`;
+
+  // ⚡ Cache hit — skip DB entirely
+  const cached = cache.get<{ board: any; state: any }>(cacheKey);
+  if (cached) return cached;
+
+  const existing = await db
+    .select()
+    .from(gameBoards)
+    .where(and(eq(gameBoards.roomCode, roomCode), eq(gameBoards.gameType, 'tictactoe')));
+
+  if (existing.length > 0) {
+    const result = { board: existing[0], state: JSON.parse(existing[0].boardState) };
+    cache.set(cacheKey, result, TTL.TTT_BOARD);
+    return result;
+  }
+
+  const initialState = {
+    cells: Array(9).fill(null),
+    teamX: null,
+    teamO: null,
+    turn: 'X',
+    movesCredits: {},
+    knivesCredits: {},
+    solvedByTeam: {},
+    winner: null
+  };
+
+  const [newBoard] = await db.insert(gameBoards).values({
+    roomCode,
+    teamId: creatorTeamId,
+    gameType: 'tictactoe',
+    boardState: JSON.stringify(initialState),
+  }).returning();
+
+  const result = { board: newBoard, state: initialState };
+  cache.set(cacheKey, result, TTL.TTT_BOARD);
+  return result;
+}
+
+export const handleTicTacToeAction: RequestHandler = async (req, res) => {
+  const { room, teamId, action, index } = req.body;
+
+  try {
+    const { board, state } = await getOrCreateTTTBoard(room, teamId);
+
+    // Assign teams if not assigned
+    if (!state.teamX) {
+      state.teamX = teamId;
+    } else if (!state.teamO && state.teamX !== teamId) {
+      state.teamO = teamId;
+    }
+
+    const isTeamX = state.teamX === teamId;
+    const isTeamO = state.teamO === teamId;
+    const symbol = isTeamX ? 'X' : isTeamO ? 'O' : null;
+
+    if (!symbol) return res.status(403).json({ error: "Not a player in this game" });
+
+    if (action === 'move') {
+      if ((state.movesCredits?.[teamId] || 0) <= 0) return res.status(400).json({ error: "No move credits available. Solve a question first!" });
+      // REMOVED: if (state.turn !== symbol) return res.status(400).json({ error: "Not your turn" });
+      if (state.cells[index]) return res.status(400).json({ error: "Cell already occupied" });
+
+      state.cells[index] = symbol;
+      // We still update the 'turn' purely as a suggestion/visual, but we won't block moves
+      state.turn = symbol === 'X' ? 'O' : 'X';
+      state.movesCredits[teamId] = (state.movesCredits[teamId] || 0) - 1;
+
+      // Check winner
+      const winPatterns = [
+        [0, 1, 2], [3, 4, 5], [6, 7, 8], // rows
+        [0, 3, 6], [1, 4, 7], [2, 5, 8], // cols
+        [0, 4, 8], [2, 4, 6]             // diags
+      ];
+
+      for (const p of winPatterns) {
+        if (state.cells[p[0]] && state.cells[p[0]] === state.cells[p[1]] && state.cells[p[0]] === state.cells[p[2]]) {
+          state.winner = state.cells[p[0]];
+        }
+      }
+
+      // No 3-in-a-row but board is full → winner by cell majority
+      if (!state.winner && state.cells.every((c: string | null) => c !== null)) {
+        const xCount = state.cells.filter((c: string | null) => c === 'X').length;
+        const oCount = state.cells.filter((c: string | null) => c === 'O').length;
+        if (xCount > oCount) { state.winner = 'X'; state.winByMajority = true; }
+        else if (oCount > xCount) { state.winner = 'O'; state.winByMajority = true; }
+        // xCount === oCount with 9 cells is impossible, but if somehow equal: no winner
+      }
+    } else if (action === 'knife') {
+      if ((state.knivesCredits?.[teamId] || 0) <= 0) return res.status(400).json({ error: "No knife credits available. Solve a fake question first!" });
+      if (!state.cells[index]) return res.status(400).json({ error: "Cell is already empty" });
+
+      state.cells[index] = null;
+      state.knivesCredits[teamId] = (state.knivesCredits[teamId] || 0) - 1;
+    }
+
+    await db.update(gameBoards).set({
+      boardState: JSON.stringify(state),
+      updatedAt: new Date()
+    }).where(eq(gameBoards.id, board.id));
+
+    // ⚡ Update cache immediately so next reads skip DB
+    const cacheKey = `ttt:${room.toUpperCase().slice(0, 10)}`;
+    cache.set(cacheKey, { board, state }, TTL.TTT_BOARD);
+
+    // ⚡ Push instantly to all SSE clients in this room
+    broadcastRoom(room.toUpperCase().slice(0, 10), {
+      type: "board_update",
+      board: state.cells,
+      turn: state.turn,
+      winner: state.winner,
+      winByMajority: state.winByMajority ?? false,
+      movesCredits: state.movesCredits,
+      knivesCredits: state.knivesCredits,
+    });
+
+    res.json({ success: true, state });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to perform action" });
+  }
+};
+
+// ─── Admin: Push Bonus Question to TTT Room ───────────────────────────────────
+export const handleAdminPushBonus: RequestHandler = async (req, res) => {
+  const { room, question, answer, isReal } = req.body;
+  if (!room || !question || !answer) {
+    return res.status(400).json({ error: "room, question, and answer required" });
+  }
+  const roomCode = String(room).toUpperCase().slice(0, 10);
+  try {
+    const { board, state } = await getOrCreateTTTBoard(roomCode, 'admin');
+    const bonusId = `bonus_${Date.now()}`;
+    state.bonusQuestion = {
+      id: bonusId,
+      text: question,
+      answer: String(answer).toLowerCase().trim(),
+      isReal: isReal !== false,
+      pushedAt: Date.now(),
+      solvedBy: [],
+    };
+    await db.update(gameBoards).set({
+      boardState: JSON.stringify(state),
+      updatedAt: new Date(),
+    }).where(eq(gameBoards.id, board.id));
+    const cacheKey = `ttt:${roomCode}`;
+    cache.set(cacheKey, { board, state }, TTL.TTT_BOARD);
+    broadcastRoom(roomCode, {
+      type: 'bonus_question',
+      bonusId,
+      question,
+      isReal: isReal !== false,
+      pushedAt: state.bonusQuestion.pushedAt,
+    });
+    res.json({ success: true, bonusId });
+  } catch (err) {
+    console.error("handleAdminPushBonus error:", err);
+    res.status(500).json({ error: "Failed to push bonus question" });
+  }
+};
+
+// ─── Team: Submit Bonus Question Answer ───────────────────────────────────────
+export const handleTTTBonusSubmit: RequestHandler = async (req, res) => {
+  const { room, teamId, bonusId, answer } = req.body;
+  if (!room || !teamId || !bonusId || answer === undefined) {
+    return res.status(400).json({ error: "room, teamId, bonusId, and answer required" });
+  }
+  const roomCode = String(room).toUpperCase().slice(0, 10);
+  try {
+    const { board, state } = await getOrCreateTTTBoard(roomCode, teamId);
+    const bonus = state.bonusQuestion;
+    if (!bonus || bonus.id !== bonusId) {
+      return res.status(404).json({ error: "Bonus question not found or expired" });
+    }
+    if ((bonus.solvedBy || []).includes(teamId)) {
+      return res.status(409).json({ error: "Already solved this bonus question", alreadySolved: true });
+    }
+    const correct = String(answer).toLowerCase().trim() === bonus.answer;
+    if (!correct) {
+      return res.json({ correct: false });
+    }
+    // Award DOUBLE credits for bonus
+    state.movesCredits = state.movesCredits || {};
+    state.knivesCredits = state.knivesCredits || {};
+    if (bonus.isReal !== false) {
+      state.movesCredits[teamId] = (state.movesCredits[teamId] || 0) + 2;
+    } else {
+      state.knivesCredits[teamId] = Math.min((state.knivesCredits[teamId] || 0) + 2, 5);
+    }
+    // Always bonus +1 knife on any bonus solve
+    state.knivesCredits[teamId] = Math.min((state.knivesCredits[teamId] || 0) + 1, 5);
+    bonus.solvedBy = [...(bonus.solvedBy || []), teamId];
+    state.bonusQuestion = bonus;
+    await db.update(gameBoards).set({
+      boardState: JSON.stringify(state),
+      updatedAt: new Date(),
+    }).where(eq(gameBoards.id, board.id));
+    const cacheKey = `ttt:${roomCode}`;
+    cache.set(cacheKey, { board, state }, TTL.TTT_BOARD);
+    broadcastRoom(roomCode, {
+      type: 'credits_update',
+      movesCredits: state.movesCredits,
+      knivesCredits: state.knivesCredits,
+    });
+    res.json({
+      correct: true,
+      movesAwarded: bonus.isReal !== false ? 2 : 0,
+      knivesAwarded: bonus.isReal !== false ? 1 : 2,
+    });
+  } catch (err) {
+    console.error("handleTTTBonusSubmit error:", err);
+    res.status(500).json({ error: "Failed to submit bonus answer" });
+  }
+};
+
+// ─── Get current TTT state for admin ─────────────────────────────────────────
+export const handleAdminTTTState: RequestHandler = async (req, res) => {
+  const roomCode = (req.query.room as string)?.toUpperCase().slice(0, 10);
+  if (!roomCode) return res.status(400).json({ error: "room required" });
+  try {
+    const existing = await db
+      .select()
+      .from(gameBoards)
+      .where(and(eq(gameBoards.roomCode, roomCode), eq(gameBoards.gameType, 'tictactoe')));
+    if (!existing.length) return res.json({ exists: false });
+    const state = JSON.parse(existing[0].boardState);
+    res.json({
+      exists: true,
+      bonusQuestion: state.bonusQuestion || null,
+      teamX: state.teamX,
+      teamO: state.teamO,
+      winner: state.winner,
+    });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to get TTT state" });
+  }
+};
+
+// ─── Spectator endpoint: full live board state (no teamId needed) ─────────────
+export const handleSpectate: RequestHandler = async (req, res) => {
+  const roomCode = (req.query.room as string)?.toUpperCase().slice(0, 10);
+  if (!roomCode) return res.status(400).json({ error: "room required" });
+  try {
+    // Load room
+    const roomRows = await db.select().from(rooms).where(eq(rooms.code, roomCode));
+    if (!roomRows.length) return res.status(404).json({ error: "Room not found" });
+    const room = roomRows[0];
+
+    // Load TTT board state
+    const existing = await db
+      .select()
+      .from(gameBoards)
+      .where(and(eq(gameBoards.roomCode, roomCode), eq(gameBoards.gameType, 'tictactoe')));
+
+    if (!existing.length) {
+      return res.json({
+        exists: false,
+        roomCode,
+        gameType: room.gameType,
+        roundEndAt: room.roundEndAt ?? null,
+      });
+    }
+
+    const state = JSON.parse(existing[0].boardState);
+
+    // Fetch team names
+    const teamIds = [state.teamX, state.teamO].filter(Boolean) as string[];
+    const teamRows = teamIds.length > 0
+      ? await db.select({ teamId: teams.teamId, teamName: teams.teamName })
+          .from(teams)
+          .where(teamIds.length === 1
+            ? eq(teams.teamId, teamIds[0])
+            : sql`${teams.teamId} IN (${sql.join(teamIds.map((id: string) => sql`${id}`), sql`, `)})`)
+      : [];
+    const nameMap: Record<string, string> = {};
+    for (const row of teamRows) nameMap[row.teamId] = row.teamName;
+
+    return res.json({
+      exists: true,
+      roomCode,
+      gameType: room.gameType,
+      roundEndAt: room.roundEndAt ?? null,
+      board: state.cells ?? Array(9).fill(null),
+      turn: state.turn ?? 'X',
+      teamX: state.teamX ?? null,
+      teamO: state.teamO ?? null,
+      teamXName: state.teamX ? (nameMap[state.teamX] || 'Team X') : null,
+      teamOName: state.teamO ? (nameMap[state.teamO] || 'Team O') : null,
+      movesCredits: state.movesCredits ?? {},
+      knivesCredits: state.knivesCredits ?? {},
+      winner: state.winner ?? null,
+      winnerName: state.winner ? (nameMap[state.winner] || state.winner) : null,
+      winByMajority: state.winByMajority ?? false,
+      bothConnected: !!(state.teamX && state.teamO),
+      bonusQuestion: state.bonusQuestion ?? null,
+    });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to get spectator state" });
   }
 };

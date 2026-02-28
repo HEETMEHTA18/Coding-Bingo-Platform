@@ -15,106 +15,6 @@ const SECURITY_CONFIG = {
   cpuLimit: process.env.COMPILER_CPU_LIMIT || "0.5",
 };
 
-// Judge0 Language IDs
-const JUDGE0_LANGUAGES = {
-  c: 50,    // C (GCC 9.2.0)
-  cpp: 54,  // C++ (GCC 9.2.0)
-};
-
-/**
- * Compile using Judge0 online compiler API
- */
-async function compileWithJudge0(
-  language: "c" | "cpp",
-  source: string,
-  stdin?: string
-): Promise<CompileResult> {
-  try {
-    const apiKey = process.env.JUDGE0_API_KEY;
-    const apiUrl = process.env.JUDGE0_API_URL || "https://judge0-ce.p.rapidapi.com";
-
-    if (!apiKey) {
-      console.error("❌ JUDGE0_API_KEY is missing in .env file!");
-      console.error("👉 To fix: Get a free key at https://rapidapi.com/judge0-official/api/judge0-ce and add JUDGE0_API_KEY=your_key to .env");
-      return {
-        success: false,
-        error: "JUDGE0_API_KEY not set. Check server logs for instructions.",
-      };
-    }
-
-    console.log(`Sending compilation request to ${apiUrl}...`);
-
-    // Submit code for compilation
-    const response = await fetch(`${apiUrl}/submissions?base64_encoded=false&wait=true`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-RapidAPI-Key": apiKey,
-        "X-RapidAPI-Host": "judge0-ce.p.rapidapi.com",
-      },
-      body: JSON.stringify({
-        language_id: JUDGE0_LANGUAGES[language],
-        source_code: source,
-        stdin: stdin || "",
-        cpu_time_limit: 5,
-        memory_limit: 262144, // 256 MB
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`❌ Judge0 API Error: ${response.status} ${response.statusText}`);
-      console.error(`Response: ${errorText}`);
-      return {
-        success: false,
-        error: `Judge0 API error: ${response.status}`,
-        stderr: errorText,
-      };
-    }
-
-    const result = await response.json();
-    console.log("Judge0 response received (Status ID: " + result.status?.id + ")");
-
-    // Status codes:
-    // 3 = Accepted (success)
-    // 6 = Compilation Error
-    // 5 = Time Limit Exceeded
-    // 11-12 = Runtime Error
-    if (result.status.id === 3) {
-      return {
-        success: true,
-        stdout: result.stdout || "",
-        stderr: result.stderr || "",
-        executionTime: result.time ? parseFloat(result.time) * 1000 : 0,
-      };
-    } else if (result.status.id === 6) {
-      return {
-        success: false,
-        compileOutput: result.compile_output || result.stderr || "Compilation failed",
-        error: "Compilation error",
-      };
-    } else if (result.status.id === 5) {
-      return {
-        success: false,
-        error: "Time limit exceeded",
-        stderr: result.stderr || "",
-      };
-    } else {
-      return {
-        success: false,
-        error: result.status.description || "Execution failed",
-        stderr: result.stderr || "",
-      };
-    }
-  } catch (error: any) {
-    console.error("❌ Compile function error:", error);
-    return {
-      success: false,
-      error: `Judge0 request failed: ${error.message}`,
-    };
-  }
-}
-
 interface CompileRequest {
   language: "c" | "cpp";
   source: string;
@@ -130,98 +30,189 @@ interface CompileResult {
   executionTime?: number;
 }
 
-/**
- * POST /api/compile
- * Compile and run C/C++ code using Docker GCC container
- */
-router.post("/api/compile", async (req, res) => {
-  const startTime = Date.now();
-  const { language, source, stdin }: CompileRequest = req.body;
+// ─────────────────────────────────────────────────────────────────────────────
+// 1. PISTON API  (free, no key, fastest: ~1-3s)
+//    https://github.com/engineer-man/piston
+// ─────────────────────────────────────────────────────────────────────────────
+const PISTON_LANGUAGES: Record<string, { language: string; version: string }> = {
+  c: { language: "c", version: "10.2.0" },
+  cpp: { language: "c++", version: "10.2.0" },
+};
 
-  // Validation
-  if (!source || !language) {
-    return res.status(400).json({ error: "Missing source or language" });
-  }
+async function compileWithPiston(
+  language: "c" | "cpp",
+  source: string,
+  stdin?: string
+): Promise<CompileResult> {
+  const pistonUrl =
+    process.env.PISTON_API_URL || "https://emkc.org/api/v2/piston/execute";
+  const lang = PISTON_LANGUAGES[language];
 
-  if (!["c", "cpp"].includes(language)) {
-    return res.status(400).json({ error: "Language must be 'c' or 'cpp'" });
-  }
+  console.log(`[Piston] Compiling ${language.toUpperCase()}...`);
 
-  if (source.length > SECURITY_CONFIG.maxSourceSize) {
-    return res
-      .status(400)
-      .json({ error: `Source code too large (max ${SECURITY_CONFIG.maxSourceSize} bytes)` });
-  }
-
-  // Check if Docker is available
-  const useOnlineCompiler = process.env.USE_ONLINE_COMPILER === "true";
-  const dockerAvailable = !useOnlineCompiler && await checkDockerAvailable();
-
-  if (useOnlineCompiler) {
-    console.log("Using online Judge0 compiler (Docker disabled)");
-    const result = await compileWithJudge0(language, source, stdin);
-    result.executionTime = Date.now() - startTime;
-    return res.json(result);
-  }
-
-  if (!dockerAvailable) {
-    return res.status(503).json({
-      error: "Docker is not available. Set USE_ONLINE_COMPILER=true in .env to use online compiler instead.",
-      hint: "See EASY_START.md for setup without Docker",
-    });
-  }
-
-  let tmpDir: string | null = null;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 9000);
 
   try {
-    // Create temporary directory
-    tmpDir = mkdtempSync(join(os.tmpdir(), "code-"));
-    const filename = language === "c" ? "main.c" : "main.cpp";
-    const sourcePath = join(tmpDir, filename);
-
-    // Write source code
-    writeFileSync(sourcePath, source, "utf-8");
-
-    // If stdin provided, write it
-    if (stdin) {
-      writeFileSync(join(tmpDir, "input.txt"), stdin, "utf-8");
-    }
-
-    // Compile and run
-    const result = await compileAndRun(language, tmpDir, filename);
-
-    // Add execution time
-    result.executionTime = Date.now() - startTime;
-
-    res.json(result);
-  } catch (error: any) {
-    console.error("Compilation error:", error);
-    res.status(500).json({
-      error: "Compilation service error",
-      details: error.message,
-      executionTime: Date.now() - startTime,
+    const response = await fetch(pistonUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        language: lang.language,
+        version: lang.version,
+        files: [
+          {
+            name: language === "c" ? "main.c" : "main.cpp",
+            content: source,
+          },
+        ],
+        stdin: stdin || "",
+        run_timeout: 5000,
+        compile_timeout: 10000,
+      }),
+      signal: controller.signal,
     });
-  } finally {
-    // Cleanup
-    if (tmpDir) {
-      try {
-        rmSync(tmpDir, { recursive: true, force: true });
-      } catch (e) {
-        console.error("Failed to cleanup temp directory:", e);
-      }
-    }
-  }
-});
 
-/**
- * Check if Docker is available
- */
+    clearTimeout(timer);
+
+    if (!response.ok) {
+      const text = await response.text();
+      console.error(`[Piston] HTTP ${response.status}: ${text}`);
+      return { success: false, error: `Piston API error: ${response.status}` };
+    }
+
+    const result = await response.json();
+    console.log(
+      `[Piston] compile.code=${result.compile?.code} run.code=${result.run?.code}`
+    );
+
+    // Compile error
+    if (result.compile && result.compile.code !== 0) {
+      return {
+        success: false,
+        error: "Compilation error",
+        compileOutput:
+          result.compile.stderr || result.compile.output || "Compilation failed",
+      };
+    }
+
+    // Runtime error (but still return stdout if any)
+    const stdout = (result.run?.stdout || "").trim();
+    const stderr = (result.run?.stderr || result.compile?.stderr || "").trim();
+
+    if (result.run && result.run.code !== 0 && !stdout) {
+      return {
+        success: false,
+        error: "Runtime error",
+        stderr: stderr || "Program exited with non-zero status",
+      };
+    }
+
+    return { success: true, stdout, stderr };
+  } catch (err: any) {
+    clearTimeout(timer);
+    if (err.name === "AbortError") {
+      return { success: false, error: "Piston API timeout (9s)" };
+    }
+    console.error("[Piston] Error:", err.message);
+    return { success: false, error: `Piston request failed: ${err.message}` };
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 2. JUDGE0 API  (online, requires JUDGE0_API_KEY, ~3-6s)
+// ─────────────────────────────────────────────────────────────────────────────
+const JUDGE0_LANGUAGES: Record<string, number> = {
+  c: 50,   // C (GCC 9.2.0)
+  cpp: 54, // C++ (GCC 9.2.0)
+};
+
+async function compileWithJudge0(
+  language: "c" | "cpp",
+  source: string,
+  stdin?: string
+): Promise<CompileResult> {
+  const apiKey = process.env.JUDGE0_API_KEY;
+  const apiUrl =
+    process.env.JUDGE0_API_URL || "https://judge0-ce.p.rapidapi.com";
+
+  if (!apiKey) {
+    return {
+      success: false,
+      error: "JUDGE0_API_KEY not set in .env",
+    };
+  }
+
+  console.log(`[Judge0] Compiling ${language.toUpperCase()}...`);
+
+  try {
+    const sourceBase64 = Buffer.from(source).toString("base64");
+    const stdinBase64 = stdin ? Buffer.from(stdin).toString("base64") : "";
+
+    const response = await fetch(
+      `${apiUrl}/submissions?base64_encoded=true&wait=true`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-RapidAPI-Key": apiKey,
+          "X-RapidAPI-Host": "judge0-ce.p.rapidapi.com",
+        },
+        body: JSON.stringify({
+          language_id: JUDGE0_LANGUAGES[language],
+          source_code: sourceBase64,
+          stdin: stdinBase64,
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      return {
+        success: false,
+        error: `Judge0 API error: ${response.status}`,
+        stderr: errorText,
+      };
+    }
+
+    const result = await response.json();
+    const decode = (str: string | null) =>
+      str ? Buffer.from(str, "base64").toString("utf-8") : "";
+
+    const stdout = decode(result.stdout);
+    const stderr = decode(result.stderr);
+    const compileOutput = decode(result.compile_output);
+
+    if (result.status.id === 3) {
+      return { success: true, stdout, stderr };
+    } else if (result.status.id === 6) {
+      return {
+        success: false,
+        compileOutput: compileOutput || stderr || "Compilation failed",
+        error: "Compilation error",
+      };
+    } else if (result.status.id === 5) {
+      return { success: false, error: "Time limit exceeded", stderr };
+    } else {
+      return {
+        success: false,
+        error: result.status.description || "Execution failed",
+        stderr,
+      };
+    }
+  } catch (err: any) {
+    return { success: false, error: `Judge0 request failed: ${err.message}` };
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 3. DOCKER  (local, no internet needed, ~10-60s cold, ~3-5s warm)
+// ─────────────────────────────────────────────────────────────────────────────
 async function checkDockerAvailable(): Promise<boolean> {
   return new Promise((resolve) => {
     const docker = spawn("docker", ["version"], { stdio: "ignore" });
     docker.on("close", (code) => resolve(code === 0));
     docker.on("error", () => resolve(false));
-    // Timeout after 3 seconds
     setTimeout(() => {
       docker.kill();
       resolve(false);
@@ -229,10 +220,7 @@ async function checkDockerAvailable(): Promise<boolean> {
   });
 }
 
-/**
- * Compile and run code using Docker
- */
-async function compileAndRun(
+async function compileWithDocker(
   language: "c" | "cpp",
   tmpDir: string,
   filename: string
@@ -241,152 +229,161 @@ async function compileAndRun(
     const compiler = language === "c" ? "gcc" : "g++";
     const standard = language === "c" ? "-std=c11" : "-std=c++17";
 
-    // Docker command:
-    // 1. Compile the code
-    // 2. If compilation fails, output compile errors
-    // 3. If compilation succeeds, run the binary with timeout
     const compileCmd =
-      `${compiler} ${standard} -O2 ${filename} -o a.out 2> compile.err || cat compile.err; ` +
-      `if [ -f a.out ]; then timeout ${SECURITY_CONFIG.timeout / 1000}s ./a.out < /dev/null; fi`;
+      `${compiler} ${standard} -O2 ${filename} -o a.out 2>compile.err || cat compile.err; ` +
+      `if [ -f a.out ]; then timeout ${SECURITY_CONFIG.timeout / 1000}s ./a.out </dev/null; fi`;
 
     const dockerArgs = [
-      "run",
-      "--rm",
-      "--network", "none", // No network access
+      "run", "--rm",
+      "--network", "none",
       "--memory", SECURITY_CONFIG.memoryLimit,
       "--cpus", SECURITY_CONFIG.cpuLimit,
       "--security-opt", "no-new-privileges:true",
       "-v", `${tmpDir}:/workspace`,
       "-w", "/workspace",
-      "gcc:latest",
-      "bash",
-      "-c",
-      compileCmd,
+      "gcc:latest", "bash", "-c", compileCmd,
     ];
 
-    console.log("Running Docker:", "docker", dockerArgs.slice(0, 10).join(" "), "...");
-
-    const docker = spawn("docker", dockerArgs, {
-      stdio: ["ignore", "pipe", "pipe"],
-    });
+    const docker = spawn("docker", dockerArgs, { stdio: ["ignore", "pipe", "pipe"] });
 
     let stdout = "";
     let stderr = "";
     let killed = false;
 
-    // Capture output
     docker.stdout?.on("data", (data) => {
       stdout += data.toString();
-      // Limit output size
       if (stdout.length > SECURITY_CONFIG.maxOutputSize) {
         stdout = stdout.substring(0, SECURITY_CONFIG.maxOutputSize) + "\n[Output truncated]";
-        if (!killed) {
-          killed = true;
-          docker.kill();
-        }
+        if (!killed) { killed = true; docker.kill(); }
       }
     });
 
     docker.stderr?.on("data", (data) => {
       stderr += data.toString();
-      if (stderr.length > SECURITY_CONFIG.maxOutputSize) {
-        stderr = stderr.substring(0, SECURITY_CONFIG.maxOutputSize) + "\n[Error truncated]";
-      }
     });
 
-    // Timeout protection
     const timeoutId = setTimeout(() => {
       if (!killed) {
         killed = true;
         docker.kill();
-        resolve({
-          success: false,
-          error: `Execution timeout (${SECURITY_CONFIG.timeout}ms)`,
-          stderr: stderr || "Process killed due to timeout",
-        });
+        resolve({ success: false, error: `Execution timeout (${SECURITY_CONFIG.timeout}ms)`, stderr });
       }
-    }, SECURITY_CONFIG.timeout + 2000); // Give Docker 2s extra for cleanup
+    }, SECURITY_CONFIG.timeout + 2000);
 
     docker.on("close", (code) => {
       clearTimeout(timeoutId);
+      if (killed) return;
 
-      if (killed) return; // Already resolved due to timeout
-
-      // Check if compilation failed (compile.err has content)
       const compileErrorPath = join(tmpDir, "compile.err");
       let compileOutput = "";
       try {
         if (existsSync(compileErrorPath)) {
           compileOutput = require("fs").readFileSync(compileErrorPath, "utf-8");
         }
-      } catch (e) {
-        // Ignore
-      }
+      } catch { }
 
       if (compileOutput.trim()) {
-        // Compilation error
-        resolve({
-          success: false,
-          error: "Compilation failed",
-          compileOutput: compileOutput,
-          stderr: stderr || undefined,
-        });
+        resolve({ success: false, error: "Compilation failed", compileOutput });
       } else if (code === 0) {
-        // Success
-        resolve({
-          success: true,
-          stdout: stdout || "",
-          stderr: stderr || undefined,
-        });
-      } else if (code === 124 || stderr.includes("timeout")) {
-        // Timeout
-        resolve({
-          success: false,
-          error: "Execution timeout",
-          stderr: stderr || "Program exceeded time limit",
-        });
+        resolve({ success: true, stdout: stdout || "", stderr: stderr || undefined });
       } else {
-        // Runtime error
-        resolve({
-          success: false,
-          error: `Runtime error (exit code ${code})`,
-          stdout: stdout || undefined,
-          stderr: stderr || "Program crashed or returned non-zero exit code",
-        });
+        resolve({ success: false, error: `Runtime error (exit code ${code})`, stderr });
       }
     });
 
     docker.on("error", (err) => {
       clearTimeout(timeoutId);
-      resolve({
-        success: false,
-        error: "Failed to run Docker container",
-        stderr: err.message,
-      });
+      resolve({ success: false, error: "Failed to run Docker", stderr: err.message });
     });
   });
 }
 
-/**
- * GET /api/compile/health
- * Check if compiler service is ready
- */
-router.get("/api/compile/health", async (req, res) => {
-  const dockerAvailable = await checkDockerAvailable();
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/compile  — tries Piston → Judge0 → Docker in order
+// ─────────────────────────────────────────────────────────────────────────────
+router.post("/api/compile", async (req, res) => {
+  const startTime = Date.now();
+  const { language, source, stdin }: CompileRequest = req.body;
 
-  if (dockerAvailable) {
-    res.json({
-      status: "healthy",
-      docker: "available",
-      compiler: "gcc:latest",
-    });
-  } else {
-    res.status(503).json({
-      status: "unhealthy",
-      docker: "unavailable",
-      message: "Docker is not running. Start Docker Desktop to enable compilation.",
+  if (!source || !language) {
+    return res.status(400).json({ error: "Missing source or language" });
+  }
+  if (!["c", "cpp"].includes(language)) {
+    return res.status(400).json({ error: "Language must be 'c' or 'cpp'" });
+  }
+  if (source.length > SECURITY_CONFIG.maxSourceSize) {
+    return res.status(400).json({
+      error: `Source code too large (max ${SECURITY_CONFIG.maxSourceSize} bytes)`,
     });
   }
+
+  const forceDocker = process.env.FORCE_DOCKER === "true";
+  const forceJudge0 = process.env.FORCE_JUDGE0 === "true";
+
+  // 1️⃣ Try Piston first (fastest, always available)
+  if (!forceDocker && !forceJudge0) {
+    const pistonResult = await compileWithPiston(language, source, stdin);
+    if (pistonResult.success || pistonResult.compileOutput) {
+      // compileOutput means compile ERROR — still a definitive result
+      pistonResult.executionTime = Date.now() - startTime;
+      return res.json(pistonResult);
+    }
+    console.warn("[Piston] Failed, trying Judge0 fallback...", pistonResult.error);
+  }
+
+  // 2️⃣ Try Judge0 if Piston failed or forced
+  if (!forceDocker && process.env.JUDGE0_API_KEY) {
+    const j0Result = await compileWithJudge0(language, source, stdin);
+    if (j0Result.success || j0Result.compileOutput) {
+      j0Result.executionTime = Date.now() - startTime;
+      return res.json(j0Result);
+    }
+    console.warn("[Judge0] Failed, trying Docker fallback...", j0Result.error);
+  }
+
+  // 3️⃣ Try Docker (local, slowest)
+  const dockerAvailable = await checkDockerAvailable();
+  if (!dockerAvailable) {
+    return res.status(503).json({
+      success: false,
+      error:
+        "All compilers unavailable. Piston unreachable, no JUDGE0_API_KEY, Docker not running.",
+    });
+  }
+
+  let tmpDir: string | null = null;
+  try {
+    tmpDir = mkdtempSync(join(os.tmpdir(), "code-"));
+    const filename = language === "c" ? "main.c" : "main.cpp";
+    writeFileSync(join(tmpDir, filename), source, "utf-8");
+    if (stdin) writeFileSync(join(tmpDir, "input.txt"), stdin, "utf-8");
+
+    const result = await compileWithDocker(language, tmpDir, filename);
+    result.executionTime = Date.now() - startTime;
+    return res.json(result);
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  } finally {
+    if (tmpDir) {
+      try { rmSync(tmpDir, { recursive: true, force: true }); } catch { }
+    }
+  }
+});
+
+// GET /api/compile/health
+router.get("/api/compile/health", async (_req, res) => {
+  const pistonOk = await compileWithPiston("c", '#include <stdio.h>\nint main(){printf("ok");return 0;}')
+    .then((r) => r.success)
+    .catch(() => false);
+
+  const dockerAvailable = await checkDockerAvailable();
+
+  res.json({
+    status: pistonOk ? "healthy" : dockerAvailable ? "docker-only" : "degraded",
+    piston: pistonOk ? "available" : "unavailable",
+    judge0: process.env.JUDGE0_API_KEY ? "configured" : "no key",
+    docker: dockerAvailable ? "available" : "unavailable",
+  });
 });
 
 export default router;

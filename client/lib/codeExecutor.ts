@@ -2,6 +2,8 @@
 export interface ExecutionResult {
   success: boolean;
   coordinates?: [number, number][];
+  stdout?: string;
+  stderr?: string;
   error?: string;
   executionTime?: number;
 }
@@ -77,9 +79,11 @@ async function executeNativeCode(code: string, timeout: number): Promise<Executi
       const coordinates = JSON.parse(stdout);
 
       if (!Array.isArray(coordinates)) {
+        // Successful execution but not an array (likely for TTT missions)
         return {
-          success: false,
-          error: 'Output is not a JSON array. Program should printf() something like: [[0,0],[1,1]]',
+          success: true,
+          stdout: (result.stdout || '').trim(),
+          stderr: (result.stderr || '').trim(),
           executionTime: Date.now() - startTime,
         };
       }
@@ -124,13 +128,17 @@ async function executeNativeCode(code: string, timeout: number): Promise<Executi
       return {
         success: true,
         coordinates: coordinates as [number, number][],
+        stdout: (result.stdout || '').trim(),
+        stderr: (result.stderr || '').trim(),
         executionTime: Date.now() - startTime,
       };
 
     } catch (parseErr) {
+      // Return success even if JSON parsing fails (e.g. missions like printf("20"))
       return {
-        success: false,
-        error: `Failed to parse output as JSON. Got: ${stdout.substring(0, 100)}`,
+        success: true,
+        stdout: (result.stdout || '').trim(),
+        stderr: (result.stderr || '').trim(),
         executionTime: Date.now() - startTime,
       };
     }
@@ -198,37 +206,36 @@ export function executeCode(code: string, timeout: number = 2000): ExecutionResu
       (function() {
         'use strict';
         ${code}
-        
+
         if (typeof generatePattern !== 'function') {
           throw new Error('You must define a function named "generatePattern"');
         }
-        
+
         const result = generatePattern();
-        
-        if (!Array.isArray(result)) {
-          throw new Error('generatePattern() must return an array');
+
+        // Validate coordinates ONLY if it's an array (for Code Canvas)
+        if (Array.isArray(result)) {
+          for (let i = 0; i < result.length; i++) {
+            const coord = result[i];
+            if (!Array.isArray(coord) || coord.length !== 2) {
+              throw new Error('Invalid coordinate at index ' + i + '. Expected [x, y]');
+            }
+
+            const [x, y] = coord;
+            if (typeof x !== 'number' || typeof y !== 'number') {
+              throw new Error('Coordinates must be numbers');
+            }
+
+            if (!Number.isInteger(x) || !Number.isInteger(y)) {
+              throw new Error('Coordinates must be integers');
+            }
+
+            if (x < 0 || x > 9 || y < 0 || y > 9) {
+              throw new Error('Coordinates must be within 0-9 range. Got: [' + x + ', ' + y + ']');
+            }
+          }
         }
-        
-        for (let i = 0; i < result.length; i++) {
-          const coord = result[i];
-          if (!Array.isArray(coord) || coord.length !== 2) {
-            throw new Error('Invalid coordinate at index ' + i + '. Expected [x, y]');
-          }
-          
-          const [x, y] = coord;
-          if (typeof x !== 'number' || typeof y !== 'number') {
-            throw new Error('Coordinates must be numbers');
-          }
-          
-          if (!Number.isInteger(x) || !Number.isInteger(y)) {
-            throw new Error('Coordinates must be integers');
-          }
-          
-          if (x < 0 || x > 9 || y < 0 || y > 9) {
-            throw new Error('Coordinates must be within 0-9 range. Got: [' + x + ', ' + y + ']');
-          }
-        }
-        
+
         return result;
       })()
     `;
@@ -271,29 +278,19 @@ export function executeCode(code: string, timeout: number = 2000): ExecutionResu
       }
 
       // Basic sanity check - wrapped code already validates details
-      if (!Array.isArray(coordinatesRaw)) {
+      if (Array.isArray(coordinatesRaw)) {
         return {
-          success: false,
-          error: 'generatePattern() did not return an array. Make sure your function returns an array of [x, y] coordinates.'
+          success: true,
+          coordinates: coordinatesRaw as [number, number][],
+          executionTime: Date.now() - startTime
         };
       }
 
-      const result = {
+      return {
         success: true,
-        coordinates: coordinatesRaw as [number, number][],
+        stdout: String(coordinatesRaw),
         executionTime: Date.now() - startTime
       };
-
-      try {
-        console.log('=== RETURNING RESULT ===');
-        console.log('Result object:', result);
-        console.log('Result.coordinates length:', result.coordinates?.length);
-        console.log('=======================');
-      } catch (logErr) {
-        console.warn('Executor return log failed:', logErr);
-      }
-
-      return result;
     } catch (execError: any) {
       if (timeoutId) clearTimeout(timeoutId);
 
@@ -393,10 +390,10 @@ export function calculateMatchPercentage(
 export const DEFAULT_CODE_TEMPLATE = `function generatePattern() {
   // Write your code here to return an array of [x, y] coordinates
   // Example: return [[0, 0], [1, 1], [2, 2]];
-  
+
   const coordinates = [];
-  
+
   // Your logic here
-  
+
   return coordinates;
 }`;

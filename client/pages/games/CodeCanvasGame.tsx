@@ -20,13 +20,25 @@ const LANGUAGE_TEMPLATES = {
 
 // Define generatePattern function that returns coordinates
 // Format: coordinates[i][0] = x, coordinates[i][1] = y
-int generatePattern(int coordinates[][2]) {
+int generatePattern(int coordinates[100][2]) {
   int count = 0;
-  
+
   // Your code here - add coordinates to array
   // Example: coordinates[count][0] = x; coordinates[count][1] = y; count++;
-  
+
   return count; // Return number of coordinates
+}
+
+int main() {
+  int coords[100][2];
+  int count = generatePattern(coords);
+  printf("[");
+  for (int i = 0; i < count; i++) {
+    printf("[%d,%d]", coords[i][0], coords[i][1]);
+    if (i < count - 1) printf(",");
+  }
+  printf("]\\n");
+  return 0;
 }`,
   cpp: `#include <iostream>
 #include <vector>
@@ -35,11 +47,22 @@ using namespace std;
 // Define generatePattern function that returns vector of coordinates
 vector<pair<int, int>> generatePattern() {
   vector<pair<int, int>> result;
-  
+
   // Your code here - add coordinates
   // Example: result.push_back({x, y});
-  
+
   return result;
+}
+
+int main() {
+  vector<pair<int, int>> pattern = generatePattern();
+  cout << "[";
+  for (size_t i = 0; i < pattern.size(); ++i) {
+    cout << "[" << pattern[i].first << "," << pattern[i].second << "]";
+    if (i < pattern.size() - 1) cout << ",";
+  }
+  cout << "]" << endl;
+  return 0;
 }`
 };
 
@@ -377,7 +400,7 @@ export default function CodeCanvasGame() {
                     <div
                       key={key}
                       className={`
-                        aspect-square rounded-md transition-all duration-300 transform 
+                        aspect-square rounded-md transition-all duration-300 transform
                         flex items-center justify-center relative group
                         ${isCorrect
                           ? 'bg-gradient-to-br from-green-400 to-emerald-600 shadow-[0_0_15px_rgba(74,222,128,0.6)] scale-110 z-10'

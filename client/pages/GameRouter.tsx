@@ -11,6 +11,7 @@ import CrosswordGame from "./games/CrosswordGame";
 import QuizGame from "./games/QuizGame";
 import PuzzleHuntGame from "./games/PuzzleHuntGame";
 import CodeCanvasGame from "./games/CodeCanvasGame";
+import TicTacToeGame from "./games/TicTacToeGame";
 
 function safeParse<T>(raw: string | null): T | null {
   try {
@@ -34,7 +35,7 @@ export default function GameRouter() {
     const checkRoom = () => {
       const storedRoom = safeParse<Room>(localStorage.getItem("bingo.room"));
       const storedTeam = safeParse<{ team_id?: string; id?: string }>(localStorage.getItem("bingo.team"));
-      
+
       if (storedRoom && storedTeam) {
         // Validate that team and room data is consistent
         const teamId = storedTeam.team_id || storedTeam.id;
@@ -45,10 +46,10 @@ export default function GameRouter() {
           window.location.href = "/";
           return;
         }
-        
+
         setRoom(storedRoom);
         const type = storedRoom.gameType || "bingo";
-  dbg("🎮 GameRouter - Room detected:", storedRoom.code, "Type:", type, "Team ID:", teamId);
+        dbg("🎮 GameRouter - Room detected:", storedRoom.code, "Type:", type, "Team ID:", teamId);
         setGameType(type);
       } else if (storedRoom || storedTeam) {
         // Partial data detected - clear everything to prevent conflicts
@@ -83,6 +84,8 @@ export default function GameRouter() {
       return <PuzzleHuntGame />;
     case "codecanvas":
       return <CodeCanvasGame />;
+    case "tictactoe":
+      return <TicTacToeGame />;
     case "bingo":
     default:
       return <GamePage />;

@@ -111,9 +111,12 @@ export default function GamePage() {
       return;
     }
 
-    const res = await fetch(
-      `/api/game?room=${encodeURIComponent(roomToUse.code)}&team=${encodeURIComponent(teamId)}`,
-    );
+    // 🚀 Fetch game state + recent submissions in parallel — saves one full RTT per call
+    const [res, rsRes] = await Promise.all([
+      fetch(`/api/game?room=${encodeURIComponent(roomToUse.code)}&team=${encodeURIComponent(teamId)}`),
+      fetch(`/api/recent-submissions?room=${encodeURIComponent(roomToUse.code)}`),
+    ]);
+
     if (!res.ok) {
       // If team not found, clear stale localStorage and send back to login
       try {
@@ -127,8 +130,13 @@ export default function GamePage() {
       } catch { }
       return; // keep previous state
     }
-    const data = (await res.json()) as Partial<GameStateResponse> &
-      Record<string, unknown>;
+
+    // Parse both responses in parallel too
+    const [data, rsJson] = await Promise.all([
+      res.json() as Promise<Partial<GameStateResponse> & Record<string, unknown>>,
+      rsRes.ok ? rsRes.json() : Promise.resolve(null),
+    ]);
+
     if (
       !data ||
       !Array.isArray(data.questions) ||
@@ -139,15 +147,8 @@ export default function GamePage() {
     setRoom(data.room as GameStateResponse["room"]);
     localStorage.setItem("bingo.room", JSON.stringify(data.room));
 
-    // // Debug logging
-    // console.log("📊 Total questions received:", data.questions?.length);
-    // console.log("📊 Questions with grid_position:", (data.questions as GameStateResponse["questions"]).filter(q => q.grid_position).length);
-
     // Show ALL questions, not just mapped ones
-    // Users can browse all questions, but only mapped ones contribute to bingo
     const allQuestions = data.questions as GameStateResponse["questions"];
-
-    // console.log("📊 All questions to display:", allQuestions.length);
     setQuestions(allQuestions);
 
     setSolved(data.solved_positions as string[]);
@@ -157,63 +158,82 @@ export default function GamePage() {
     const currentRoom = data.room as GameStateResponse["room"];
     const isExpired = currentRoom.roundEndAt && Date.now() > new Date(currentRoom.roundEndAt).getTime();
     setDisabled(isExpired);
-    // fetch recent submissions for this room (best-effort)
+
+    // Apply recent submissions from the parallel fetch
     try {
-      if ((data.room as GameStateResponse['room'])?.code) {
-        const rs = await fetch(`/api/recent-submissions?room=${encodeURIComponent((data.room as GameStateResponse['room']).code)}`);
-        if (rs.ok) {
-          const j = await rs.json();
-          if (Array.isArray(j.rows)) {
-            setRecentSubs(j.rows.map((r: any) => ({
-              teamId: r.teamId,
-              questionId: r.questionId,
-              submittedAnswer: r.submittedAnswer,
-              isCorrect: r.isCorrect,
-              solvedAt: r.solvedAt,
-              position: r.position || null,
-            })));
-          }
-        }
+      if (rsJson && Array.isArray(rsJson.rows)) {
+        setRecentSubs(rsJson.rows.map((r: any) => ({
+          teamId: r.teamId,
+          questionId: r.questionId,
+          submittedAnswer: r.submittedAnswer,
+          isCorrect: r.isCorrect,
+          solvedAt: r.solvedAt,
+          position: r.position || null,
+        })));
       }
     } catch (e) {
-      // ignore fetch errors for recent submissions
+      // ignore
     }
   };
+
+  // Smarter polling: pause when tab is hidden (saves server load)
+  const isVisible = useRef(true);
+  useEffect(() => {
+    const onVisibility = () => { isVisible.current = document.visibilityState === "visible"; };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, []);
 
   useEffect(() => {
     // Notify achievement manager that a new game started
     achievementManager.onGameStart();
 
     loadState();
-    const id = setInterval(loadState, 5000); // Check for timer updates every 5 seconds
+    // Fallback poll every 3s (SSE handles instant push; this catches SSE gaps)
+    const id = setInterval(() => { if (isVisible.current) loadState(); }, 3000);
     const tick = setInterval(() => setNow(Date.now()), 1000);
-    const subs = setInterval(() => {
-      // refresh recent submissions every 5s after room is loaded
-      if (room?.code) {
-        fetch(`/api/recent-submissions?room=${encodeURIComponent(room.code)}`)
-          .then((r) => r.ok ? r.json() : null)
-          .then((j) => {
-            if (j && Array.isArray(j.rows)) {
-              setRecentSubs(j.rows.map((r: any) => ({
-                teamId: r.teamId,
-                questionId: r.questionId,
-                submittedAnswer: r.submittedAnswer,
-                isCorrect: r.isCorrect,
-                solvedAt: r.solvedAt,
-                position: r.position || null,
-              })));
-            }
-          })
-          .catch(() => { });
-      }
-    }, 5000);
+
+    // 🚀 SSE: receive instant board_update events so clients refresh immediately
+    // when any team in the room submits a correct answer — no waiting for the poll interval
+    let sse: EventSource | null = null;
+    const roomCode = room?.code || safeParse<Room>(localStorage.getItem("bingo.room"))?.code;
+    if (roomCode && typeof EventSource !== "undefined") {
+      sse = new EventSource(`/api/game/stream?room=${encodeURIComponent(roomCode)}`);
+      sse.onmessage = (e) => {
+        try {
+          const msg = JSON.parse(e.data) as { type: string };
+          if (msg.type === "board_update" || msg.type === "game_update") {
+            if (isVisible.current) loadState();
+          }
+        } catch { /* ignore malformed frames */ }
+      };
+      sse.onerror = () => {
+        // SSE dropped — polling fallback is still running
+        sse?.close();
+        sse = null;
+      };
+    }
+
     return () => {
       clearInterval(id);
       clearInterval(tick);
-      clearInterval(subs);
+      sse?.close();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Keyboard shortcuts: arrow keys to navigate, Escape to clear answer
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.key === "ArrowRight") { e.preventDefault(); selectByDelta(1); }
+      if (e.key === "ArrowLeft") { e.preventDefault(); selectByDelta(-1); }
+      if (e.key === "Escape") setAnswer("");
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [questions, selectedQid]);
 
   // When lines change, detect newly completed lines and trigger achievements/celebration
   useEffect(() => {
@@ -664,52 +684,72 @@ export default function GamePage() {
                     </div>
                   </div>
 
-                  {/* Navigation */}
-                  <div className="flex items-center justify-between bg-slate-900/40 border border-slate-800 rounded-xl p-4">
-                    <button
-                      onClick={() => selectByDelta(-1)}
-                      className="px-5 py-2.5 rounded-lg bg-slate-800 border border-slate-700 text-white hover:bg-slate-700 hover:border-slate-600 transition-all font-medium flex items-center gap-2"
-                    >
-                      <span>←</span>
-                      <span>Previous</span>
-                    </button>
-                    <div className="flex items-center gap-4">
-                      <span className="text-sm font-semibold text-slate-300">
-                        Question {currentQuestionIndex + 1} of {questions.length}
-                      </span>
-                      <div className="flex gap-1.5">
-                        {[...Array(Math.min(7, questions.length))].map((_, i) => {
-                          const isActive = i === Math.min(currentQuestionIndex, 6);
-                          return (
-                            <span
-                              key={i}
-                              className={`w-2 h-2 rounded-full transition-all ${isActive
-                                  ? "bg-blue-500 w-6"
-                                  : "bg-slate-700"
-                                }`}
-                            />
-                          );
-                        })}
+                  {/* Navigation + Progress */}
+                  <div className="space-y-3">
+                    {/* Progress bar */}
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs text-slate-500 font-mono w-24 shrink-0">{solvedCount} / {questions.length} solved</span>
+                      <div className="flex-1 h-2 bg-slate-800 rounded-full overflow-hidden">
+                        <div
+                          className="h-full rounded-full transition-all duration-700"
+                          style={{
+                            width: `${questions.length ? (solvedCount / questions.length) * 100 : 0}%`,
+                            background: "linear-gradient(90deg, #7c3aed, #06b6d4)",
+                            boxShadow: "0 0 8px rgba(6,182,212,0.4)",
+                          }}
+                        />
                       </div>
+                      <span className="text-xs text-cyan-400 font-bold w-10 text-right">{questions.length ? Math.round((solvedCount / questions.length) * 100) : 0}%</span>
                     </div>
-                    <button
-                      onClick={() => selectByDelta(1)}
-                      className="px-5 py-2.5 rounded-lg bg-slate-800 border border-slate-700 text-white hover:bg-slate-700 hover:border-slate-600 transition-all font-medium flex items-center gap-2"
-                    >
-                      <span>Next</span>
-                      <span>→</span>
-                    </button>
+                    {/* Nav buttons */}
+                    <div className="flex items-center justify-between bg-slate-900/40 border border-slate-800 rounded-xl p-4">
+                      <button
+                        onClick={() => selectByDelta(-1)}
+                        className="px-5 py-2.5 rounded-lg bg-slate-800 border border-slate-700 text-white hover:bg-slate-700 hover:border-slate-600 transition-all font-medium flex items-center gap-2"
+                        title="Previous (← arrow key)"
+                      >
+                        <span>←</span>
+                        <span>Previous</span>
+                      </button>
+                      <div className="flex items-center gap-4">
+                        <span className="text-sm font-semibold text-slate-300">
+                          Question {currentQuestionIndex + 1} / {questions.length}
+                        </span>
+                        <div className="flex gap-1.5">
+                          {[...Array(Math.min(7, questions.length))].map((_, i) => {
+                            const isActive = i === Math.min(currentQuestionIndex, 6);
+                            return (
+                              <span
+                                key={i}
+                                className={`h-2 rounded-full transition-all duration-300 ${isActive
+                                  ? "bg-gradient-to-r from-purple-500 to-cyan-400 w-6 shadow-[0_0_6px_rgba(139,92,246,0.6)]"
+                                  : "bg-slate-700 w-2"
+                                  }`}
+                              />
+                            );
+                          })}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => selectByDelta(1)}
+                        className="px-5 py-2.5 rounded-lg bg-slate-800 border border-slate-700 text-white hover:bg-slate-700 hover:border-slate-600 transition-all font-medium flex items-center gap-2"
+                        title="Next (→ arrow key)"
+                      >
+                        <span>Next</span>
+                        <span>→</span>
+                      </button>
+                    </div>
                   </div>
 
                   {status && (
                     <div
                       className={`px-5 py-4 rounded-xl border-2 font-semibold flex items-center gap-3 shadow-lg animate-in ${status.type === "success"
-                          ? "bg-green-900/40 border-green-500 text-green-200"
-                          : status.type === "error"
-                            ? "bg-red-900/40 border-red-500 text-red-200"
-                            : status.type === "warn"
-                              ? "bg-amber-900/40 border-amber-500 text-amber-200"
-                              : "bg-blue-900/40 border-blue-500 text-blue-200"
+                        ? "bg-green-900/40 border-green-500 text-green-200"
+                        : status.type === "error"
+                          ? "bg-red-900/40 border-red-500 text-red-200"
+                          : status.type === "warn"
+                            ? "bg-amber-900/40 border-amber-500 text-amber-200"
+                            : "bg-blue-900/40 border-blue-500 text-blue-200"
                         }`}
                     >
                       <span className="text-xl">
@@ -782,15 +822,15 @@ export default function GamePage() {
                         <div
                           key={`${sub.teamId}-${sub.questionId}-${idx}`}
                           className={`px-4 py-3 rounded-lg border transition-colors ${isCorrect
-                              ? 'bg-slate-800/70 border-slate-700 hover:bg-slate-800'
-                              : 'bg-red-900/20 border-red-800/50 hover:bg-red-900/30'
+                            ? 'bg-slate-800/70 border-slate-700 hover:bg-slate-800'
+                            : 'bg-red-900/20 border-red-800/50 hover:bg-red-900/30'
                             }`}
                         >
                           <div className="flex items-center justify-between gap-3">
                             <div className="flex items-center gap-3 min-w-0 flex-1">
                               <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${isCorrect
-                                  ? 'bg-green-500/20 border border-green-500/30'
-                                  : 'bg-red-500/20 border border-red-500/30'
+                                ? 'bg-green-500/20 border border-green-500/30'
+                                : 'bg-red-500/20 border border-red-500/30'
                                 }`}>
                                 <span className={`text-sm ${isCorrect ? 'text-green-400' : 'text-red-400'}`}>
                                   {isCorrect ? '✓' : '✗'}
@@ -919,8 +959,8 @@ function BingoGrid({ solved, onSelectQuestion, questions, highlightedPositions }
                 key={position}
                 onClick={() => onSelectQuestion(getQuestionIdForPosition(questions, position))}
                 className={`aspect-square rounded-xl flex items-center justify-center text-lg font-bold border-2 transition-all duration-200 ${isSolved
-                    ? `bg-gradient-to-br from-emerald-500 to-green-600 border-emerald-400 text-white shadow-lg shadow-emerald-500/30 ${isHighlighted ? 'animate-pulse scale-105' : ''}`
-                    : "bg-slate-800/70 border-slate-600 text-slate-300 cursor-default"
+                  ? `bg-gradient-to-br from-emerald-500 to-green-600 border-emerald-400 text-white shadow-lg shadow-emerald-500/30 ${isHighlighted ? 'animate-pulse scale-105' : ''}`
+                  : "bg-slate-800/70 border-slate-600 text-slate-300 cursor-default"
                   }`}
               >
                 {isSolved ? (

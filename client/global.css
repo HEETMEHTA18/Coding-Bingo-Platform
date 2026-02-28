@@ -1,166 +1,268 @@
 /** @import must precede all other statements */
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap");
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/* ═══════════════════════════════════════════════════════════════
+   GAMING DARK THEME — CSS DESIGN TOKENS
+   ═══════════════════════════════════════════════════════════════ */
 @layer base {
-  /**
-   * Tailwind CSS theme
-   * tailwind.config.ts expects the following color variables to be expressed as HSL values.
-   * A different format will require also updating the theme in tailwind.config.ts.
-  */
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    /* Force dark mode as the ONE true mode */
+    --background: 224 20% 6%;
+    --foreground: 210 40% 96%;
 
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card: 224 20% 9%;
+    --card-foreground: 210 40% 96%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    --popover: 224 20% 8%;
+    --popover-foreground: 210 40% 96%;
 
-    --primary: 221 83% 53%;
+    --primary: 262 80% 65%;
+    /* Vivid purple */
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 220 25% 14%;
+    --secondary-foreground: 210 40% 90%;
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    --muted: 220 20% 12%;
+    --muted-foreground: 215 20% 55%;
 
-    --accent: 213 100% 97%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    --accent: 195 100% 50%;
+    /* Cyan glow */
+    --accent-foreground: 224 20% 6%;
 
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: 0 80% 55%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 221 83% 53%;
+    --border: 220 20% 18%;
+    --input: 220 20% 13%;
+    --ring: 262 80% 65%;
 
     --radius: 0.5rem;
 
-    --sidebar-background: 0 0% 98%;
-
-    --sidebar-foreground: 240 5.3% 26.1%;
-
-    --sidebar-primary: 240 5.9% 10%;
-
-    --sidebar-primary-foreground: 0 0% 98%;
-
-    --sidebar-accent: 240 4.8% 95.9%;
-
-    --sidebar-accent-foreground: 240 5.9% 10%;
-
-    --sidebar-border: 220 13% 91%;
-
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    /* Extra gaming tokens */
+    --neon-purple: #a855f7;
+    --neon-cyan: #06b6d4;
+    --neon-green: #22c55e;
+    --neon-red: #ef4444;
+    --neon-yellow: #eab308;
+    --panel-bg: rgba(15, 17, 28, 0.85);
+    --glass-border: rgba(168, 85, 247, 0.2);
   }
 
+  /* Keep dark class in sync (Tailwind dark: prefix) */
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-
-    --primary: 221 83% 60%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
+    --background: 224 20% 6%;
+    --foreground: 210 40% 96%;
+    --card: 224 20% 9%;
+    --card-foreground: 210 40% 96%;
+    --popover: 224 20% 8%;
+    --popover-foreground: 210 40% 96%;
+    --primary: 262 80% 65%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 25% 14%;
+    --secondary-foreground: 210 40% 90%;
+    --muted: 220 20% 12%;
+    --muted-foreground: 215 20% 55%;
+    --accent: 195 100% 50%;
+    --accent-foreground: 224 20% 6%;
+    --destructive: 0 80% 55%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 220 20% 18%;
+    --input: 220 20% 13%;
+    --ring: 262 80% 65%;
+    --sidebar-background: 224 20% 7%;
+    --sidebar-foreground: 210 40% 90%;
+    --sidebar-primary: 262 80% 65%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --sidebar-accent: 220 20% 12%;
+    --sidebar-accent-foreground: 210 40% 90%;
+    --sidebar-border: 220 20% 18%;
+    --sidebar-ring: 262 80% 65%;
   }
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   BASE RESETS & TYPOGRAPHY
+   ═══════════════════════════════════════════════════════════════ */
 @layer base {
   * {
     @apply border-border;
+    box-sizing: border-box;
+  }
+
+  html {
+    color-scheme: dark;
+    scroll-behavior: smooth;
   }
 
   body {
     @apply bg-background text-foreground;
-    font-family: "Inter", sans-serif;
+    font-family: "Inter", system-ui, sans-serif;
+    background-color: hsl(224, 20%, 6%);
+    background-image:
+      radial-gradient(ellipse 80% 50% at 50% -20%, rgba(139, 92, 246, 0.15) 0%, transparent 60%),
+      radial-gradient(ellipse 60% 30% at 80% 110%, rgba(6, 182, 212, 0.08) 0%, transparent 50%);
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
-  /* Smooth transitions for theme changes */
-  * {
-    transition-property: background-color, border-color, color, fill, stroke;
-    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-    transition-duration: 150ms;
+  /* ── Typography ── */
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: "Orbitron", "Inter", sans-serif;
+    letter-spacing: 0.05em;
+    color: hsl(var(--foreground));
   }
 
-  /* Custom scrollbar */
+  code,
+  pre,
+  .font-mono {
+    font-family: "JetBrains Mono", "Fira Code", "Consolas", monospace;
+  }
+
+  /* ── Input / Textarea — dark gaming style ── */
+  input,
+  textarea,
+  select {
+    background-color: hsl(220, 20%, 11%) !important;
+    border-color: hsl(220, 20%, 20%) !important;
+    color: hsl(210, 40%, 96%) !important;
+    caret-color: var(--neon-purple);
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: hsl(215, 20%, 40%) !important;
+  }
+
+  input:focus,
+  textarea:focus,
+  select:focus {
+    border-color: var(--neon-purple) !important;
+    box-shadow: 0 0 0 2px rgba(168, 85, 247, 0.25) !important;
+    outline: none !important;
+  }
+
+  /* ── Scrollbar ── */
   ::-webkit-scrollbar {
-    width: 8px;
+    width: 6px;
+    height: 6px;
   }
 
   ::-webkit-scrollbar-track {
-    @apply bg-muted;
+    background: hsl(224, 20%, 8%);
   }
 
   ::-webkit-scrollbar-thumb {
-    @apply bg-muted-foreground/30 rounded-full;
+    background: hsl(262, 50%, 35%);
+    border-radius: 999px;
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    @apply bg-muted-foreground/50;
+    background: var(--neon-purple);
+  }
+
+  /* ── Selection ── */
+  ::selection {
+    background: rgba(168, 85, 247, 0.35);
+    color: #fff;
   }
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   COMPONENT OVERRIDES — make Radix/shadcn look gaming
+   ═══════════════════════════════════════════════════════════════ */
+@layer components {
+
+  /* Cards */
+  .game-card {
+    background: linear-gradient(135deg, hsl(224, 25%, 10%) 0%, hsl(224, 20%, 8%) 100%);
+    border: 1px solid hsl(220, 20%, 16%);
+    border-radius: 12px;
+    backdrop-filter: blur(20px);
+  }
+
+  /* Neon border helper */
+  .neon-border-purple {
+    border: 1px solid rgba(168, 85, 247, 0.4);
+    box-shadow: 0 0 12px rgba(168, 85, 247, 0.1);
+  }
+
+  .neon-border-cyan {
+    border: 1px solid rgba(6, 182, 212, 0.4);
+    box-shadow: 0 0 12px rgba(6, 182, 212, 0.1);
+  }
+
+  /* Glass panel */
+  .glass-panel {
+    background: rgba(15, 17, 28, 0.75);
+    backdrop-filter: blur(24px);
+    border: 1px solid rgba(168, 85, 247, 0.15);
+    border-radius: 16px;
+  }
+
+  /* Gaming badge */
+  .badge-gaming {
+    font-family: "Orbitron", sans-serif;
+    font-size: 0.65rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    font-weight: 700;
+  }
+
+  /* Primary glow button */
+  .btn-gaming {
+    background: linear-gradient(135deg, #7c3aed 0%, #a855f7 50%, #6366f1 100%);
+    box-shadow:
+      0 0 20px rgba(168, 85, 247, 0.4),
+      inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    color: #fff;
+    font-family: "Orbitron", sans-serif;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    transition: all 0.2s ease;
+  }
+
+  .btn-gaming:hover {
+    box-shadow:
+      0 0 30px rgba(168, 85, 247, 0.6),
+      inset 0 1px 0 rgba(255, 255, 255, 0.15);
+    transform: translateY(-1px);
+  }
+
+  .btn-gaming:active {
+    transform: translateY(0);
+    box-shadow: 0 0 15px rgba(168, 85, 247, 0.4);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   ANIMATIONS & KEYFRAMES
+   ═══════════════════════════════════════════════════════════════ */
 @layer utilities {
-  /* Animation utilities */
   .animate-in {
-    animation: animate-in 0.5s ease-out;
+    animation: animateIn 0.4s ease-out both;
   }
 
-  .slide-in-from-left-5 {
-    animation: slide-in-from-left-5 0.6s ease-out;
+  .animate-fade-in {
+    animation: fadeIn 0.3s ease-out both;
   }
 
-  .slide-in-from-right-5 {
-    animation: slide-in-from-right-5 0.6s ease-out;
+  .animate-scale-in {
+    animation: scaleIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both;
   }
 
-  .slide-in-from-bottom-5 {
-    animation: slide-in-from-bottom-5 0.6s ease-out;
-  }
-
-  .fade-in-50 {
-    animation: fade-in-50 0.5s ease-out;
-  }
-
-  .animate-bounce-gentle {
-    animation: bounce-gentle 2s infinite;
-  }
-
-  .animate-pulse-slow {
-    animation: pulse-slow 3s ease-in-out infinite;
+  .animate-slide-up {
+    animation: slideUp 0.4s ease-out both;
   }
 
   .animate-glow {
@@ -172,113 +274,218 @@
   }
 
   .animate-shimmer {
-    animation: shimmer 2s linear infinite;
+    animation: shimmer 2.5s linear infinite;
+    background-size: 200% 100%;
   }
 
-  /* Grid animations */
-  .grid-cell-fill {
-    animation: grid-cell-fill 0.6s ease-out;
+  .animate-pulse-slow {
+    animation: pulseSlow 3s ease-in-out infinite;
   }
 
+  .animate-bounce-gentle {
+    animation: bounceGentle 2s ease-in-out infinite;
+  }
+
+  .animate-shake {
+    animation: shake 0.4s cubic-bezier(.36, .07, .19, .97) both;
+  }
+
+  .animate-ping-once {
+    animation: ping 0.6s ease-out;
+  }
+
+  /* Neon text glow */
+  .text-neon-purple {
+    color: var(--neon-purple);
+    text-shadow: 0 0 10px rgba(168, 85, 247, 0.7);
+  }
+
+  .text-neon-cyan {
+    color: var(--neon-cyan);
+    text-shadow: 0 0 10px rgba(6, 182, 212, 0.7);
+  }
+
+  .text-neon-green {
+    color: var(--neon-green);
+    text-shadow: 0 0 10px rgba(34, 197, 94, 0.7);
+  }
+
+  .text-neon-red {
+    color: var(--neon-red);
+    text-shadow: 0 0 10px rgba(239, 68, 68, 0.7);
+  }
+
+  /* Grid cell animations */
   .grid-cell-hover {
-    transition: all 0.2s ease;
+    transition: all 0.15s cubic-bezier(0.34, 1.56, 0.64, 1);
   }
 
   .grid-cell-hover:hover {
-    transform: scale(1.05);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    transform: scale(1.04);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4), 0 0 16px rgba(168, 85, 247, 0.25);
+  }
+
+  .grid-cell-fill {
+    animation: cellPop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  /* Achievement glows */
+  .achievement-glow-common {
+    box-shadow: 0 0 12px rgba(107, 114, 128, 0.4);
+  }
+
+  .achievement-glow-rare {
+    box-shadow: 0 0 16px rgba(59, 130, 246, 0.5);
+  }
+
+  .achievement-glow-epic {
+    box-shadow: 0 0 20px rgba(168, 85, 247, 0.6);
+  }
+
+  .achievement-glow-legendary {
+    box-shadow: 0 0 28px rgba(251, 191, 36, 0.7);
+  }
+
+  /* Slide-in helpers */
+  .slide-in-from-left-5 {
+    animation: slideInLeft 0.5s ease-out both;
+  }
+
+  .slide-in-from-right-5 {
+    animation: slideInRight 0.5s ease-out both;
+  }
+
+  .slide-in-from-bottom-5 {
+    animation: slideUp 0.5s ease-out both;
+  }
+
+  .fade-in-50 {
+    animation: fadeIn 0.5s ease-out both;
   }
 }
 
-@keyframes animate-in {
+/* ── Keyframes ── */
+@keyframes animateIn {
   from {
     opacity: 0;
     transform: scale(0.95);
   }
+
   to {
     opacity: 1;
     transform: scale(1);
   }
 }
 
-@keyframes slide-in-from-left-5 {
+@keyframes fadeIn {
   from {
     opacity: 0;
-    transform: translateX(-1.25rem);
   }
+
   to {
     opacity: 1;
-    transform: translateX(0);
   }
 }
 
-@keyframes slide-in-from-right-5 {
+@keyframes scaleIn {
   from {
     opacity: 0;
-    transform: translateX(1.25rem);
+    transform: scale(0.7);
   }
+
   to {
     opacity: 1;
-    transform: translateX(0);
+    transform: scale(1);
   }
 }
 
-@keyframes slide-in-from-bottom-5 {
+@keyframes slideUp {
   from {
     opacity: 0;
-    transform: translateY(1.25rem);
+    transform: translateY(16px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
   }
 }
 
-@keyframes fade-in-50 {
+@keyframes slideInLeft {
   from {
     opacity: 0;
+    transform: translateX(-20px);
   }
+
   to {
     opacity: 1;
+    transform: translateX(0);
   }
 }
 
-@keyframes bounce-gentle {
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes bounceGentle {
+
   0%,
   100% {
     transform: translateY(0);
   }
+
   50% {
-    transform: translateY(-4px);
+    transform: translateY(-5px);
   }
 }
 
-@keyframes pulse-slow {
+@keyframes pulseSlow {
+
   0%,
   100% {
     opacity: 1;
   }
+
   50% {
-    opacity: 0.7;
+    opacity: 0.6;
   }
 }
 
-@keyframes glow {
-  from {
-    box-shadow: 0 0 5px rgba(59, 130, 246, 0.5);
+@keyframes shake {
+
+  0%,
+  100% {
+    transform: translateX(0);
   }
-  to {
-    box-shadow: 0 0 20px rgba(59, 130, 246, 0.8);
+
+  20%,
+  60% {
+    transform: translateX(-8px);
+  }
+
+  40%,
+  80% {
+    transform: translateX(8px);
   }
 }
 
 @keyframes float {
+
   0%,
   100% {
-    transform: translateY(0px);
+    transform: translateY(0);
   }
+
   50% {
-    transform: translateY(-6px);
+    transform: translateY(-8px);
   }
 }
 
@@ -286,112 +493,127 @@
   0% {
     background-position: -200% 0;
   }
+
   100% {
     background-position: 200% 0;
   }
 }
 
-@keyframes grid-cell-fill {
+@keyframes ping {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+
+  75%,
+  100% {
+    transform: scale(1.8);
+    opacity: 0;
+  }
+}
+
+@keyframes cellPop {
   0% {
     transform: scale(0);
     opacity: 0;
   }
-  50% {
-    transform: scale(1.2);
-    opacity: 0.8;
-  }
-  100% {
-    transform: scale(1);
+
+  60% {
+    transform: scale(1.15);
     opacity: 1;
   }
+
+  100% {
+    transform: scale(1);
+  }
 }
 
-/* Achievement glow effects */
-.achievement-glow-common {
-  box-shadow: 0 0 10px rgba(107, 114, 128, 0.3);
+@keyframes glow {
+  from {
+    box-shadow: 0 0 8px rgba(168, 85, 247, 0.5), 0 0 20px rgba(168, 85, 247, 0.2);
+  }
+
+  to {
+    box-shadow: 0 0 16px rgba(168, 85, 247, 0.9), 0 0 40px rgba(168, 85, 247, 0.4);
+  }
 }
 
-.achievement-glow-rare {
-  box-shadow: 0 0 15px rgba(59, 130, 246, 0.4);
+@keyframes scanY {
+  0% {
+    transform: translateY(-4px);
+  }
+
+  100% {
+    transform: translateY(100vh);
+  }
 }
 
-.achievement-glow-epic {
-  box-shadow: 0 0 20px rgba(168, 85, 247, 0.5);
+@keyframes gradientShift {
+
+  0%,
+  100% {
+    background-position: 0% 50%;
+  }
+
+  50% {
+    background-position: 100% 50%;
+  }
 }
 
-.achievement-glow-legendary {
-  box-shadow: 0 0 25px rgba(251, 191, 36, 0.6);
+/* Orbitron font utility */
+.font-orbitron {
+  font-family: "Orbitron", "Inter", sans-serif !important;
 }
 
-/* Custom focus styles */
-.focus-ring {
-  @apply focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background;
+.font-jetbrains {
+  font-family: "JetBrains Mono", "Consolas", monospace !important;
+}
+
+/* Animated gradient text */
+.animate-gradient-text {
+  background-size: 200% 200%;
+  animation: gradientShift 4s ease infinite;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
 
-/* Gradient backgrounds */
+/* ── Gradient presets ── */
 .gradient-primary {
-  background: linear-gradient(
-    135deg,
-    hsl(var(--primary)) 0%,
-    hsl(var(--primary) / 0.8) 100%
-  );
+  background: linear-gradient(135deg, #7c3aed 0%, #a855f7 100%);
 }
 
 .gradient-success {
-  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  background: linear-gradient(135deg, #16a34a 0%, #22c55e 100%);
 }
 
 .gradient-warning {
-  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  background: linear-gradient(135deg, #d97706 0%, #f59e0b 100%);
 }
 
 .gradient-error {
-  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  background: linear-gradient(135deg, #dc2626 0%, #ef4444 100%);
 }
 
-/* Animation keyframes for Game page */
-@keyframes shake {
-  0%, 100% { transform: translateX(0); }
-  25% { transform: translateX(-10px); }
-  75% { transform: translateX(10px); }
+.gradient-cyan {
+  background: linear-gradient(135deg, #0891b2 0%, #06b6d4 100%);
 }
 
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+.gradient-gaming {
+  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 50%, #a855f7 100%);
 }
 
-@keyframes scaleIn {
-  from { transform: scale(0.8); opacity: 0; }
-  to { transform: scale(1); opacity: 1; }
-}
-
-.animate-shake {
-  animation: shake 0.5s;
-}
-
-.animate-fadeIn {
-  animation: fadeIn 0.3s;
-}
-
-.animate-scaleIn {
-  animation: scaleIn 0.4s;
-}
-
-/* Code formatting for Game page */
+/* ── Code blocks ── */
 pre code {
   display: block;
   white-space: pre !important;
   word-wrap: normal !important;
   overflow-wrap: normal !important;
   tab-size: 2;
-  -moz-tab-size: 2;
-  -o-tab-size: 2;
-  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-family: "JetBrains Mono", "Consolas", "Monaco", monospace;
   font-size: 0.875rem;
-  line-height: 1.7;
-  letter-spacing: 0.02em;
+  line-height: 1.75;
+  letter-spacing: 0.01em;
 }
 
 pre {
@@ -399,8 +621,21 @@ pre {
   overflow-x: auto;
   overflow-y: auto;
   tab-size: 2;
-  -moz-tab-size: 2;
-  -o-tab-size: 2;
-  padding: 1.5rem;
-  border-radius: 0.75rem;
+  padding: 1.25rem 1.5rem;
+  border-radius: 10px;
+  background: hsl(224, 25%, 8%) !important;
+  border: 1px solid hsl(220, 20%, 16%);
+}
+
+/* ── Focus ring ── */
+.focus-ring {
+  @apply focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-background;
+}
+
+/* ── Toaster (gaming override) ── */
+[data-sonner-toast] {
+  background: hsl(224, 20%, 10%) !important;
+  border: 1px solid hsl(220, 20%, 20%) !important;
+  color: hsl(210, 40%, 96%) !important;
+  font-family: "Inter", sans-serif !important;
 }
